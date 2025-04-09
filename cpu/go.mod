@@ -1,3 +1,3 @@
-module github.com/sisoputnfrba/tp-golang/cpu
+module ssoo-cpu
 
 go 1.24

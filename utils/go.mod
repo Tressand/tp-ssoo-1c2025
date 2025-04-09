@@ -1,3 +1,3 @@
-module github.com/sisoputnfrba/tp-golang/utils
+module ssoo-utils
 
 go 1.24
