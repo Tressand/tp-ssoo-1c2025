@@ -14,9 +14,14 @@ type IOConfig struct {
 }
 
 var Config IOConfig
+var configFilePath string = "./io/config/config.json"
+
+func SetFilePath(path string) {
+	configFilePath = path
+}
 
 func Load() {
-	filepath, err := filepath.Abs("./io/config/config.json")
+	filepath, err := filepath.Abs(configFilePath)
 	if err != nil {
 		panic(err)
 	}

@@ -20,9 +20,14 @@ type MemoryConfig struct {
 }
 
 var Config MemoryConfig
+var configFilePath string = "./memoria/config/config.json"
+
+func SetFilePath(path string) {
+	configFilePath = path
+}
 
 func Load() {
-	filepath, err := filepath.Abs("./memoria/config/config.json")
+	filepath, err := filepath.Abs(configFilePath)
 	if err != nil {
 		panic(err)
 	}

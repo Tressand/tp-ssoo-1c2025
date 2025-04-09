@@ -21,9 +21,14 @@ type CPUConfig struct {
 }
 
 var Config CPUConfig
+var configFilePath string = "./cpu/config/config.json"
+
+func SetFilePath(path string) {
+	configFilePath = path
+}
 
 func Load() {
-	filepath, err := filepath.Abs("./cpu/config/config.json")
+	filepath, err := filepath.Abs(configFilePath)
 	if err != nil {
 		panic(err)
 	}

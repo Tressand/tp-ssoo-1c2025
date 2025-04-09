@@ -16,9 +16,14 @@ type KernelConfig struct {
 }
 
 var Config KernelConfig
+var configFilePath string = "./kernel/config/config.json"
+
+func SetFilePath(path string) {
+	configFilePath = path
+}
 
 func Load() {
-	filepath, err := filepath.Abs("./kernel/config/config.json")
+	filepath, err := filepath.Abs(configFilePath)
 	if err != nil {
 		panic(err)
 	}
