@@ -8,5 +8,5 @@ import (
 
 func main() {
 	config.Load()
-	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Config))
+	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 }

@@ -19,7 +19,7 @@ type MemoryConfig struct {
 	LogLevel       slog.Level `json:"log_level"`
 }
 
-var Config MemoryConfig
+var Values MemoryConfig
 var configFilePath string = "./memoria/config/config.json"
 
 func SetFilePath(path string) {
@@ -32,7 +32,7 @@ func Load() {
 		panic(err)
 	}
 
-	err = configManager.LoadConfig(filepath, &Config)
+	err = configManager.LoadConfig(filepath, &Values)
 	if err != nil {
 		panic(err)
 	}

@@ -15,7 +15,7 @@ type KernelConfig struct {
 	LogLevel           slog.Level `json:"log_level"`
 }
 
-var Config KernelConfig
+var Values KernelConfig
 var configFilePath string = "./kernel/config/config.json"
 
 func SetFilePath(path string) {
@@ -28,7 +28,7 @@ func Load() {
 		panic(err)
 	}
 
-	err = configManager.LoadConfig(filepath, &Config)
+	err = configManager.LoadConfig(filepath, &Values)
 	if err != nil {
 		panic(err)
 	}

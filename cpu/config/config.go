@@ -20,7 +20,7 @@ type CPUConfig struct {
 	LogLevel         slog.Level `json:"log_level"`
 }
 
-var Config CPUConfig
+var Values CPUConfig
 var configFilePath string = "./cpu/config/config.json"
 
 func SetFilePath(path string) {
@@ -33,7 +33,7 @@ func Load() {
 		panic(err)
 	}
 
-	err = configManager.LoadConfig(filepath, &Config)
+	err = configManager.LoadConfig(filepath, &Values)
 	if err != nil {
 		panic(err)
 	}
