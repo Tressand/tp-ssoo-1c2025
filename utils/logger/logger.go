@@ -28,7 +28,7 @@ func Setup(path string, options LoggerOptions) error {
 	}
 	if options.Override {
 		file.Truncate(0)
-		file.WriteString("======= ONLY LAST SESSION LOGS =======\n\n")
+		file.WriteString("======= LOGS DE LA ÚLTIMA SESIÓN =======\n\n")
 	}
 
 	var output io.Writer = file
@@ -44,8 +44,8 @@ func Setup(path string, options LoggerOptions) error {
 	return nil
 }
 
-func SetupDefault(level slog.Level) error {
-	return Setup("kernel.log", LoggerOptions{
+func SetupDefault(name string, level slog.Level) error {
+	return Setup(name+".log", LoggerOptions{
 		Level:           level,
 		Override:        true,
 		WriteToTerminal: true,

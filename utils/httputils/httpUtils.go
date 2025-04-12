@@ -3,9 +3,9 @@ package httputils
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
-	"ssoo-utils/logger"
 	"time"
 )
 
@@ -18,12 +18,12 @@ func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal cha
 	// Send goroutine to listen and serve
 	var waitserverstart = make(chan struct{})
 	go func() {
-		logger.Instance.Info("Starting HTTP server at " + server.Addr)
+		slog.Info("Arranca servidor en: " + server.Addr)
 		waitserverstart <- struct{}{}
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Instance.Error("Error starting HTTP server: %v", "error", err)
+			slog.Error("Error arrancando servidor HTTP: %v", "error", err)
 		}
-		logger.Instance.Info("HTTP server stopped")
+		slog.Info("Servidor HTTP Detenido")
 	}()
 	// Wait for shutdown signal
 	go func() {
@@ -32,7 +32,7 @@ func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal cha
 		shutdownCtx, cancel := context.WithTimeout(shutdownCtx, 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			logger.Instance.Error("error shutting down http server", "error", err)
+			slog.Error("Error cerrando servidor HTTP", "error", err)
 		}
 		shutdownSignal <- struct{}{}
 	}()
@@ -43,7 +43,7 @@ func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal cha
 func GetOutboundIP() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
-		logger.Instance.Error("Error getting outbound IP: %v", "error", err)
+		slog.Error("Error obteniendo IP local: %v", "error", err)
 		return ""
 	}
 	defer conn.Close()
