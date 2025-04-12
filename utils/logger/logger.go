@@ -1,27 +1,51 @@
 package logger
 
 import (
+	"io"
 	"log/slog"
 	"os"
+	"ssoo-utils/logger/prettywriter"
 )
 
-var Instance *slog.Logger
+type Logger = slog.Logger
 
-func Setup(path string, level slog.Level, override bool) error {
+type LoggerOptions struct {
+	Level           slog.Level
+	Override        bool
+	WriteToTerminal bool
+	Pretty          bool
+}
+
+var Instance *Logger = slog.Default().With("default", "true")
+var file *os.File
+
+func Setup(path string, level slog.Level, options LoggerOptions) error {
 	flags := os.O_WRONLY | os.O_CREATE | os.O_APPEND
-	if override {
-		flags = flags | os.O_TRUNC
-	}
 
-	logFile, err := os.OpenFile(path, flags, 0666)
+	file, err := os.OpenFile(path, flags, 0666)
 	if err != nil {
 		return err
 	}
+	if options.Override {
+		file.Truncate(0)
+		file.WriteString("======= ONLY LAST SESSION LOGS =======\n\n")
+	}
 
-	Instance = slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: level}))
-
-	// Crear y asignar los argumentos del log.
-
+	var output io.Writer = file
+	if options.WriteToTerminal {
+		output = io.MultiWriter(file, os.Stdout)
+	}
+	if options.Pretty {
+		output = prettywriter.NewPrettyWriter(output)
+	}
+	Instance = slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(Instance)
+
 	return nil
+}
+
+func Close() {
+	if file != nil {
+		file.Close()
+	}
 }
