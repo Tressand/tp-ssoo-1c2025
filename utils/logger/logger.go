@@ -19,7 +19,7 @@ type LoggerOptions struct {
 var Instance *Logger = slog.Default().With("default", "true")
 var file *os.File
 
-func Setup(path string, level slog.Level, options LoggerOptions) error {
+func Setup(path string, options LoggerOptions) error {
 	flags := os.O_WRONLY | os.O_CREATE | os.O_APPEND
 
 	file, err := os.OpenFile(path, flags, 0666)
@@ -38,10 +38,19 @@ func Setup(path string, level slog.Level, options LoggerOptions) error {
 	if options.Pretty {
 		output = prettywriter.NewPrettyWriter(output)
 	}
-	Instance = slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{Level: level}))
+	Instance = slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{Level: options.Level}))
 	slog.SetDefault(Instance)
 
 	return nil
+}
+
+func SetupDefault(level slog.Level) error {
+	return Setup("kernel.log", LoggerOptions{
+		Level:           level,
+		Override:        true,
+		WriteToTerminal: true,
+		Pretty:          true,
+	})
 }
 
 func Close() {

@@ -15,12 +15,7 @@ import (
 func main() {
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
-	err := logger.Setup("kernel.log", config.Values.LogLevel, logger.LoggerOptions{
-		Level:           config.Values.LogLevel,
-		Override:        true,
-		WriteToTerminal: true,
-		Pretty:          true,
-	})
+	err := logger.SetupDefault(config.Values.LogLevel)
 	defer logger.Close()
 	if err != nil {
 		fmt.Printf("Error setting up logger: %v\n", err)
