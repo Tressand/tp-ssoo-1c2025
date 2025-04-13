@@ -45,7 +45,7 @@ func (menu *menu) Activate() {
 		fmt.Println("------------------------")
 		fmt.Print("Select: ")
 		var output string
-		fmt.Scan(&output)
+		fmt.Scanln(&output)
 
 		current = menu.first
 		count = 1

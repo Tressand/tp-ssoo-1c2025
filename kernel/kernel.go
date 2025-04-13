@@ -3,7 +3,6 @@ package main
 // #region SECTION: IMPORTS
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -144,7 +143,6 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 }
 
 func sendToIO() {
-	reader := bufio.NewReader(os.Stdin)
 	var target *IOConnection
 
 	// List the name of all IOs available
@@ -154,8 +152,8 @@ func sendToIO() {
 	}
 
 	fmt.Print("Who are we sleeping? (any) ")
-	output, _ := reader.ReadString('\n')
-	output = output[0 : len(output)-1]
+	var output string
+	fmt.Scanln(&output)
 
 	// Search for the IO selected
 	if output == "" {
@@ -178,8 +176,7 @@ func sendToIO() {
 	var timer int
 	for {
 		fmt.Print("How much are we sleeping? (2000ms)")
-		output, _ := reader.ReadString('\n')
-		output = output[0 : len(output)-1]
+		fmt.Scanln(&output)
 		if output == "" {
 			timer = 2000
 			break
