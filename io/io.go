@@ -1,5 +1,7 @@
 package main
 
+// #region SECTION: IMPORTS
+
 import (
 	"bytes"
 	"fmt"
@@ -15,9 +17,13 @@ import (
 	"time"
 )
 
+// #endregion
+
 var urlKernel string = ""
 
 func main() {
+	// #region SETUP
+
 	config.Load()
 	if config.Values.IpKernel == "self" {
 		config.Values.IpKernel = httputils.GetOutboundIP()
@@ -32,9 +38,11 @@ func main() {
 	}
 	slog.Info("Arranca IO")
 
-	const cant = 5
+	// #endregion
+
+	const startingCount = 5
 	var wg sync.WaitGroup
-	for n := range cant {
+	for n := range startingCount {
 		wg.Add(1)
 		go createKernelConnection("IO"+fmt.Sprint(n+1), 3, 5, &wg)
 	}

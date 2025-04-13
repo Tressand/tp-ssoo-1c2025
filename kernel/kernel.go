@@ -1,5 +1,7 @@
 package main
 
+// #region SECTION: IMPORTS
+
 import (
 	"bufio"
 	"fmt"
@@ -16,7 +18,13 @@ import (
 	"sync"
 )
 
+// #endregion
+
+// #region SECTION: MAIN
+
 func main() {
+	// #region SETUP
+
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 	err := logger.SetupDefault("kernel", config.Values.LogLevel)
@@ -28,20 +36,31 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca Kernel")
 
+	// #endregion
+
+	// #region CREATE SERVER
+
 	// Create mux
 	var mux *http.ServeMux = http.NewServeMux()
-	globalCloser := make(chan interface{})
+	// Closing this channel will trigger a select statement, serving as a closer for all established connections.
+	globalCloser := make(chan any)
+
 	// Add routes to mux
 	mux.Handle("/test", test())
+	// Pass the globalCloser to handlers that will block.
+	mux.Handle("/io-notify", recieveIO(globalCloser))
 
-	mux.Handle("/io-notify", handleIO(globalCloser))
-	// Pass mux through middleware
-	// If it were to happen...
-
-	shutdownSignal := make(chan interface{})
+	// Sending anything to this channel will shutdown the server.
+	// The server will respond back on this same channel to confirm closing.
+	shutdownSignal := make(chan any)
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortKernel, mux, shutdownSignal)
 
+	// #endregion
+
+	// #region MENU
+
 	menu := menu.Create()
+	menu.Add("Liberar IO", sendToIO)
 	menu.Add("Close Server and Exit Program", func() {
 		close(globalCloser)
 		shutdownSignal <- struct{}{}
@@ -49,91 +68,16 @@ func main() {
 		close(shutdownSignal)
 		os.Exit(0)
 	})
-	menu.Add("Liberar IO", func() {
-		reader := bufio.NewReader(os.Stdin)
-		var target *IOConnection
-		fmt.Println("Current available IOs:")
-		for _, elem := range availableIOs {
-			fmt.Println("	- ", elem.name)
-		}
-		fmt.Print("Who are we sleeping? (any) ")
-		output, _ := reader.ReadString('\n')
-		output = output[0 : len(output)-1]
-		if output == "" {
-			target = &availableIOs[0]
-		} else {
-			for _, io := range availableIOs {
-				if io.name == output {
-					target = &io
-					break
-				}
-			}
-		}
-		if target == nil {
-			fmt.Println("IO not found.")
-			return
-		}
-		fmt.Printf("Got it. Targetting %s\n", target.name)
-		var timer int
-		for {
-			fmt.Print("How much are we sleeping? (2000ms)")
-			output, _ := reader.ReadString('\n')
-			output = output[0 : len(output)-1]
-			if output == "" {
-				timer = 2000
-				break
-			}
-			conversion, err := strconv.Atoi(output)
-			if err != nil {
-				fmt.Print("Lil bro, this not a number...")
-				continue
-			}
-			timer = conversion
-			break
-		}
-		target.handler <- timer
-		for index, elem := range availableIOs {
-			if elem == *target {
-				availableIOs = append(availableIOs[:index], availableIOs[index+1:]...)
-				break
-			}
-		}
-	})
 	for {
 		menu.Activate()
 	}
+
+	// #endregion
 }
 
-type IOConnection struct {
-	name    string
-	handler chan int
-}
+// #endregion
 
-var avIOmu sync.Mutex
-var availableIOs []IOConnection
-
-func handleIO(closer chan interface{}) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		data, _ := io.ReadAll(r.Body)
-		name := string(data)
-		slog.Info("IO available", "name", name)
-		connHandler := make(chan int)
-		avIOmu.Lock()
-		availableIOs = append(availableIOs, IOConnection{
-			name:    name,
-			handler: connHandler,
-		})
-		avIOmu.Unlock()
-		select {
-		case timer := <-connHandler:
-			w.WriteHeader(http.StatusOK)
-			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte(fmt.Sprint(timer)))
-		case <-closer:
-			w.WriteHeader(http.StatusTeapot)
-		}
-	}
-}
+// #region SECTION: TEST ENDPOINT
 
 func test() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -143,3 +87,111 @@ func test() http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 	}
 }
+
+// #endregion
+
+// #region SECTION: HANDLE IO CONNECTIONS
+
+type IOConnection struct {
+	name    string
+	handler chan int
+}
+
+var availableIOs []IOConnection
+var avIOmu sync.Mutex
+
+func recieveIO(closer chan any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get IO name
+		data, _ := io.ReadAll(r.Body)
+		name := string(data)
+		slog.Info("IO available", "name", name)
+
+		// Create handler channel and add this IO to the list of available IOs
+		connHandler := make(chan int)
+		// Note: Mutex is to prevent race condition on the availableIOs' list
+		thisConnection := IOConnection{
+			name:    name,
+			handler: connHandler,
+		}
+		avIOmu.Lock()
+		availableIOs = append(availableIOs, thisConnection)
+		avIOmu.Unlock()
+
+		// select will wait for whoever comes first:
+		select {
+		// A timer is sent through this specific IO handler channel
+		case timer := <-connHandler:
+			// Remove the IOConnection from the list of available ones before sending the response.
+			for index, elem := range availableIOs {
+				if elem == thisConnection {
+					availableIOs = append(availableIOs[:index], availableIOs[index+1:]...)
+					break
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte(fmt.Sprint(timer)))
+
+		// The global closer channel closed
+		case <-closer:
+			w.WriteHeader(http.StatusTeapot)
+		}
+	}
+}
+
+func sendToIO() {
+	reader := bufio.NewReader(os.Stdin)
+	var target *IOConnection
+
+	// List the name of all IOs available
+	fmt.Println("Current available IOs:")
+	for _, elem := range availableIOs {
+		fmt.Println("	- ", elem.name)
+	}
+
+	fmt.Print("Who are we sleeping? (any) ")
+	output, _ := reader.ReadString('\n')
+	output = output[0 : len(output)-1]
+
+	// Search for the IO selected
+	if output == "" {
+		target = &availableIOs[0]
+	} else {
+		for _, io := range availableIOs {
+			if io.name == output {
+				target = &io
+				break
+			}
+		}
+	}
+	if target == nil {
+		fmt.Println("IO not found.")
+		return
+	}
+
+	// Get the timer
+	fmt.Printf("Got it. Targetting %s\n", target.name)
+	var timer int
+	for {
+		fmt.Print("How much are we sleeping? (2000ms)")
+		output, _ := reader.ReadString('\n')
+		output = output[0 : len(output)-1]
+		if output == "" {
+			timer = 2000
+			break
+		}
+		conversion, err := strconv.Atoi(output)
+		if err != nil {
+			fmt.Print("Lil bro, this not a number...")
+			continue
+		}
+		timer = conversion
+		break
+	}
+
+	// Send the timer through the targets channel, this will trigger the recieveIO()'s response.
+	target.handler <- timer
+}
+
+// #endregion
