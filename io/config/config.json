@@ -1,5 +1,5 @@
 {
-  "ip_kernel": "127.0.0.1",
+  "ip_kernel": "self",
   "port_kernel": 8001,
   "port_io": 8003,
   "log_level": "DEBUG"
