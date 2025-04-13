@@ -4,13 +4,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"ssoo-io/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
+	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
 	"sync"
@@ -40,30 +43,62 @@ func main() {
 
 	// #endregion
 
-	const startingCount = 5
+	// #region INITIAL THREADS
+
+	var count = 5
 	var wg sync.WaitGroup
-	for n := range startingCount {
+	ctx, cancelctx := context.WithCancel(context.Background())
+	for n := range count {
 		wg.Add(1)
-		go createKernelConnection("IO"+fmt.Sprint(n+1), 3, 5, &wg)
+		go createKernelConnection("IO"+fmt.Sprint(n+1), 3, 5, &wg, ctx)
 	}
-	wg.Wait()
+	time.Sleep(5 * time.Millisecond)
+
+	// #endregion
+
+	// #region MENU
+
+	menu := menu.Create()
+	menu.Add("Add new IO thread.", func() {
+		wg.Add(1)
+		count++
+		go createKernelConnection("IO"+fmt.Sprint(count), 3, 5, &wg, ctx)
+	})
+	menu.Add("Wait for all IO's to close and exit.", func() {
+		wg.Wait()
+		os.Exit(0)
+	})
+	menu.Add("Forcefully close all IO's and exit.", func() {
+		cancelctx()
+		os.Exit(0)
+	})
+	for {
+		menu.Activate()
+	}
+	// #endregion
 }
 
-func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *sync.WaitGroup) {
+func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *sync.WaitGroup, ctx context.Context) {
+	defer wg.Done()
 	for {
-		retry, err := notifyKernel(name)
-		if !retry {
-			break
-		}
-		if err != nil {
-			if retryAmount <= 0 {
-				break
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			retry, err := notifyKernel(name)
+			if !retry {
+				return
 			}
-			time.Sleep(time.Duration(retrySeconds) * time.Second)
-			retryAmount--
+			if err != nil {
+				if retryAmount <= 0 {
+					return
+				}
+				time.Sleep(time.Duration(retrySeconds) * time.Second)
+				retryAmount--
+			}
 		}
+
 	}
-	wg.Done()
 }
 
 func notifyKernel(name string) (bool, error) {
