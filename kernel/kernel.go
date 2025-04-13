@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -42,13 +43,15 @@ func main() {
 
 	// Create mux
 	var mux *http.ServeMux = http.NewServeMux()
-	// Closing this channel will trigger a select statement, serving as a closer for all established connections.
-	globalCloser := make(chan any)
+
+	// Closing this context with cancelctx() will trigger a select statement on io connections (see below)
+	// Serving as a closer for all established connections.
+	ctx, cancelctx := context.WithCancel(context.Background())
 
 	// Add routes to mux
 	mux.Handle("/test", test())
 	// Pass the globalCloser to handlers that will block.
-	mux.Handle("/io-notify", recieveIO(globalCloser))
+	mux.Handle("/io-notify", recieveIO(ctx))
 
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
@@ -62,7 +65,7 @@ func main() {
 	menu := menu.Create()
 	menu.Add("Liberar IO", sendToIO)
 	menu.Add("Close Server and Exit Program", func() {
-		close(globalCloser)
+		cancelctx()
 		shutdownSignal <- struct{}{}
 		<-shutdownSignal
 		close(shutdownSignal)
@@ -100,7 +103,7 @@ type IOConnection struct {
 var availableIOs []IOConnection
 var avIOmu sync.Mutex
 
-func recieveIO(closer chan any) http.HandlerFunc {
+func recieveIO(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get IO name
 		data, _ := io.ReadAll(r.Body)
@@ -133,8 +136,8 @@ func recieveIO(closer chan any) http.HandlerFunc {
 			w.Header().Set("Content-Type", "text/plain")
 			w.Write([]byte(fmt.Sprint(timer)))
 
-		// The global closer channel closed
-		case <-closer:
+		// The io context channel closed
+		case <-ctx.Done():
 			w.WriteHeader(http.StatusTeapot)
 		}
 	}
