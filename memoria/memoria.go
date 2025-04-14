@@ -44,8 +44,9 @@ func main() {
 
 	// #region MENU
 
-	menu := menu.Create()
-	menu.Add("Save value on memory", func() {
+	mainMenu := menu.Create()
+	storageMenu := menu.Create()
+	storageMenu.Add("Save value on memory", func() {
 		var key string
 		var value string
 
@@ -56,7 +57,7 @@ func main() {
 
 		saveValue(key, value)
 	})
-	menu.Add("Read value from memory", func() {
+	storageMenu.Add("Read value from memory", func() {
 		var key string
 
 		fmt.Print("Enter key: ")
@@ -64,12 +65,12 @@ func main() {
 
 		fmt.Println(retrieveValue(key))
 	})
-	menu.Add("List all values stored", func() {
+	storageMenu.Add("List all values stored", func() {
 		for key, value := range storage {
 			fmt.Printf("%s | %v\n", key, value)
 		}
 	})
-	menu.Add("Delete value from memory", func() {
+	storageMenu.Add("Delete value from memory", func() {
 		var key string
 
 		fmt.Print("Enter key: ")
@@ -77,14 +78,17 @@ func main() {
 
 		deleteValue(key)
 	})
-	menu.Add("Close Server and Exit Program", func() {
+	mainMenu.Add("Access Storage", func() {
+		storageMenu.Activate()
+	})
+	mainMenu.Add("Close Server and Exit Program", func() {
 		shutdownSignal <- struct{}{}
 		<-shutdownSignal
 		close(shutdownSignal)
 		os.Exit(0)
 	})
 	for {
-		menu.Activate()
+		mainMenu.Activate()
 	}
 
 	// #endregion
@@ -93,6 +97,7 @@ func main() {
 
 func storageRequestHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Request arrived.", r.RequestURI)
 		params := r.URL.Query()
 		if !params.Has("key") || (r.Method == "POST" && !params.Has("value")) {
 			w.WriteHeader(http.StatusBadRequest)
@@ -111,13 +116,13 @@ func storageRequestHandler() http.HandlerFunc {
 	}
 }
 
-var storage map[string]any = make(map[string]any)
+var storage map[string]string = make(map[string]string)
 
-func saveValue(key string, value any) {
+func saveValue(key string, value string) {
 	storage[key] = value
 }
 
-func retrieveValue(key string) any {
+func retrieveValue(key string) string {
 	return storage[key]
 }
 

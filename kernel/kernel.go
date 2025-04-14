@@ -61,9 +61,35 @@ func main() {
 
 	// #region MENU
 
-	menu := menu.Create()
-	menu.Add("Liberar IO", sendToIO)
-	menu.Add("Close Server and Exit Program", func() {
+	mainMenu := menu.Create()
+	moduleMenu := menu.Create()
+	moduleMenu.Add("Send IO Signal", sendToIO)
+	moduleMenu.Add("Send CPU Interrupt", func() {
+		fmt.Println("Not implemented")
+	})
+	moduleMenu.Add("Ask CPU to work", func() {
+		fmt.Println("Not implemented")
+	})
+	moduleMenu.Add("Store value on Memory", func() {
+		fmt.Print("Key: ")
+		var key string
+		var value string
+		fmt.Scanln(&key)
+		fmt.Print("Value: ")
+		fmt.Scanln(&value)
+		var url string = config.Values.MemoryURL
+		url += "/storage?key=" + key + "&value=" + value
+
+		fmt.Println(url)
+		resp, err := http.Post(url, http.MethodPost, http.NoBody)
+
+		fmt.Println(parsers.Struct(resp))
+		fmt.Println(err)
+	})
+	mainMenu.Add("Communicate with other module", func() {
+		moduleMenu.Activate()
+	})
+	mainMenu.Add("Close Server and Exit Program", func() {
 		cancelctx()
 		shutdownSignal <- struct{}{}
 		<-shutdownSignal
@@ -71,7 +97,7 @@ func main() {
 		os.Exit(0)
 	})
 	for {
-		menu.Activate()
+		mainMenu.Activate()
 	}
 
 	// #endregion

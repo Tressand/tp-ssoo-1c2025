@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"ssoo-io/config"
-	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
@@ -22,16 +21,10 @@ import (
 
 // #endregion
 
-var urlKernel string = ""
-
 func main() {
 	// #region SETUP
 
 	config.Load()
-	if config.Values.IpKernel == "self" {
-		config.Values.IpKernel = httputils.GetOutboundIP()
-	}
-	urlKernel = "http://" + config.Values.IpKernel + ":" + fmt.Sprint(config.Values.PortKernel)
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 	err := logger.SetupDefault("io", config.Values.LogLevel)
 	defer logger.Close()
@@ -104,7 +97,7 @@ func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *
 func notifyKernel(name string) (bool, error) {
 	log := slog.With("name", name)
 	log.Info("Notificando a Kernel...")
-	resp, err := http.Post(urlKernel+"/io-notify", "text/plain", bytes.NewBufferString(name))
+	resp, err := http.Post(config.Values.KernelURL+"/io-notify", "text/plain", bytes.NewBufferString(name))
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
 		log.Error("Error making POST request", "error", err)
