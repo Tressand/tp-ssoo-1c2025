@@ -3,6 +3,7 @@ package config
 import (
 	"log/slog"
 	"path/filepath"
+	"ssoo-memoria/storage"
 	"ssoo-utils/configManager"
 )
 
@@ -36,4 +37,6 @@ func Load() {
 	if err != nil {
 		panic(err)
 	}
+
+	storage.InitializeUserMemory(Values.MemorySize)
 }
