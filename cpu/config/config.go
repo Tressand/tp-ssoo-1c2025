@@ -40,6 +40,7 @@ var Exec_values = Exec_valuesS{
 	Arg2: -1,
 }
 var Instruccion string
+var Identificador int
 
 func SetFilePath(path string) {
 	configFilePath = path

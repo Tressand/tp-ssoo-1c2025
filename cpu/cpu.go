@@ -4,12 +4,27 @@ import (
 	"strings"
 	"strconv"
 	"time"
+	"os"
 	"fmt"
 	"ssoo-cpu/config"
 	"ssoo-utils/parsers"
 )
 
 func main() {
+
+	/*if len(os.Args) < 2{
+		fmt.Println("Falta el identificador. Uso: ./cpu [identificador]")
+		return
+	}
+	identificadorStr := os.Args[1]
+	identificador, err := strconv.Atoi(identificadorStr)
+	if err != nil {
+		fmt.Printf("Error al convertir el identificador '%s' a entero: %v\n", identificadorStr, err)
+		return
+	}
+	config.Identificador = identificador
+	fmt.Printf("Identificador recibido: %d\n", config.Identificador)*/ //funciona falta saberlo usar
+
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 	asign("IO 8")
