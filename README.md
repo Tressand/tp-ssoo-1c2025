@@ -1,3 +1,9 @@
+## NOTA PARA EL DOCENTE
+Se agregó un programa que buildea automaticamente los cuatro módulos y coloca los archivos de configuración en la disposición correcta.
+Desde la carpeta raiz del repositorio, ejecutar este comando:
+`./build_all.exe`
+Este programa compila los cuatro módulos y coloca sus respectivos archivos de configuración dentro de la carpeta "builds/". El codigo fuente de este programa utilitario se encuentra en "utils/build_all/build_all.go"
+
 ## Checkpoint
 
 Para cada checkpoint de control obligatorio, se debe crear un tag en el
