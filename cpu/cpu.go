@@ -12,7 +12,7 @@ import (
 
 func main() {
 
-	/*if len(os.Args) < 2{
+	if len(os.Args) < 2{
 		fmt.Println("Falta el identificador. Uso: ./cpu [identificador]")
 		return
 	}
@@ -23,7 +23,7 @@ func main() {
 		return
 	}
 	config.Identificador = identificador
-	fmt.Printf("Identificador recibido: %d\n", config.Identificador)*/ //funciona falta saberlo usar
+	fmt.Printf("Identificador recibido: %d\n", config.Identificador) //funciona falta saberlo usar
 
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))

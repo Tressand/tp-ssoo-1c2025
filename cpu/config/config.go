@@ -33,7 +33,7 @@ type Exec_valuesS struct{
 }
 
 var Values CPUConfig
-var configFilePath string = "./cpu/config/config.json"
+var configFilePath string = "./config/config.json"
 var Pcb PCBS
 var Exec_values = Exec_valuesS{
 	Arg1: -1,
