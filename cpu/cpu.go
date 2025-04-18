@@ -2,6 +2,8 @@ package main
 
 import (
 	"strings"
+	"strconv"
+	"time"
 	"fmt"
 	"ssoo-cpu/config"
 	"ssoo-utils/parsers"
@@ -10,36 +12,42 @@ import (
 func main() {
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
-	asign("WRITE 1 2")
-	asign("EXIT")
+	asign("IO 8")
+	exec()
 }
 
-func exec(instruccion string){
-	switch(instruccion){
+func exec(){
+	switch config.Instruccion{
 		case "NOOP":
+			time.Sleep(1 * time.Second)
+			fmt.Println("se espero 1 segundo")
 			//no hace nada
-			break;
+
 		case "WRITE":
 			//write en la direccion del arg1 con el dato en arg2
-			break;
+
 		case "READ":
 			//read en la direccion del arg1 con el tamaño en arg2
-			break;
+
 		case "GOTO":
-			//actualizar el pc en pcb por el arg1
-			break;
+			config.Pcb.PC = config.Exec_values.Arg1
+			fmt.Printf("se actualizo el pc a %d\n",config.Exec_values.Arg1)
+			fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
+
 		case "IO":
-			//WAIT(ARG1)
-			break;
+			time.Sleep(time.Second * time.Duration(config.Exec_values.Arg1))
+			fmt.Printf("se espero %d segundo\n",config.Exec_values.Arg1)
+			//simula una IO por un tiempo igual al arg1
+
 		case "INIT_PROC":
 			//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
-			break;
+
 		case "DUMP_MEMORY":
 			//vacia la memoria
-			break;
+
 		case "EXIT":
-			//
-			break;
+			//fin de proceso
+
 		default:
 			
 	}
@@ -54,21 +62,30 @@ func asign(bruto string){
 		return
 	}
 	
-	funcion := partes[0]
-	var arg1,arg2 string
+	config.Instruccion = partes[0]
 
 	if len(partes) > 1 {
-		arg1 = partes[1]
+		val, err := strconv.Atoi(partes[1])
+		if err != nil {
+			fmt.Println("Error convirtiendo arg1 a int:", err)
+		} else {
+			config.Exec_values.Arg1 = val
+		}
 	}
 	if len(partes) > 2 {
-		arg2 = partes[2]
+		val, err := strconv.Atoi(partes[2])
+		if err != nil {
+			fmt.Println("Error convirtiendo arg2 a int:", err)
+		} else {
+			config.Exec_values.Arg2 = val
+		}
 	}
 
-	fmt.Println("Función:", funcion)
-	if arg1 != "" {
-		fmt.Println("Argumento 1:", arg1)
+	fmt.Println("Función:", config.Instruccion)
+	if config.Exec_values.Arg1 != -1 {
+		fmt.Println("Argumento 1:", config.Exec_values.Arg1)
 	}
-	if arg2 != "" {
-		fmt.Println("Argumento 2:", arg2)
+	if config.Exec_values.Arg2 != -1 {
+		fmt.Println("Argumento 2:", config.Exec_values.Arg2)
 	}
 }

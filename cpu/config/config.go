@@ -20,26 +20,26 @@ type CPUConfig struct {
 	LogLevel         slog.Level `json:"log_level"`
 }
 
-type PCB struct{
+type PCBS struct{
 	PID int
 	PC int
 	ME []int
 	MT []int
 }
 
-type Registros struct{
-	AX,BX,CX,DX int
-}
-
-type Exec_values struct{
-	arg1,arg2 int
+type Exec_valuesS struct{
+	Arg1 int
+	Arg2 int
 }
 
 var Values CPUConfig
 var configFilePath string = "./cpu/config/config.json"
-var pcb PCB
-var registros Registros
-var exec_values Exec_values
+var Pcb PCBS
+var Exec_values = Exec_valuesS{
+	Arg1: -1,
+	Arg2: -1,
+}
+var Instruccion string
 
 func SetFilePath(path string) {
 	configFilePath = path
