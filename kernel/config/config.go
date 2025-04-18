@@ -1,20 +1,20 @@
 package config
 
 import (
-	"fmt"
 	"log/slog"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 )
 
 type KernelConfig struct {
-	MemoryURL          string
-	IpMemory           string     `json:"ip_memory"`
-	PortMemory         int        `json:"port_memory"`
-	PortKernel         int        `json:"port_kernel"`
-	SchedulerAlgorithm string     `json:"scheduler_algorithm"`
-	SuspensionTime     int        `json:"suspension_time"`
-	LogLevel           slog.Level `json:"log_level"`
+	IpMemory              string     `json:"ip_memory"`
+	PortMemory            int        `json:"port_memory"`
+	PortKernel            int        `json:"port_kernel"`
+	SchedulerAlgorithm    string     `json:"scheduler_algorithm"`
+	ReadyIngressAlgorithm string     `json:"ready_ingress_algorithm"`
+	Alpha                 string     `json:"alpha"`
+	SuspensionTime        int        `json:"suspension_time"`
+	LogLevel              slog.Level `json:"log_level"`
 }
 
 var Values KernelConfig
@@ -35,5 +35,4 @@ func Load() {
 	if Values.IpMemory == "self" {
 		Values.IpMemory = httputils.GetOutboundIP()
 	}
-	Values.MemoryURL = "http://" + Values.IpMemory + ":" + fmt.Sprint(Values.PortMemory)
 }

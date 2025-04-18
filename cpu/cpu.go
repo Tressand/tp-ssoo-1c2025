@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"ssoo-cpu/config"
+	"ssoo-utils/httputils"
 	"ssoo-utils/parsers"
 )
 
@@ -13,14 +15,28 @@ func main() {
 
 	key, value := getInput()
 
-	url := buildUrl(config.Values.MemoryURL, key, value)
+	url := httputils.BuildUrl(httputils.URLData{
+		Base:     config.Values.IpMemory,
+		Endpoint: "storage",
+		Queries: map[string]string{
+			"key":   key,
+			"value": value,
+		},
+	})
 
 	fmt.Printf("Connecting to %s\n", url)
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	if err != nil {
+		slog.Error("POST to Memory failed", "Error", err)
+	}
+	resp.Body.Close()
 
-	fmt.Println(parsers.Struct(resp))
-	fmt.Println(err)
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("POST to Memory status wrong", "status", resp.StatusCode)
+		return
+	}
 
+	slog.Info("POST to Memory succeded")
 }
 
 func getInput() (string, string) {
@@ -32,9 +48,4 @@ func getInput() (string, string) {
 	fmt.Scanln(&value)
 
 	return key, value
-}
-
-func buildUrl(baseURL, key, value string) string {
-
-	return fmt.Sprintf("%s/storage?key=%s&value=%s", baseURL, key, value)
 }

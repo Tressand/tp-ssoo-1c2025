@@ -38,7 +38,17 @@ func main() {
 
 	// #region INITIAL THREADS
 
-	var count = 5
+	var nstr string
+	var count = -1
+	for count < 0 {
+		fmt.Print("How many IO's will we open at start? ")
+		fmt.Scanln(&nstr)
+		count, err = strconv.Atoi(nstr)
+		if err != nil || count < 0 {
+			continue
+		}
+	}
+
 	var wg sync.WaitGroup
 	ctx, cancelctx := context.WithCancel(context.Background())
 	for n := range count {

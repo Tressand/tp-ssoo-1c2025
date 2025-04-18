@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 )
 
 type PrettyWriter struct {
@@ -36,7 +37,17 @@ func NewPrettyWriter(output io.Writer) *PrettyWriter {
 }
 
 func prettyfy(entry map[string]any) string {
-	var str string = fmt.Sprintf("[%s] (%s) %s", entry["time"], entry["level"], entry["msg"])
+	time, err := time.Parse("2006-01-02T15:04:05.999999999Z", fmt.Sprint(entry["time"]))
+	if err != nil {
+		panic("time conversion failed!")
+	}
+	var str string
+	str += fmt.Sprintf("[%s]", time.Format("02-01-2006 15:04:05 PM"))
+	if name, ok := entry["name"]; ok {
+		str += fmt.Sprintf(" (%v)", name)
+		delete(entry, "name")
+	}
+	str += fmt.Sprintf(" (%s) %s", entry["level"], entry["msg"])
 	delete(entry, "time")
 	delete(entry, "level")
 	delete(entry, "msg")

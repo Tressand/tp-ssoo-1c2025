@@ -77,8 +77,15 @@ func main() {
 		fmt.Scanln(&key)
 		fmt.Print("Value: ")
 		fmt.Scanln(&value)
-		var url string = config.Values.MemoryURL
-		url += "/storage?key=" + key + "&value=" + value
+
+		var url string = httputils.BuildUrl(httputils.URLData{
+			Base:     config.Values.IpMemory,
+			Endpoint: "storage",
+			Queries: map[string]string{
+				"key":   key,
+				"value": value,
+			},
+		})
 
 		fmt.Println(url)
 		resp, err := http.Post(url, http.MethodPost, http.NoBody)

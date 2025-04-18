@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -49,4 +50,19 @@ func GetOutboundIP() string {
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 	return localAddr.IP.String()
+}
+
+type URLData struct {
+	Base     string
+	Endpoint string
+	Queries  map[string]string
+}
+
+func BuildUrl(data URLData) string {
+	url := "http://" + data.Base + "/" + data.Endpoint
+	for key, value := range data.Queries {
+		url += "?" + key + "=" + value + "&"
+	}
+	url, _ = strings.CutSuffix(url, "&")
+	return url
 }
