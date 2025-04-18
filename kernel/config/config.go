@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 )
@@ -19,19 +18,16 @@ type KernelConfig struct {
 }
 
 var Values KernelConfig
-var configFilePath string = "./kernel/config/config.json"
+var configFilePath string = "/config/kernel_config.json"
 
 func SetFilePath(path string) {
 	configFilePath = path
 }
 
 func Load() {
-	filepath, err := filepath.Abs(configFilePath)
-	if err != nil {
-		panic(err)
-	}
+	configFilePath = configManager.GetDefaultConfigPath() + configFilePath
 
-	err = configManager.LoadConfig(filepath, &Values)
+	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {
 		panic(err)
 	}
