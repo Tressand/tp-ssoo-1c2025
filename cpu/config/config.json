@@ -1,6 +1,6 @@
 {
   "port_cpu": 8004,
-  "ip_memory": "127.0.0.1",
+  "ip_memory": "self",
   "port_memory": 8002,
   "ip_kernel": "127.0.0.1",
   "port_kernel": 8001,
