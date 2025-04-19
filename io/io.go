@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"ssoo-io/config"
+	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
@@ -71,8 +72,9 @@ func main() {
 		wg.Wait()
 		os.Exit(0)
 	})
-	menu.Add("Forcefully close all IO's and exit.", func() {
+	menu.Add("Close all connections and exit.", func() {
 		cancelctx()
+		wg.Wait()
 		os.Exit(0)
 	})
 	for {
@@ -107,7 +109,12 @@ func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *
 func notifyKernel(name string) (bool, error) {
 	log := slog.With("name", name)
 	log.Info("Notificando a Kernel...")
-	resp, err := http.Post(config.Values.KernelURL+"/io-notify", "text/plain", bytes.NewBufferString(name))
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "io-notify",
+	})
+	resp, err := http.Post(url, "text/plain", bytes.NewBufferString(name))
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
 		log.Error("Error making POST request", "error", err)

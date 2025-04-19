@@ -53,16 +53,20 @@ func GetOutboundIP() string {
 }
 
 type URLData struct {
-	Base     string
+	Ip       string
+	Port     int
 	Endpoint string
 	Queries  map[string]string
 }
 
 func BuildUrl(data URLData) string {
-	url := "http://" + data.Base + "/" + data.Endpoint + "?"
-	for key, value := range data.Queries {
-		url += key + "=" + value + "&"
+	url := "http://" + data.Ip + ":" + fmt.Sprint(data.Port) + "/" + data.Endpoint
+	if len(data.Queries) > 0 {
+		url += "?"
+		for key, value := range data.Queries {
+			url += key + "=" + value + "&"
+		}
+		url, _ = strings.CutSuffix(url, "&")
 	}
-	url, _ = strings.CutSuffix(url, "&")
 	return url
 }

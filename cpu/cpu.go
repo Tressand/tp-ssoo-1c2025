@@ -30,79 +30,21 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca CPU")
 
-	// #region INITIAL THREADS
-
-	var nstr string
-	var count = -1
-	for count < 0 {
-		fmt.Print("How many CPU's will we open at start? ")
-		fmt.Scanln(&nstr)
-		count, err = strconv.Atoi(nstr)
-		if err != nil || count < 0 {
-			continue
-		}
-	}
-
-	var wg sync.WaitGroup
-	ctx, cancelctx := context.WithCancel(context.Background())
-	for n := range count {
-		wg.Add(1)
-		go createKernelConnection("CPU"+fmt.Sprint(n+1), 3, 5, &wg, ctx)
-	}
-	time.Sleep(5 * time.Millisecond)
-
-	// #endregion
-
 	var mux *http.ServeMux = http.NewServeMux()
 
 	mux.Handle("/interrupt", interrupt())
 
 	shutdownSignal := make(chan any)
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
-	/*
-		key, value := getInput()
 
-		url := httputils.BuildUrl(httputils.URLData{
-			Base:     config.Values.IpMemory,
-			Endpoint: "storage",
-			Queries: map[string]string{
-				"key":   key,
-				"value": value,
-			},
-		})
+	var wg sync.WaitGroup
+	ctx, cancelctx := context.WithCancel(context.Background())
 
-		fmt.Printf("Connecting to %s\n", url)
-		resp, err := http.Post(url, http.MethodPost, http.NoBody)
-		if err != nil {
-			slog.Error("POST to Memory failed", "Error", err)
-		}
-		resp.Body.Close()
+	wg.Add(1)
+	go createKernelConnection("CPU1", 3, 5, &wg, ctx)
 
-		if resp.StatusCode != http.StatusOK {
-			slog.Error("POST to Memory status wrong", "status", resp.StatusCode)
-			return
-		}
-
-		slog.Info("POST to Memory succeded")
-	*/
 	mainMenu := menu.Create()
-	moduleMenu := menu.Create()
-	moduleMenu.Add("Add new CPU thread.", func() {
-		wg.Add(1)
-		count++
-		go createKernelConnection("CPU"+fmt.Sprint(count), 3, 5, &wg, ctx)
-	})
-	moduleMenu.Add("Wait for all CPU's to close and exit.", func() {
-		wg.Wait()
-		os.Exit(0)
-	})
-	moduleMenu.Add("Forcefully close all CPU's and exit.", func() {
-		cancelctx()
-		os.Exit(0)
-	})
-	mainMenu.Add("Communicate with other module", func() {
-		moduleMenu.Activate()
-	})
+	mainMenu.Add("Store value on Memory", func() { sendValueToMemory(getInput()) })
 	mainMenu.Add("Close Server and Exit Program", func() {
 		cancelctx()
 		shutdownSignal <- struct{}{}
@@ -113,17 +55,47 @@ func main() {
 	for {
 		mainMenu.Activate()
 	}
-
 }
 
-func createKernelConnection(id string, retryAmount int, retrySeconds int, wg *sync.WaitGroup, ctx context.Context) {
+func sendValueToMemory(key string, value string) {
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "storage",
+		Queries: map[string]string{
+			"key":   key,
+			"value": value,
+		},
+	})
+
+	fmt.Printf("Connecting to %s\n", url)
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	if err != nil {
+		slog.Error("POST to Memory failed", "Error", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("POST to Memory status wrong", "status", resp.StatusCode)
+		return
+	}
+
+	slog.Info("POST to Memory succeded")
+}
+
+func createKernelConnection(
+	name string,
+	retryAmount int,
+	retrySeconds int,
+	wg *sync.WaitGroup,
+	ctx context.Context) {
 	defer wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			retry, err := notifyKernel(id)
+			retry, err := notifyKernel(name, ctx)
 			if !retry {
 				return
 			}
@@ -135,75 +107,25 @@ func createKernelConnection(id string, retryAmount int, retrySeconds int, wg *sy
 				retryAmount--
 			}
 		}
-
 	}
 }
 
-/*
-func notifyKernel(id string) (bool, error) {
-	log := slog.With("cpu_id", id)
+func notifyKernel(id string, ctx context.Context) (bool, error) {
+	log := slog.With("name", id)
 	log.Info("Notificando a Kernel...")
 
-	ip := httputils.GetOutboundIP()
-	port := strconv.Itoa(config.Values.PortCPU)
-
 	url := httputils.BuildUrl(httputils.URLData{
-		Base:     config.Values.IpKernel,
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
 		Endpoint: "cpu-notify",
 		Queries: map[string]string{
-			"ip":   ip,
-			"port": port,
+			"ip":   httputils.GetOutboundIP(),
+			"port": fmt.Sprint(config.Values.PortCPU),
 			"id":   id,
 		},
 	})
 
-	resp, err := http.Post(url, "text/plain", http.NoBody)
-
-	if err != nil {
-		fmt.Println("Probably the server is not running, logging error")
-		log.Error("Error making POST request", "error", err)
-		return true, err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusTeapot {
-			log.Info("Server asked for shutdown.")
-			return false, nil
-		}
-		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
-		return true, fmt.Errorf("response error: %w", err)
-	}
-
-	data, _ := io.ReadAll(resp.Body)
-	valor, _ := strconv.Atoi(string(data))
-	log.Info("Recibió respuesta, valor", "timer", valor)
-
-	return true, nil
-} */
-
-func notifyKernel(id string) (bool, error) {
-	log := slog.With("cpu_id", id)
-	log.Info("Notificando a Kernel...")
-
-	ip := httputils.GetOutboundIP()
-	port := strconv.Itoa(config.Values.PortCPU)
-
-	kernelUrl := config.Values.IpKernel + ":" + strconv.Itoa(config.Values.PortKernel)
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Base:     kernelUrl,
-		Endpoint: "cpu-notify",
-		Queries: map[string]string{
-			"ip":   ip,
-			"port": port,
-			"id":   id,
-		},
-	})
-	log.Info("Connecting to Kernel", "url", url)
-
-	resp, err := http.Post(url, "text/plain", http.NoBody)
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
@@ -222,14 +144,29 @@ func notifyKernel(id string) (bool, error) {
 	}
 
 	data, _ := io.ReadAll(resp.Body)
-	value, _ := strconv.Atoi(string(data))
-	log.Info("Recibió respuesta ", "mensaje", value)
+	duration, _ := strconv.Atoi(string(data))
+	log.Info("Recibió respuesta, durmiendo...", "timer", duration)
 
-	return true, nil
+	sleepDone := make(chan struct{})
+	go func() {
+		time.Sleep(time.Duration(duration) * time.Millisecond)
+		sleepDone <- struct{}{}
+		fmt.Println("sleep goroutine closed")
+	}()
+	defer close(sleepDone)
+
+	select {
+	case <-sleepDone:
+		return true, nil
+	case <-ctx.Done():
+		return false, nil
+	}
 }
 
 func interrupt() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Interruptions not implemented
+
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			logger.Instance.Error("Error reading request body", "error", err)

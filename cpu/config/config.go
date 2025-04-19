@@ -38,4 +38,7 @@ func Load() {
 	if Values.IpMemory == "self" {
 		Values.IpMemory = httputils.GetOutboundIP()
 	}
+	if Values.IpKernel == "self" {
+		Values.IpKernel = httputils.GetOutboundIP()
+	}
 }
