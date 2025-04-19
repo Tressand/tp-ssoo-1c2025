@@ -7,6 +7,8 @@ import (
 	"os"
 	"ssoo-cpu/config"
 	"ssoo-utils/httputils"
+	"ssoo-utils/logger"
+	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
 )
@@ -15,16 +17,29 @@ func main() {
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 
-	// ID CPU -> Kernel
+	err := logger.SetupDefault("cpu", config.Values.LogLevel)
+	defer logger.Close()
+	if err != nil {
+		fmt.Printf("Error setting up logger: %v\n", err)
+		return
+	}
+	log := logger.Instance
+	log.Info("Arranca CPU")
 
+	//
 	if len(os.Args) < 2 {
 		slog.Error("No CPU ID provided")
 		return
 	}
 
 	cpuId := os.Args[1]
-
 	//
+	var mux *http.ServeMux = http.NewServeMux()
+
+	mux.Handle("/message-from-kernel", messageFromKernel())
+
+	shutdownSignal := make(chan any)
+	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
 	key, value := getInput()
 
@@ -51,33 +66,62 @@ func main() {
 
 	slog.Info("POST to Memory succeded")
 
-	cpuIp := httputils.GetOutboundIP()
-	cpuPort := strconv.Itoa(config.Values.PortCPU)
+	mainMenu := menu.Create()
+	moduleMenu := menu.Create()
+	moduleMenu.Add("Send id, ip and port to Kernel", func() {
+		handshakeWithKernel(cpuId)
+	})
+	mainMenu.Add("Communicate with other module", func() {
+		moduleMenu.Activate()
+	})
+	mainMenu.Add("Close Server and Exit Program", func() {
+		shutdownSignal <- struct{}{}
+		<-shutdownSignal
+		close(shutdownSignal)
+		os.Exit(0)
+	})
+	for {
+		mainMenu.Activate()
+	}
 
-	urlKernel := httputils.BuildUrl(httputils.URLData{
+}
+
+func handshakeWithKernel(id string) {
+	ip := httputils.GetOutboundIP()
+	port := strconv.Itoa(config.Values.PortCPU)
+
+	url := httputils.BuildUrl(httputils.URLData{
 		Base:     config.Values.IpKernel,
 		Endpoint: "cpu-handshake",
 		Queries: map[string]string{
-			"ip":   cpuIp,
-			"port": cpuPort,
-			"id":   cpuId,
+			"ip":   ip,
+			"port": port,
+			"id":   id,
 		},
 	})
-	fmt.Printf("Connecting to %s\n", urlKernel)
+	fmt.Printf("Connecting to %s\n", url)
 
-	res, err := http.Post(urlKernel, http.MethodPost, http.NoBody)
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
 		slog.Error("POST to Kernel failed", "Error", err)
 	}
-	res.Body.Close()
+	resp.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
-		slog.Error("POST to Kernel status wrong", "status", res.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("POST to Kernel status wrong", "status", resp.StatusCode)
 		return
 	}
 
 	slog.Info("POST to Kernel succeded")
+}
 
+func messageFromKernel() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Instance.Info("Recibo datos desde kernel")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("Message received."))
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 func getInput() (string, string) {
