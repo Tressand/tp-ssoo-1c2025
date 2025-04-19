@@ -49,6 +49,10 @@ func main() {
 
 	// Add routes to mux
 	mux.Handle("/test", test())
+
+	// Handshake with CPU
+	mux.Handle("/cpu-handshake", handshakeCpu())
+
 	// Pass the globalCloser to handlers that will block.
 	mux.Handle("/io-notify", recieveIO(ctx))
 
@@ -124,6 +128,30 @@ func test() http.HandlerFunc {
 }
 
 // #endregion
+
+// #region SECTION: CPU COMMUNICATION
+
+func handshakeCpu() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get CPU IP and Port
+		query := r.URL.Query()
+		cpuIp := query.Get("ip")
+		cpuPort := query.Get("port")
+		cpuId := query.Get("id")
+
+		if cpuIp == "" || cpuPort == "" || cpuId == "" {
+			slog.Error("Missing parameters in CPU handshake")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		slog.Info("CPU handshake", "ip", cpuIp, "port", cpuPort, "cpuId", cpuId)
+
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("Handshake successful"))
+		w.WriteHeader(http.StatusOK)
+	}
+}
 
 // #region SECTION: HANDLE IO CONNECTIONS
 
