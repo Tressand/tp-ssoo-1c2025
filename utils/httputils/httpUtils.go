@@ -59,9 +59,9 @@ type URLData struct {
 }
 
 func BuildUrl(data URLData) string {
-	url := "http://" + data.Base + "/" + data.Endpoint
+	url := "http://" + data.Base + "/" + data.Endpoint + "?"
 	for key, value := range data.Queries {
-		url += "?" + key + "=" + value + "&"
+		url += key + "=" + value + "&"
 	}
 	url, _ = strings.CutSuffix(url, "&")
 	return url

@@ -51,8 +51,7 @@ func main() {
 	mux.Handle("/test", test())
 
 	// Handshake with CPU
-	mux.Handle("/cpu-handshake", handshakeCpu())
-
+	mux.Handle("/cpu-notify", receiveCPU(ctx))
 	// Pass the globalCloser to handlers that will block.
 	mux.Handle("/io-notify", recieveIO(ctx))
 
@@ -71,9 +70,7 @@ func main() {
 	moduleMenu.Add("Send CPU Interrupt", func() {
 		fmt.Println("Not implemented")
 	})
-	moduleMenu.Add("Ask CPU to work", func() {
-		fmt.Println("Not implemented")
-	})
+	moduleMenu.Add("Ask CPU to work", askCPU)
 	moduleMenu.Add("Store value on Memory", func() {
 		fmt.Print("Key: ")
 		var key string
@@ -129,29 +126,96 @@ func test() http.HandlerFunc {
 
 // #endregion
 
-// #region SECTION: CPU COMMUNICATION
+// #region SECTION: HANDLE CPU CONNECTIONS
 
-func handshakeCpu() http.HandlerFunc {
+type CPUConnection struct {
+	id      string
+	ip      string
+	port    string
+	handler chan int
+}
+
+var availableCPUs []CPUConnection
+var avCPUmu sync.Mutex
+
+func receiveCPU(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get CPU IP and Port
-		query := r.URL.Query()
-		cpuIp := query.Get("ip")
-		cpuPort := query.Get("port")
-		cpuId := query.Get("id")
-
-		if cpuIp == "" || cpuPort == "" || cpuId == "" {
-			slog.Error("Missing parameters in CPU handshake")
-			w.WriteHeader(http.StatusBadRequest)
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
-		slog.Info("CPU handshake", "ip", cpuIp, "port", cpuPort, "cpuId", cpuId)
+		query := r.URL.Query()
+		ip := query.Get("ip")
+		port := query.Get("port")
+		id := query.Get("id")
 
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("Handshake successful"))
-		w.WriteHeader(http.StatusOK)
+		slog.Info("CPU available", "id", id)
+
+		connHandler := make(chan int)
+
+		thisConnection := CPUConnection{
+			id:      id,
+			ip:      ip,
+			port:    port,
+			handler: connHandler,
+		}
+
+		avCPUmu.Lock()
+		availableCPUs = append(availableCPUs, thisConnection)
+		avCPUmu.Unlock()
+
+		select {
+		case temp := <-connHandler:
+			for index, elem := range availableCPUs {
+				if elem == thisConnection {
+					availableCPUs = append(availableCPUs[:index], availableCPUs[index+1:]...)
+					break
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte(fmt.Sprint(temp)))
+
+		case <-ctx.Done():
+			w.WriteHeader(http.StatusTeapot)
+		}
 	}
 }
+
+func askCPU() {
+	var target *CPUConnection
+
+	fmt.Println("Current available CPUs:")
+	for _, elem := range availableCPUs {
+		fmt.Println("	- ", elem.id)
+	}
+
+	fmt.Print("Select CPU to work (any) ")
+	var output string
+	fmt.Scanln(&output)
+
+	if output == "" {
+		target = &availableCPUs[0]
+	} else {
+		for _, cpu := range availableCPUs {
+			if cpu.id == output {
+				target = &cpu
+				break
+			}
+		}
+	}
+	if target == nil {
+		fmt.Println("CPU not found.")
+		return
+	}
+
+	// Habria que pasarle el pid y pc a la CPU
+
+	target.handler <- 99
+}
+
+// #endregion
 
 // #region SECTION: HANDLE IO CONNECTIONS
 
