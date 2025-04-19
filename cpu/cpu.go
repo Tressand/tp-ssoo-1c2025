@@ -55,7 +55,7 @@ func main() {
 
 	var mux *http.ServeMux = http.NewServeMux()
 
-	mux.Handle("/message-from-kernel", messageFromKernel())
+	mux.Handle("/interrupt", interrupt())
 
 	shutdownSignal := make(chan any)
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
@@ -190,8 +190,10 @@ func notifyKernel(id string) (bool, error) {
 	ip := httputils.GetOutboundIP()
 	port := strconv.Itoa(config.Values.PortCPU)
 
+	kernelUrl := config.Values.IpKernel + ":" + strconv.Itoa(config.Values.PortKernel)
+
 	url := httputils.BuildUrl(httputils.URLData{
-		Base:     config.Values.IpKernel,
+		Base:     kernelUrl,
 		Endpoint: "cpu-notify",
 		Queries: map[string]string{
 			"ip":   ip,
@@ -201,7 +203,7 @@ func notifyKernel(id string) (bool, error) {
 	})
 	log.Info("Connecting to Kernel", "url", url)
 
-	resp, err := http.Get(url)
+	resp, err := http.Post(url, "text/plain", http.NoBody)
 
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
@@ -221,17 +223,27 @@ func notifyKernel(id string) (bool, error) {
 
 	data, _ := io.ReadAll(resp.Body)
 	value, _ := strconv.Atoi(string(data))
-	log.Info("Recibió respuesta, value: ", "timer", value)
+	log.Info("Recibió respuesta ", "mensaje", value)
 
 	return true, nil
 }
 
-func messageFromKernel() http.HandlerFunc {
+func interrupt() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		logger.Instance.Info("Recibo datos desde kernel")
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			logger.Instance.Error("Error reading request body", "error", err)
+			http.Error(w, "Error reading request body", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		message := string(data)
+		logger.Instance.Info("Received message from kernel", "message", message)
+
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("Message received."))
 		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Message received."))
 	}
 }
 

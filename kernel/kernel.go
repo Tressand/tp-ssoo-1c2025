@@ -15,6 +15,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -67,9 +68,7 @@ func main() {
 	mainMenu := menu.Create()
 	moduleMenu := menu.Create()
 	moduleMenu.Add("Send IO Signal", sendToIO)
-	moduleMenu.Add("Send CPU Interrupt", func() {
-		fmt.Println("Not implemented")
-	})
+	moduleMenu.Add("Send CPU Interrupt", sendInterrupt)
 	moduleMenu.Add("Ask CPU to work", askCPU)
 	moduleMenu.Add("Store value on Memory", func() {
 		fmt.Print("Key: ")
@@ -132,7 +131,7 @@ type CPUConnection struct {
 	id      string
 	ip      string
 	port    string
-	handler chan int
+	handler chan string
 }
 
 var availableCPUs []CPUConnection
@@ -140,7 +139,7 @@ var avCPUmu sync.Mutex
 
 func receiveCPU(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
@@ -152,7 +151,7 @@ func receiveCPU(ctx context.Context) http.HandlerFunc {
 
 		slog.Info("CPU available", "id", id)
 
-		connHandler := make(chan int)
+		connHandler := make(chan string)
 
 		thisConnection := CPUConnection{
 			id:      id,
@@ -212,7 +211,54 @@ func askCPU() {
 
 	// Habria que pasarle el pid y pc a la CPU
 
-	target.handler <- 99
+	target.handler <- "Message from Kernel"
+}
+
+func sendInterrupt() {
+	var target *CPUConnection
+
+	fmt.Println("Current available CPUs:")
+	for _, elem := range availableCPUs {
+		fmt.Println("	- ", elem.id)
+	}
+
+	fmt.Print("Select CPU to interrupt (any) ")
+	var output string
+	fmt.Scanln(&output)
+
+	if output == "" {
+		target = &availableCPUs[0]
+	} else {
+		for _, cpu := range availableCPUs {
+			if cpu.id == output {
+				target = &cpu
+				break
+			}
+		}
+	}
+	if target == nil {
+		fmt.Println("CPU not found.")
+		return
+	}
+
+	url := httputils.BuildUrl(httputils.URLData{
+		Base:     target.ip + ":" + target.port,
+		Endpoint: "interrupt",
+		Queries:  map[string]string{}})
+
+	// Realizar el POST
+	resp, err := http.Post(url, "text/plain", strings.NewReader("Interrupt from Kernel"))
+
+	if err != nil {
+		fmt.Printf("Error sending interrupt to CPU %s: %v\n", target.id, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Leer la respuesta del CPU
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("Response from CPU %s: %s\n", target.id, string(body))
+
 }
 
 // #endregion
