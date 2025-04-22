@@ -27,7 +27,7 @@ func main() {
 	identificadorStr := os.Args[1]
 	identificador, err1 := strconv.Atoi(identificadorStr)
 	if err1 != nil {
-		fmt.Printf("Error al convertir el identificador '%s' a entero: %v\n", identificadorStr, err)
+		fmt.Printf("Error al convertir el identificador '%s' a entero: %v\n", identificadorStr, err1)
 		return
 	}
 	config.Identificador = identificador
@@ -215,8 +215,8 @@ func getInput() (string, string) {
 func exec(){
 	switch config.Instruccion{
 		case "NOOP":
-			time.Sleep(1 * time.Second)
-			fmt.Println("se espero 1 segundo")
+			time.Sleep(1 * time.Millisecond)
+			fmt.Println("se espero 1 milisegundo.")
 			//no hace nada
 
 		case "WRITE":
@@ -231,8 +231,8 @@ func exec(){
 			fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
 
 		case "IO":
-			time.Sleep(time.Second * time.Duration(config.Exec_values.Arg1))
-			fmt.Printf("se espero %d segundo\n",config.Exec_values.Arg1)
+			time.Sleep(time.Millisecond * time.Duration(config.Exec_values.Arg1))
+			fmt.Printf("se espero %d milisegundo.\n",config.Exec_values.Arg1)
 			//simula una IO por un tiempo igual al arg1
 
 		case "INIT_PROC":
