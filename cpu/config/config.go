@@ -2,8 +2,8 @@ package config
 
 import (
 	"log/slog"
-	"path/filepath"
 	"ssoo-utils/configManager"
+	"ssoo-utils/httputils"
 )
 
 type CPUConfig struct {
@@ -33,7 +33,6 @@ type Exec_valuesS struct{
 }
 
 var Values CPUConfig
-var configFilePath string = "./config/config.json"
 var Pcb PCBS
 var Exec_values = Exec_valuesS{
 	Arg1: -1,
@@ -41,19 +40,24 @@ var Exec_values = Exec_valuesS{
 }
 var Instruccion string
 var Identificador int
+var configFilePath string = "/config/cpu_config.json"
 
 func SetFilePath(path string) {
 	configFilePath = path
 }
 
 func Load() {
-	filepath, err := filepath.Abs(configFilePath)
+	configFilePath = configManager.GetDefaultConfigPath() + configFilePath
+
+	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {
 		panic(err)
 	}
 
-	err = configManager.LoadConfig(filepath, &Values)
-	if err != nil {
-		panic(err)
+	if Values.IpMemory == "self" {
+		Values.IpMemory = httputils.GetOutboundIP()
+	}
+	if Values.IpKernel == "self" {
+		Values.IpKernel = httputils.GetOutboundIP()
 	}
 }

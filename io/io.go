@@ -22,16 +22,10 @@ import (
 
 // #endregion
 
-var urlKernel string = ""
-
 func main() {
 	// #region SETUP
 
 	config.Load()
-	if config.Values.IpKernel == "self" {
-		config.Values.IpKernel = httputils.GetOutboundIP()
-	}
-	urlKernel = "http://" + config.Values.IpKernel + ":" + fmt.Sprint(config.Values.PortKernel)
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 	err := logger.SetupDefault("io", config.Values.LogLevel)
 	defer logger.Close()
@@ -45,7 +39,17 @@ func main() {
 
 	// #region INITIAL THREADS
 
-	var count = 5
+	var nstr string
+	var count = -1
+	for count < 0 {
+		fmt.Print("How many IO's will we open at start? ")
+		fmt.Scanln(&nstr)
+		count, err = strconv.Atoi(nstr)
+		if err != nil || count < 0 {
+			continue
+		}
+	}
+
 	var wg sync.WaitGroup
 	ctx, cancelctx := context.WithCancel(context.Background())
 	for n := range count {
@@ -68,8 +72,9 @@ func main() {
 		wg.Wait()
 		os.Exit(0)
 	})
-	menu.Add("Forcefully close all IO's and exit.", func() {
+	menu.Add("Close all connections and exit.", func() {
 		cancelctx()
+		wg.Wait()
 		os.Exit(0)
 	})
 	for {
@@ -104,7 +109,12 @@ func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *
 func notifyKernel(name string) (bool, error) {
 	log := slog.With("name", name)
 	log.Info("Notificando a Kernel...")
-	resp, err := http.Post(urlKernel+"/io-notify", "text/plain", bytes.NewBufferString(name))
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "io-notify",
+	})
+	resp, err := http.Post(url, "text/plain", bytes.NewBufferString(name))
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
 		log.Error("Error making POST request", "error", err)

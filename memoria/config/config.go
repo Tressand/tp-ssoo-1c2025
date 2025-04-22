@@ -2,7 +2,6 @@ package config
 
 import (
 	"log/slog"
-	"path/filepath"
 	"ssoo-utils/configManager"
 )
 
@@ -20,19 +19,16 @@ type MemoryConfig struct {
 }
 
 var Values MemoryConfig
-var configFilePath string = "./memoria/config/config.json"
+var configFilePath string = "/config/memoria_config.json"
 
 func SetFilePath(path string) {
 	configFilePath = path
 }
 
 func Load() {
-	filepath, err := filepath.Abs(configFilePath)
-	if err != nil {
-		panic(err)
-	}
+	configFilePath = configManager.GetDefaultConfigPath() + configFilePath
 
-	err = configManager.LoadConfig(filepath, &Values)
+	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {
 		panic(err)
 	}
