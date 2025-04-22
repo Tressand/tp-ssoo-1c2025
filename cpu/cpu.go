@@ -25,8 +25,8 @@ func main() {
 		return
 	}
 	identificadorStr := os.Args[1]
-	identificador, err := strconv.Atoi(identificadorStr)
-	if err != nil {
+	identificador, err1 := strconv.Atoi(identificadorStr)
+	if err1 != nil {
 		fmt.Printf("Error al convertir el identificador '%s' a entero: %v\n", identificadorStr, err)
 		return
 	}
