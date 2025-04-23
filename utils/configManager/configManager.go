@@ -3,6 +3,9 @@ package configManager
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 func LoadConfig[ConfigObject interface{}](filepath string, v *ConfigObject) error {
@@ -40,4 +43,23 @@ func SaveConfig[ConfigObject struct{}](filepath string, v *ConfigObject) error {
 	}
 
 	return nil
+}
+
+func GetDefaultConfigPath() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+
+	if strings.Contains(exePath, os.TempDir()) || strings.Contains(exePath, ".cache") {
+		_, modulePath, _, ok := runtime.Caller(1)
+		if !ok {
+			panic("runtime.Caller failed")
+		}
+		exePath, _ = strings.CutSuffix(modulePath, "/config/config.go")
+	} else {
+		exePath = filepath.Dir(exePath)
+	}
+
+	return exePath
 }

@@ -1,15 +1,12 @@
 package config
 
 import (
-	"fmt"
 	"log/slog"
-	"path/filepath"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 )
 
 type CPUConfig struct {
-	MemoryURL        string
 	PortCPU          int        `json:"port_cpu"`
 	IpMemory         string     `json:"ip_memory"`
 	PortMemory       int        `json:"port_memory"`
@@ -23,20 +20,36 @@ type CPUConfig struct {
 	LogLevel         slog.Level `json:"log_level"`
 }
 
+type PCBS struct{
+	PID int
+	PC int
+	ME []int
+	MT []int
+}
+
+type Exec_valuesS struct{
+	Arg1 int
+	Arg2 int
+}
+
 var Values CPUConfig
-var configFilePath string = "./cpu/config/config.json"
+var Pcb PCBS
+var Exec_values = Exec_valuesS{
+	Arg1: -1,
+	Arg2: -1,
+}
+var Instruccion string
+var Identificador int
+var configFilePath string = "/config/cpu_config.json"
 
 func SetFilePath(path string) {
 	configFilePath = path
 }
 
 func Load() {
-	filepath, err := filepath.Abs(configFilePath)
-	if err != nil {
-		panic(err)
-	}
+	configFilePath = configManager.GetDefaultConfigPath() + configFilePath
 
-	err = configManager.LoadConfig(filepath, &Values)
+	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {
 		panic(err)
 	}
@@ -44,6 +57,7 @@ func Load() {
 	if Values.IpMemory == "self" {
 		Values.IpMemory = httputils.GetOutboundIP()
 	}
-	Values.MemoryURL = "http://" + Values.IpMemory + ":" + fmt.Sprint(Values.PortMemory)
-
+	if Values.IpKernel == "self" {
+		Values.IpKernel = httputils.GetOutboundIP()
+	}
 }

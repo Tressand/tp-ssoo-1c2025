@@ -1,15 +1,12 @@
 package config
 
 import (
-	"fmt"
 	"log/slog"
-	"path/filepath"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 )
 
 type IOConfig struct {
-	KernelURL  string
 	IpKernel   string     `json:"ip_kernel"`
 	PortKernel int        `json:"port_kernel"`
 	PortIO     int        `json:"port_io"`
@@ -17,19 +14,16 @@ type IOConfig struct {
 }
 
 var Values IOConfig
-var configFilePath string = "./io/config/config.json"
+var configFilePath string = "/config/io_config.json"
 
 func SetFilePath(path string) {
 	configFilePath = path
 }
 
 func Load() {
-	filepath, err := filepath.Abs(configFilePath)
-	if err != nil {
-		panic(err)
-	}
+	configFilePath = configManager.GetDefaultConfigPath() + configFilePath
 
-	err = configManager.LoadConfig(filepath, &Values)
+	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {
 		panic(err)
 	}
@@ -37,5 +31,4 @@ func Load() {
 	if Values.IpKernel == "self" {
 		Values.IpKernel = httputils.GetOutboundIP()
 	}
-	Values.KernelURL = "http://" + Values.IpKernel + ":" + fmt.Sprint(Values.PortKernel)
 }
