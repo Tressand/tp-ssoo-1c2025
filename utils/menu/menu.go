@@ -65,3 +65,23 @@ func (menu *menu) Activate() {
 		}
 	}
 }
+
+func SliceSelect[T any](slice []T) (index int) {
+	if len(slice) == 0 {
+		return -1
+	}
+	for {
+		for i, elem := range slice {
+			fmt.Printf("  %d - %v\n", i, elem)
+		}
+		fmt.Print("\nSelect index: ")
+		var output string
+		fmt.Scanln(&output)
+		for i := range slice {
+			if output == fmt.Sprint(i) {
+				return i
+			}
+		}
+		fmt.Print("Invalid option.\n\n")
+	}
+}

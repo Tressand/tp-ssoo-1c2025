@@ -3,6 +3,8 @@ package storage
 import (
 	"bufio"
 	"errors"
+	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 )
@@ -31,6 +33,26 @@ const (
 	DUMP_MEMORY
 )
 
+var opcodeStrings map[int]string = map[int]string{
+	NOOP:        "NOOP",
+	EXIT:        "EXIT",
+	WRITE:       "WRITE",
+	READ:        "READ",
+	GOTO:        "GOTO",
+	IO:          "IO",
+	INIT_PROC:   "INIT_PROC",
+	DUMP_MEMORY: "DUMP_MEMORY",
+}
+
+func OpCodeFromString(str string) int {
+	for key, value := range opcodeStrings {
+		if value == str {
+			return key
+		}
+	}
+	return -1
+}
+
 func GetDataByPID(pid uint) (data *process_data, index int) {
 	for index, process := range systemMemory {
 		if process.pid == pid {
@@ -38,30 +60,6 @@ func GetDataByPID(pid uint) (data *process_data, index int) {
 		}
 	}
 	return nil, -1
-}
-
-func OpCodeFromString(opcode string) (result int) {
-	switch opcode {
-	case "NOOP":
-		result = 0
-	case "EXIT":
-		result = 1
-	case "WRITE":
-		result = 2
-	case "READ":
-		result = 3
-	case "GOTO":
-		result = 4
-	case "IO":
-		result = 5
-	case "INIT_PROC":
-		result = 6
-	case "DUMP_MEMORY":
-		result = 7
-	default:
-		result = -1
-	}
-	return
 }
 
 func GetInstruction(pid uint, pc int) (*instruction, error) {
@@ -74,8 +72,30 @@ func GetInstruction(pid uint, pc int) (*instruction, error) {
 
 var systemMemory []process_data = make([]process_data, 0)
 
+func LogSystemMemory() {
+	if len(systemMemory) == 0 {
+		fmt.Println("No processes loaded.")
+		return
+	}
+	var msg string
+	for _, p := range systemMemory {
+		msg += "------------------------\n"
+		msg += "|  PID: " + fmt.Sprint(p.pid) + "\n|\n"
+		msg += "|  Code (" + fmt.Sprint(len(p.code)) + " instructions)\n"
+		for index, inst := range p.code {
+			msg += "|    " + opcodeStrings[inst.opcode] + " " + fmt.Sprint(inst.args) + "\n"
+			if index >= 10 {
+				msg += "|    (...)\n"
+				break
+			}
+		}
+	}
+	msg += "------------------------\n"
+	fmt.Print(msg)
+}
+
 func CreateProcess(newpid uint, codePath string, memoryRequirement int) error {
-	if memoryRequirement < remainingMemory {
+	if memoryRequirement > remainingMemory {
 		return errors.New("not enough user memory")
 	}
 
@@ -95,6 +115,9 @@ func CreateProcess(newpid uint, codePath string, memoryRequirement int) error {
 		}
 		line := scanner.Text()
 		parts := strings.Split(line, " ")
+		if len(parts) > 3 {
+			return errors.New("more arguments than possible")
+		}
 		newOpCode := OpCodeFromString(parts[0])
 		if newOpCode == -1 {
 			return errors.New("opcode not recognized")
@@ -145,6 +168,7 @@ var remainingMemory = 0
 func InitializeUserMemory(size int) {
 	userMemory = make([]byte, size)
 	remainingMemory = size
+	slog.Info("Memoria de Usuario Inicializada", "size", remainingMemory)
 }
 
 func allocateMemory(pid uint, size int) error {

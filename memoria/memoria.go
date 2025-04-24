@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"ssoo-memoria/config"
+	"ssoo-memoria/storage"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
@@ -24,6 +27,7 @@ func main() {
 	}
 	log := logger.Instance
 	log.Info("Arranca Memoria")
+	storage.InitializeUserMemory(config.Values.MemorySize)
 
 	// #endregion
 
@@ -66,7 +70,7 @@ func main() {
 		fmt.Println(retrieveValue(key))
 	})
 	storageMenu.Add("List all values stored", func() {
-		for key, value := range storage {
+		for key, value := range testStorage {
 			fmt.Printf("%s | %v\n", key, value)
 		}
 	})
@@ -81,6 +85,23 @@ func main() {
 	mainMenu.Add("Access Storage", func() {
 		storageMenu.Activate()
 	})
+	mainMenu.Add("Create Process", func() {
+		var codeFolder = "./code"
+		codeFolder, _ = filepath.Abs(codeFolder)
+		files, _ := os.ReadDir(codeFolder)
+		var names []string
+		for _, file := range files {
+			names = append(names, file.Name())
+		}
+		i := menu.SliceSelect(names)
+		err := storage.CreateProcess(1, codeFolder+"/"+files[i].Name(), 0)
+		if err != nil {
+			slog.Error("process could not be created", "error", err)
+		} else {
+			slog.Info("process created")
+		}
+	})
+	mainMenu.Add("Log processes", storage.LogSystemMemory)
 	mainMenu.Add("Close Server and Exit Program", func() {
 		shutdownSignal <- struct{}{}
 		<-shutdownSignal
@@ -116,16 +137,16 @@ func storageRequestHandler() http.HandlerFunc {
 	}
 }
 
-var storage map[string]string = make(map[string]string)
+var testStorage map[string]string = make(map[string]string)
 
 func saveValue(key string, value string) {
-	storage[key] = value
+	testStorage[key] = value
 }
 
 func retrieveValue(key string) string {
-	return storage[key]
+	return testStorage[key]
 }
 
 func deleteValue(key string) {
-	delete(storage, key)
+	delete(testStorage, key)
 }
