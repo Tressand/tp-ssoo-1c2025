@@ -6,8 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"ssoo-utils/codeutils"
 	"strings"
 )
+
+type instruction = codeutils.Instruction
+
+var opcodeStrings map[int]string = codeutils.OpcodeStrings
 
 //#region SECTION: SYSTEM MEMORY
 
@@ -15,42 +20,6 @@ type process_data struct {
 	pid     uint
 	code    []instruction
 	metrics memory_metrics
-}
-
-type instruction struct {
-	opcode int
-	args   []string
-}
-
-const (
-	NOOP int = iota
-	EXIT
-	WRITE
-	READ
-	GOTO
-	IO
-	INIT_PROC
-	DUMP_MEMORY
-)
-
-var opcodeStrings map[int]string = map[int]string{
-	NOOP:        "NOOP",
-	EXIT:        "EXIT",
-	WRITE:       "WRITE",
-	READ:        "READ",
-	GOTO:        "GOTO",
-	IO:          "IO",
-	INIT_PROC:   "INIT_PROC",
-	DUMP_MEMORY: "DUMP_MEMORY",
-}
-
-func OpCodeFromString(str string) int {
-	for key, value := range opcodeStrings {
-		if value == str {
-			return key
-		}
-	}
-	return -1
 }
 
 func GetDataByPID(pid uint) (data *process_data, index int) {
@@ -83,7 +52,7 @@ func LogSystemMemory() {
 		msg += "|  PID: " + fmt.Sprint(p.pid) + "\n|\n"
 		msg += "|  Code (" + fmt.Sprint(len(p.code)) + " instructions)\n"
 		for index, inst := range p.code {
-			msg += "|    " + opcodeStrings[inst.opcode] + " " + fmt.Sprint(inst.args) + "\n"
+			msg += "|    " + opcodeStrings[inst.Opcode] + " " + fmt.Sprint(inst.Args) + "\n"
 			if index >= 10 {
 				msg += "|    (...)\n"
 				break
@@ -118,11 +87,11 @@ func CreateProcess(newpid uint, codePath string, memoryRequirement int) error {
 		if len(parts) > 3 {
 			return errors.New("more arguments than possible")
 		}
-		newOpCode := OpCodeFromString(parts[0])
+		newOpCode := codeutils.OpCodeFromString(parts[0])
 		if newOpCode == -1 {
 			return errors.New("opcode not recognized")
 		}
-		newProcessData.code = append(newProcessData.code, instruction{opcode: newOpCode, args: parts[1:]})
+		newProcessData.code = append(newProcessData.code, instruction{Opcode: newOpCode, Args: parts[1:]})
 	}
 
 	err = allocateMemory(newpid, memoryRequirement)
