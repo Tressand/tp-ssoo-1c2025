@@ -3,7 +3,6 @@ package main
 // #region SECTION: IMPORTS
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -39,8 +39,14 @@ func main() {
 
 	// #region INITIAL THREADS
 
-	var nstr string
+	var names []string
 	var count = -1
+	if len(os.Args) > 1 {
+		names = append(names, os.Args[1:]...)
+		count = len(names)
+	}
+
+	var nstr string
 	for count < 0 {
 		fmt.Print("How many IO's will we open at start? ")
 		fmt.Scanln(&nstr)
@@ -48,17 +54,25 @@ func main() {
 		if err != nil || count < 0 {
 			continue
 		}
+		for n := range count {
+			names = append(names, "IO"+fmt.Sprint(n+1))
+		}
 	}
 
 	var wg sync.WaitGroup
 	ctx, cancelctx := context.WithCancel(context.Background())
 	for n := range count {
 		wg.Add(1)
-		go createKernelConnection("IO"+fmt.Sprint(n+1), 3, 5, &wg, ctx)
+		go createKernelConnection(names[n], 3, 5, &wg, ctx)
 	}
 	time.Sleep(5 * time.Millisecond)
 
 	// #endregion
+
+	if !config.Values.ShowMenu {
+		wg.Wait()
+		return
+	}
 
 	// #region MENU
 
@@ -84,13 +98,14 @@ func main() {
 }
 
 func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *sync.WaitGroup, ctx context.Context) {
+	var assignedPID uint = 0
 	defer wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			retry, err := notifyKernel(name)
+			retry, err := notifyKernel(name, &assignedPID)
 			if !retry {
 				return
 			}
@@ -106,21 +121,24 @@ func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *
 	}
 }
 
-func notifyKernel(name string) (bool, error) {
+func notifyKernel(name string, pidptr *uint) (bool, error) {
 	log := slog.With("name", name)
 	log.Info("Notificando a Kernel...")
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-notify",
+		Queries:  map[string]string{"name": name, "pid": fmt.Sprint(*pidptr)},
 	})
-	resp, err := http.Post(url, "text/plain", bytes.NewBufferString(name))
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
 		log.Error("Error making POST request", "error", err)
 		return true, err
 	}
 	defer resp.Body.Close()
+
+	*pidptr = 0
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusTeapot {
@@ -132,12 +150,14 @@ func notifyKernel(name string) (bool, error) {
 	}
 
 	data, _ := io.ReadAll(resp.Body)
-	duration, _ := strconv.Atoi(string(data))
-	log.Info("Recibió respuesta, durmiendo...", "timer", duration)
+	vars := strings.Split(string(data), "|")
+	pid, _ := strconv.Atoi(vars[0])
+	duration, _ := strconv.Atoi(vars[1])
 
+	*pidptr = uint(pid)
+	logger.RequiredLog(true, *pidptr, "Inicio de IO", map[string]string{"Tiempo": fmt.Sprint(duration) + "ms"})
 	time.Sleep(time.Duration(duration) * time.Millisecond)
-
-	log.Info("Terminó de dormir")
+	logger.RequiredLog(true, *pidptr, "Fin de IO", map[string]string{})
 
 	return true, nil
 }

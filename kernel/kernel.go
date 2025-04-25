@@ -313,7 +313,12 @@ func sendInterrupt() {
 
 type IOConnection struct {
 	name    string
-	handler chan int
+	handler chan IORequest
+}
+
+type IORequest struct {
+	pid   uint
+	timer int
 }
 
 var availableIOs []IOConnection
@@ -327,17 +332,17 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		}
 
 		// Get IO name
-		data, _ := io.ReadAll(r.Body)
-		name := string(data)
+		name := r.URL.Query().Get("name")
 		slog.Info("IO available", "name", name)
 
 		// Create handler channel and add this IO to the list of available IOs
-		connHandler := make(chan int)
-		// Note: Mutex is to prevent race condition on the availableIOs' list
+		connHandler := make(chan IORequest)
 		thisConnection := IOConnection{
 			name:    name,
 			handler: connHandler,
 		}
+
+		// Note: Mutex is to prevent race condition on the availableIOs' list
 		avIOmu.Lock()
 		availableIOs = append(availableIOs, thisConnection)
 		avIOmu.Unlock()
@@ -345,7 +350,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		// select will wait for whoever comes first:
 		select {
 		// A timer is sent through this specific IO handler channel
-		case timer := <-connHandler:
+		case request := <-connHandler:
 			// Remove the IOConnection from the list of available ones before sending the response.
 			for index, elem := range availableIOs {
 				if elem == thisConnection {
@@ -355,7 +360,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			}
 			w.WriteHeader(http.StatusOK)
 			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte(fmt.Sprint(timer)))
+			w.Write([]byte(fmt.Sprintf("%d|%d", request.pid, request.timer)))
 
 		// The io context channel closed
 		case <-ctx.Done():
@@ -417,7 +422,11 @@ func sendToIO() {
 	}
 
 	// Send the timer through the targets channel, this will trigger the recieveIO()'s response.
-	target.handler <- timer
+	sendIORequest(0, timer, target)
+}
+
+func sendIORequest(pid uint, timer int, io *IOConnection) {
+	io.handler <- IORequest{pid: pid, timer: timer}
 }
 
 // #endregion

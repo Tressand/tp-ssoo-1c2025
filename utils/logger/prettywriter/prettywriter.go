@@ -4,11 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 )
 
 type PrettyWriter struct {
 	output io.Writer
+}
+
+var mutex sync.Mutex
+
+func NewPrettyWriter(output io.Writer) *PrettyWriter {
+	return &PrettyWriter{
+		output: output,
+	}
 }
 
 func (cw *PrettyWriter) Write(p []byte) (n int, err error) {
@@ -22,18 +31,13 @@ func (cw *PrettyWriter) Write(p []byte) (n int, err error) {
 	prettyEntry := prettyfy(logEntry)
 
 	// Write the custom format to the output
+	mutex.Lock()
 	n, err = cw.output.Write([]byte(prettyEntry))
 	if err != nil {
 		return n, fmt.Errorf("failed to write custom log: %w", err)
 	}
-
+	mutex.Unlock()
 	return len(p), nil // Return the original byte count to satisfy the logger
-}
-
-func NewPrettyWriter(output io.Writer) *PrettyWriter {
-	return &PrettyWriter{
-		output: output,
-	}
 }
 
 func prettyfy(entry map[string]any) string {
@@ -42,7 +46,7 @@ func prettyfy(entry map[string]any) string {
 		panic("time conversion failed!")
 	}
 	var str string
-	str += fmt.Sprintf("[%s]", time.Format("02-01-2006 15:04:05 PM"))
+	str += fmt.Sprintf("[%s]", time.Format("15:04:05.9999"))
 	if name, ok := entry["name"]; ok {
 		str += fmt.Sprintf(" (%v)", name)
 		delete(entry, "name")
@@ -61,4 +65,14 @@ func prettyfy(entry map[string]any) string {
 	}
 	str += "\n"
 	return str
+}
+
+func (cw *PrettyWriter) WriteString(str string) (n int, err error) {
+	mutex.Lock()
+	n, err = cw.output.Write([]byte(str))
+	if err != nil {
+		return n, fmt.Errorf("failed to write string to log: %w", err)
+	}
+	mutex.Unlock()
+	return len(str), nil
 }

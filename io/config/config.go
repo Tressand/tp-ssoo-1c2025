@@ -11,6 +11,7 @@ type IOConfig struct {
 	PortKernel int        `json:"port_kernel"`
 	PortIO     int        `json:"port_io"`
 	LogLevel   slog.Level `json:"log_level"`
+	ShowMenu   bool       `json:"show_menu"`
 }
 
 var Values IOConfig
