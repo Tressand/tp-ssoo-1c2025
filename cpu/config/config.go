@@ -32,6 +32,15 @@ type Exec_valuesS struct{
 	Arg2 int
 }
 
+type RequestPayload struct {
+	PID int `json:"pid"`
+	PC  int `json:"pc"`
+}
+
+type ResponsePayload struct {
+	Instrucciones []int `json:"instrucciones"`//deberia traer otra cosa pero por ahora lo dejo asi
+}
+
 var Values CPUConfig
 var Pcb PCBS
 var Exec_values = Exec_valuesS{

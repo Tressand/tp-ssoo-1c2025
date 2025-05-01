@@ -1,25 +1,28 @@
 package main
 
 import (
-	"strings"
-	"strconv"
-	"time"
-	"os"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"ssoo-cpu/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 func main() {
-
+	//Obtener identificador
 	if len(os.Args) < 2{
 		fmt.Println("Falta el identificador. Uso: ./cpu [identificador]")
 		return
@@ -33,11 +36,15 @@ func main() {
 	config.Identificador = identificador
 	fmt.Printf("Identificador recibido: %d\n", config.Identificador) //funciona falta saberlo usar
 
+	//cargar config
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
-	asign("IO 8")
-	exec()
+	
+	//Ejecucion de practica
+	//asign("IO 8")
+	//exec()
 
+	//crear logger
 	err := logger.SetupDefault("cpu", config.Values.LogLevel)
 	defer logger.Close()
 	if err != nil {
@@ -47,6 +54,7 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca CPU")
 
+	//iniciar server
 	var mux *http.ServeMux = http.NewServeMux()
 
 	mux.Handle("/interrupt", interrupt())
@@ -60,6 +68,8 @@ func main() {
 	wg.Add(1)
 	go createKernelConnection("CPU1", 3, 5, &wg, ctx)
 
+
+	//crear menu
 	mainMenu := menu.Create()
 	mainMenu.Add("Store value on Memory", func() { sendValueToMemory(getInput()) })
 	mainMenu.Add("Close Server and Exit Program", func() {
@@ -99,6 +109,54 @@ func sendValueToMemory(key string, value string) {
 
 	slog.Info("POST to Memory succeded")
 }
+
+func sendPidPcToMemory(){
+
+	payload := config.RequestPayload{
+		PID: config.Pcb.PID,
+		PC: config.Pcb.PC,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error serializando JSON: %v", err)
+		return
+	}
+
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "storage",
+	})
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error al enviar PID y PC a memoria: %v",err)
+		return
+	}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error leyendo respuesta de memoria: %v", err)
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Memoria devolvió estado %d: %s", resp.StatusCode, string(body))
+		return
+	}
+
+	var response config.ResponsePayload
+	if err := json.Unmarshal(body, &response); err != nil {
+		log.Printf("Error parseando respuesta JSON: %v", err)
+		return
+	}
+
+	//falta ver que se hacen con los datos enviados por memoria en response.
+	log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
+}
+
 
 func createKernelConnection(
 	name string,
@@ -237,7 +295,7 @@ func exec(){
 
 		case "INIT_PROC":
 			//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
-
+			
 		case "DUMP_MEMORY":
 			//vacia la memoria
 
