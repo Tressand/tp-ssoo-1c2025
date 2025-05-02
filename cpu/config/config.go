@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 )
@@ -31,6 +32,13 @@ type Exec_valuesS struct {
 	Arg1 int
 	Arg2 int
 }
+
+type RequestPayload struct {
+	PID int `json:"pid"`
+	PC  int `json:"pc"`
+}
+
+type ResponsePayload = codeutils.Instruction
 
 var Values CPUConfig
 var Pcb PCBS

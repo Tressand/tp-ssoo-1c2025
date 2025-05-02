@@ -27,27 +27,7 @@ import (
 func main() {
 	// #region SETUP
 
-	if len(os.Args) < 3 {
-		fmt.Println("Faltan argumentos! Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso] [...args]")
-		return
-	}
-
-	pathFile := os.Args[1]
-
-	if _, err := os.Stat(pathFile); os.IsNotExist(err) {
-		fmt.Printf("El archivo de pseudocódigo '%s' no existe.\n", pathFile)
-		return
-	}
-
-	processSizeStr := os.Args[2]
-	processSize, processSizeErr := strconv.Atoi(processSizeStr)
-
-	if processSizeErr != nil {
-		fmt.Printf("Error al convertir el tamaño del proceso '%s' a entero: %v\n", processSizeStr, processSizeErr)
-		return
-	}
 	// load config
-
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 	err := logger.SetupDefault("kernel", config.Values.LogLevel)
@@ -59,9 +39,32 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca Kernel")
 
-	// #endregion
+	// nota: arreglar después para que los argumentos sean opcionales.
+	if len(os.Args) > 1 {
+		if len(os.Args) < 3 {
+			fmt.Println("Faltan argumentos! Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso] [...args]")
+			return
+		}
 
-	process.CreateProcess(pathFile, processSize) // ? Va aca o en el menu?
+		pathFile := os.Args[1]
+
+		if _, err := os.Stat(pathFile); os.IsNotExist(err) {
+			fmt.Printf("El archivo de pseudocódigo '%s' no existe.\n", pathFile)
+			return
+		}
+
+		processSizeStr := os.Args[2]
+		processSize, processSizeErr := strconv.Atoi(processSizeStr)
+
+		if processSizeErr != nil {
+			fmt.Printf("Error al convertir el tamaño del proceso '%s' a entero: %v\n", processSizeStr, processSizeErr)
+			return
+		}
+
+		process.CreateProcess(pathFile, processSize)
+	}
+
+	// #endregion
 
 	// #region CREATE SERVER
 

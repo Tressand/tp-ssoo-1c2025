@@ -1,6 +1,6 @@
 package codeutils
 
-type Opcode = int
+type Opcode int
 
 type Instruction struct {
 	Opcode Opcode   `json:"opcode"`
@@ -18,7 +18,7 @@ const (
 	DUMP_MEMORY
 )
 
-var OpcodeStrings map[int]string = map[int]string{
+var OpcodeStrings map[Opcode]string = map[Opcode]string{
 	NOOP:        "NOOP",
 	EXIT:        "EXIT",
 	WRITE:       "WRITE",
@@ -29,7 +29,7 @@ var OpcodeStrings map[int]string = map[int]string{
 	DUMP_MEMORY: "DUMP_MEMORY",
 }
 
-func OpCodeFromString(str string) int {
+func OpCodeFromString(str string) Opcode {
 	for key, value := range OpcodeStrings {
 		if value == str {
 			return key

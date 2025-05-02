@@ -12,7 +12,7 @@ import (
 
 type instruction = codeutils.Instruction
 
-var opcodeStrings map[int]string = codeutils.OpcodeStrings
+var opcodeStrings map[codeutils.Opcode]string = codeutils.OpcodeStrings
 
 //#region SECTION: SYSTEM MEMORY
 
