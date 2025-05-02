@@ -46,7 +46,6 @@ func main() {
 		fmt.Printf("Error al convertir el tamaño del proceso '%s' a entero: %v\n", processSizeStr, processSizeErr)
 		return
 	}
-
 	// load config
 
 	config.Load()
@@ -91,6 +90,7 @@ func main() {
 
 	mainMenu := menu.Create()
 	moduleMenu := menu.Create()
+
 	moduleMenu.Add("Send IO Signal", sendToIO)
 	moduleMenu.Add("Send CPU Interrupt", sendInterrupt)
 	moduleMenu.Add("Ask CPU to work", askCPU)

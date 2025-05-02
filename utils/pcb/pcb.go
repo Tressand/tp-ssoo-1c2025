@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type STATE = int
+type STATE int
 
 const (
 	EXIT STATE = iota

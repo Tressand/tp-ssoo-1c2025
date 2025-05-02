@@ -4,11 +4,20 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"ssoo-kernel/config"
 	kernel_globals "ssoo-kernel/globals"
 	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
 )
+
+// Estructura para manejar la cola de nuevos procesos
+type ProcessQueueItem struct {
+	PCB  *pcb.PCB
+	Size int
+}
+
+var NewQueue []ProcessQueueItem = make([]ProcessQueueItem, 0)
 
 func CreateProcess(pathFile string, processSize int) {
 	newProcess := pcb.Create(
@@ -16,14 +25,14 @@ func CreateProcess(pathFile string, processSize int) {
 		pathFile,
 	)
 
-	// pido memoria a memoria(?)🥵
 	err := requestMemoryProcess(newProcess.GetPID(), pathFile, processSize)
 	if err != nil {
 		slog.Error("No se pudo crear el proceso en Memoria", "error", err)
 		return
 	}
 
-	kernel_globals.ActualProcess = newProcess
+	addToNewQueue(newProcess, processSize)
+
 	kernel_globals.Processes = append(kernel_globals.Processes, newProcess)
 
 	slog.Info(fmt.Sprintf(
@@ -33,25 +42,37 @@ func CreateProcess(pathFile string, processSize int) {
 	))
 }
 
-/*
-var newQueue []*pcb.PCB
-
-	func addToNewQueue(pcb *pcb.PCB) {
-		switch config.Values.ReadyIngressAlgorithm {
-		case "FIFO":
-			newQueue = append(newQueue, pcb)
-		case "PMCP":
-			// Proceso más chico primero: Ordenamos la cola por tamaño ascendente
-			newQueue = append(newQueue, pcb)
-			sort.Slice(newQueue, func(i, j int) bool {
-				return newQueue[i].Size < newQueue[j].Size
-			})
-
-		}
+func addToNewQueue(pcb *pcb.PCB, size int) {
+	newItem := ProcessQueueItem{
+		PCB:  pcb,
+		Size: size,
 	}
-*/
-func requestMemoryProcess(pid uint, codePath string, size int) error {
 
+	switch config.Values.ReadyIngressAlgorithm {
+	case "FIFO":
+		NewQueue = append(NewQueue, newItem)
+	case "PMCP":
+		// Proceso más chico primero: Ordenamos la cola por tamaño ascendente
+		NewQueue = append(NewQueue, newItem)
+		sort.Slice(NewQueue, func(i, j int) bool {
+			return NewQueue[i].Size < NewQueue[j].Size
+		})
+	default:
+		NewQueue = append(NewQueue, newItem) // Por defecto FIFO
+	}
+}
+
+// Función para obtener el siguiente proceso de la cola
+func GetNextProcessFromQueue() (*pcb.PCB, int) {
+	if len(NewQueue) == 0 {
+		return nil, 0
+	}
+	nextItem := NewQueue[0]
+	NewQueue = NewQueue[1:] // Elimina el primer elemento
+	return nextItem.PCB, nextItem.Size
+}
+
+func requestMemoryProcess(pid uint, codePath string, size int) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,

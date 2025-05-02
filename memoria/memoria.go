@@ -154,6 +154,7 @@ func deleteValue(key string) {
 
 func processHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Request arrived.", r.RequestURI)
 		params := r.URL.Query()
 
 		if !params.Has("pid") || !params.Has("size") || !params.Has("path") {
