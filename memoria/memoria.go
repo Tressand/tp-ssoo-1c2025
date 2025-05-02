@@ -12,6 +12,7 @@ import (
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
+	"strconv"
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 
 	// Add routes to mux
 	mux.Handle("/storage", storageRequestHandler())
-
+	mux.Handle("/process", processHandler())
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
 	shutdownSignal := make(chan any)
@@ -149,4 +150,42 @@ func retrieveValue(key string) string {
 
 func deleteValue(key string) {
 	delete(testStorage, key)
+}
+
+func processHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		params := r.URL.Query()
+
+		if !params.Has("pid") || !params.Has("size") || !params.Has("path") {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Se requieren: pid, size y path"))
+			return
+		}
+
+		pid, err := strconv.ParseUint(params.Get("pid"), 10, 32)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("PID debe ser un número"))
+			return
+		}
+
+		size, err := strconv.Atoi(params.Get("size"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Size debe ser un número"))
+			return
+		}
+
+		codePath := params.Get("path")
+
+		err = storage.CreateProcess(uint(pid), codePath, size)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Proceso creado exitosamente"))
+	}
 }
