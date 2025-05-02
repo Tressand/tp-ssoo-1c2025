@@ -45,20 +45,29 @@ func SaveConfig[ConfigObject struct{}](filepath string, v *ConfigObject) error {
 	return nil
 }
 
-func GetDefaultConfigPath() string {
+// Magic to figure out if the program is running on "go run" or an executable
+func IsCompiledEnv() bool {
+	exePath, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	return !(strings.Contains(exePath, os.TempDir()) || strings.Contains(exePath, ".cache"))
+}
+
+func GetDefaultExePath() string {
 	exePath, err := os.Executable()
 	if err != nil {
 		panic(err)
 	}
 
-	if strings.Contains(exePath, os.TempDir()) || strings.Contains(exePath, ".cache") {
+	if IsCompiledEnv() {
+		exePath = filepath.Dir(exePath)
+	} else {
 		_, modulePath, _, ok := runtime.Caller(1)
 		if !ok {
 			panic("runtime.Caller failed")
 		}
 		exePath, _ = strings.CutSuffix(modulePath, "/config/config.go")
-	} else {
-		exePath = filepath.Dir(exePath)
 	}
 
 	return exePath

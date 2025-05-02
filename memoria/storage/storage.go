@@ -33,8 +33,11 @@ func GetDataByPID(pid uint) (data *process_data, index int) {
 
 func GetInstruction(pid uint, pc int) (*instruction, error) {
 	targetProcess, _ := GetDataByPID(pid)
-	if pc > len(targetProcess.code) {
-		return nil, errors.New("invalid program counter")
+	if targetProcess == nil {
+		return nil, errors.New("process pid=" + fmt.Sprint(pid) + " does not exist")
+	}
+	if pc >= len(targetProcess.code) {
+		return nil, errors.New("out of scope program counter")
 	}
 	return &targetProcess.code[pc], nil
 }
@@ -133,6 +136,10 @@ type memory_metrics struct {
 
 var userMemory []byte
 var remainingMemory = 0
+
+func GetRemainingMemory() int {
+	return remainingMemory
+}
 
 func InitializeUserMemory(size int) {
 	userMemory = make([]byte, size)

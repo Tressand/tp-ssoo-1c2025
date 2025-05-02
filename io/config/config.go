@@ -22,7 +22,7 @@ func SetFilePath(path string) {
 }
 
 func Load() {
-	configFilePath = configManager.GetDefaultConfigPath() + configFilePath
+	configFilePath = configManager.GetDefaultExePath() + configFilePath
 
 	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {

@@ -20,14 +20,14 @@ type CPUConfig struct {
 	LogLevel         slog.Level `json:"log_level"`
 }
 
-type PCBS struct{
+type PCBS struct {
 	PID int
-	PC int
-	ME []int
-	MT []int
+	PC  int
+	ME  []int
+	MT  []int
 }
 
-type Exec_valuesS struct{
+type Exec_valuesS struct {
 	Arg1 int
 	Arg2 int
 }
@@ -47,7 +47,7 @@ func SetFilePath(path string) {
 }
 
 func Load() {
-	configFilePath = configManager.GetDefaultConfigPath() + configFilePath
+	configFilePath = configManager.GetDefaultExePath() + configFilePath
 
 	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {

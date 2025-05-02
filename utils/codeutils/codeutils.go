@@ -3,8 +3,8 @@ package codeutils
 type Opcode = int
 
 type Instruction struct {
-	Opcode Opcode
-	Args   []string
+	Opcode Opcode   `json:"opcode"`
+	Args   []string `json:"args"`
 }
 
 const (

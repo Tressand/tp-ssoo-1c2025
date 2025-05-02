@@ -1,17 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"ssoo-memoria/config"
 	"ssoo-memoria/storage"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
+	"strconv"
 )
 
 func main() {
@@ -37,7 +38,9 @@ func main() {
 	var mux *http.ServeMux = http.NewServeMux()
 
 	// Add routes to mux
-	mux.Handle("/storage", storageRequestHandler())
+	mux.Handle("/storage", testStorageRequestHandler())
+	mux.Handle("/process", processRequestHandler())
+	mux.Handle("/free_space", freeSpaceRequestHandler())
 
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
@@ -86,8 +89,7 @@ func main() {
 		storageMenu.Activate()
 	})
 	mainMenu.Add("Create Process", func() {
-		var codeFolder = "./code"
-		codeFolder, _ = filepath.Abs(codeFolder)
+		codeFolder := config.Values.CodeFolder
 		files, _ := os.ReadDir(codeFolder)
 		var names []string
 		for _, file := range files {
@@ -116,12 +118,84 @@ func main() {
 
 }
 
-func storageRequestHandler() http.HandlerFunc {
+func freeSpaceRequestHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Request arrived.", r.RequestURI)
+		w.WriteHeader(http.StatusOK)
+		w.Header().Add("contentType", "text/plain")
+		w.Write([]byte(fmt.Sprint(storage.GetRemainingMemory())))
+	}
+}
+
+func processRequestHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Request: ", r.Method, ":/", r.RequestURI)
+		params := r.URL.Query()
+		if !params.Has("pid") {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("missing pid"))
+			return
+		}
+		conv, _ := strconv.ParseUint(params.Get("pid"), 10, 0)
+		pid := uint(conv)
+
+		switch r.Method {
+		case "GET":
+			if !params.Has("pc") {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("missing pc"))
+				return
+			}
+			pc, _ := strconv.Atoi(params.Get("pc"))
+			instruction, err := storage.GetInstruction(pid, pc)
+			if err != nil {
+				w.WriteHeader(http.StatusBadGateway)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			body, err := json.Marshal(instruction)
+			if err != nil {
+				w.WriteHeader(http.StatusBadGateway)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write(body)
+
+		case "POST":
+			if !params.Has("code") || !params.Has("req") {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("missing codefile or memory requirement"))
+				return
+			}
+			req, _ := strconv.Atoi(params.Get("req"))
+			codepath := config.Values.CodeFolder + "/" + params.Get("code")
+			err := storage.CreateProcess(pid, codepath, req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadGateway)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+
+		case "DELETE":
+			err := storage.DeleteProcess(pid)
+			if err != nil {
+				w.WriteHeader(http.StatusBadGateway)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}
+	}
+}
+
+func testStorageRequestHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Request: ", r.Method, ":/", r.RequestURI)
 		params := r.URL.Query()
 		if !params.Has("key") || (r.Method == "POST" && !params.Has("value")) {
 			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Header().Add("contentType", "text/plain")
