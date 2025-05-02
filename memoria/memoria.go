@@ -125,6 +125,23 @@ func freeSpaceRequestHandler() http.HandlerFunc {
 	}
 }
 
+// esta API de procesos acepta GET, POST y DELETE.
+// todas las peticiones devuelven 502:BadGateway si tuvo un error interno y 400:BadRequest si la petición está mal.
+// los errores se pueden obtener del body de la response.
+// GET:
+
+// 	recibe 2 querys: pid y pc.
+// 	devuelve 200:OK y la instrucción en json si la encontró
+
+// POST:
+
+// 	recibe 2 querys: pid y nombre del archivo de código, la detección de la dirección de dicho archivo es automática.
+// 	devuelve 200:OK si creó el proceso
+
+// DELETE:
+
+// recibe 1 query: pid
+// devuelve 200:OK si encontró el proceso y lo borra.
 func processRequestHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Request: ", r.Method, ":/", r.RequestURI)
