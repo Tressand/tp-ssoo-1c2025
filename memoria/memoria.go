@@ -41,7 +41,6 @@ func main() {
 	mux.Handle("/storage", testStorageRequestHandler())
 	mux.Handle("/process", processRequestHandler())
 	mux.Handle("/free_space", freeSpaceRequestHandler())
-
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
 	shutdownSignal := make(chan any)
