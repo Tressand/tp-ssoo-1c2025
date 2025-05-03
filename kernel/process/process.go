@@ -76,11 +76,11 @@ func requestMemoryProcess(pid uint, codePath string, size int) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
-		Endpoint: "/process",
+		Endpoint: "process",
 		Queries: map[string]string{
 			"pid":  fmt.Sprint(pid),
-			"path": codePath,
-			"size": fmt.Sprint(size),
+			"code": codePath,
+			"req":  fmt.Sprint(size),
 		},
 	})
 
