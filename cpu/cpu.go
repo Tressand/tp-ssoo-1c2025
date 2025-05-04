@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
 	//"log"
 	"log/slog"
 	"net/http"
+	//"net/url"
 	"os"
 	"ssoo-cpu/config"
 	"ssoo-utils/codeutils"
@@ -18,7 +20,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
-	"strings"
+	//"strings"
 	"sync"
 	"time"
 )
@@ -78,7 +80,7 @@ func main() {
 	//crear menu
 	mainMenu := menu.Create()
 	mainMenu.Add("Store value on Memory", func() { sendValueToMemory(getInput()) })
-	mainMenu.add("Send Pid and Pc to memory", func() {sendPidPcToMemory()})
+	mainMenu.Add("Send Pid and Pc to memory", func() {sendPidPcToMemory()})
 	mainMenu.Add("Close Server and Exit Program", func() {
 		cancelctx()
 		shutdownSignal <- struct{}{}
@@ -116,6 +118,8 @@ func sendValueToMemory(key string, value string) {
 
 	slog.Info("POST to Memory succeded")
 }
+
+//#region Execute
 
 func sendPidPcToMemory() {
 
@@ -211,6 +215,111 @@ func initProcess(){
 
 	slog.Info("Proceso creado exitosamente en Memoria. ","pid",config.Pcb.PID)
 }
+
+func readMemory(){
+
+	//TODO HALLAR LA DIRECCION FISICA A PARTIR DE LA DIRECCION LOGICA
+
+	var dir_fisica = 10210
+
+	//parte HTTP
+
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "process",
+		Queries: map[string]string{
+			"direction": fmt.Sprint(dir_fisica),
+			"size": fmt.Sprint(config.Exec_values.Arg1),
+		},
+	})
+
+	resp, err := http.Get(url)
+
+	if err != nil {
+		slog.Error("Error al solicitar el dato de memoria. ", "error",err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("memoria respondió con error: %s", resp.Status)
+		return
+	}
+
+	var result struct {
+		Contenido string `json:"contenido"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		slog.Error("error al decodificar respuesta de memoria: %w", err)
+		return
+	}
+
+	fmt.Println("El dato en la direccion es: %s",result.Contenido)
+	slog.Info("El dato en la direccion es: ",result.Contenido)
+}
+
+func writeMemory(){
+
+	//TODO HALLAR LA DIRECCION FISICA A PARTIR DE LA DIRECCION LOGICA
+
+	var dir_fisica = 10210
+
+	//parte HTTP
+
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "process",
+		Queries: map[string]string{
+			"direction": fmt.Sprint(dir_fisica),
+			"size": fmt.Sprint(config.Exec_values.Arg1),
+		},
+	})
+
+	resp, err := http.Post(url,http.MethodPost,http.NoBody)
+
+	if err != nil {
+		slog.Error("Error al solicitar el dato de memoria. ", "error",err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("memoria respondió con error: %s", resp.Status)
+		return
+	}
+
+	slog.Info("Se ha guardado el contenido exitosamente.")
+}
+
+func dumpMemory(){
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "free_space",
+	})
+
+	resp, err := http.Get(url)
+
+	if err != nil {
+		slog.Error("Error al solicitar el vaciado de la memoria. ", "error",err)
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("memoria respondió con error: %s", resp.Status)
+		return
+	}
+
+	slog.Info("Se ha borrado la memoria. ")
+
+}
+
+
+//#endregion
 
 func createKernelConnection(
 	name string,
@@ -328,15 +437,16 @@ func exec() {
 	switch config.Instruccion {
 	case "NOOP":
 		time.Sleep(1 * time.Millisecond)
-		fmt.Println("se espero 1 milisegundo.")
-		//no hace nada
-		//TODO
+		slog.Info("se espero 1 milisegundo por instruccion NOOP.")
+
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		//TODO
+		writeMemory()
+
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		//TODO
+		readMemory()
+
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
 		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
@@ -352,54 +462,20 @@ func exec() {
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
 		initProcess()
+
 	case "DUMP_MEMORY":
 		//vacia la memoria
-		//TODO
+		dumpMemory()
+
 	case "EXIT":
 		//fin de proceso
 		DeleteProcess()
+
 	default:
 
 	}
 	config.Pcb.PC++
 }
-/*
-func asign(bruto string) {
-
-	partes := strings.Fields(bruto)
-
-	if len(partes) == 0 {
-		fmt.Println("Cadena vacía o sin funcion")
-		return
-	}
-
-	config.Instruccion = partes[0]
-
-	if len(partes) > 1 {
-		val, err := strconv.Atoi(partes[1])
-		if err != nil {
-			fmt.Println("Error convirtiendo arg1 a int:", err)
-		} else {
-			config.Exec_values.Arg1 = val
-		}
-	}
-	if len(partes) > 2 {
-		val, err := strconv.Atoi(partes[2])
-		if err != nil {
-			fmt.Println("Error convirtiendo arg2 a int:", err)
-		} else {
-			config.Exec_values.Arg2 = val
-		}
-	}
-
-	fmt.Println("Función:", config.Instruccion)
-	if config.Exec_values.Arg1 != -1 {
-		fmt.Println("Argumento 1:", config.Exec_values.Arg1)
-	}
-	if config.Exec_values.Arg2 != -1 {
-		fmt.Println("Argumento 2:", config.Exec_values.Arg2)
-	}
-}*/
 
 func asign(){
 
