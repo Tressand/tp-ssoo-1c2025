@@ -31,6 +31,7 @@ type PCBS struct {
 type Exec_valuesS struct {
 	Arg1 int
 	Arg2 int
+	Str string
 }
 
 type RequestPayload struct {
@@ -45,6 +46,7 @@ var Pcb PCBS
 var Exec_values = Exec_valuesS{
 	Arg1: -1,
 	Arg2: -1,
+	Str: "",
 }
 var Instruccion string
 var Identificador int

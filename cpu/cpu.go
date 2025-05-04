@@ -1,16 +1,17 @@
 package main
 
 import (
-	"bytes"
+	//"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	//"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"ssoo-cpu/config"
+	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
@@ -21,6 +22,8 @@ import (
 	"sync"
 	"time"
 )
+type Instruction = codeutils.Instruction
+var instruction Instruction
 
 func main() {
 	//Obtener identificador
@@ -75,6 +78,7 @@ func main() {
 	//crear menu
 	mainMenu := menu.Create()
 	mainMenu.Add("Store value on Memory", func() { sendValueToMemory(getInput()) })
+	mainMenu.add("Send Pid and Pc to memory", func() {sendPidPcToMemory()})
 	mainMenu.Add("Close Server and Exit Program", func() {
 		cancelctx()
 		shutdownSignal <- struct{}{}
@@ -115,53 +119,97 @@ func sendValueToMemory(key string, value string) {
 
 func sendPidPcToMemory() {
 
-	payload := config.RequestPayload{
-		PID: config.Pcb.PID,
-		PC:  config.Pcb.PC,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("Error serializando JSON: %v", err)
-		return
-	}
-
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
-		Endpoint: "storage",
+		Endpoint: "process",
 		Queries: map[string]string{
 			"pid": fmt.Sprint(config.Pcb.PID),
 			"pc":  fmt.Sprint(config.Pcb.PC),
 		},
 	})
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	resp, err := http.Get(url)
 	if err != nil {
-		log.Printf("Error al enviar PID y PC a memoria: %v", err)
+		fmt.Errorf("error al realizar la solicitud a la memoria: %v", err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Errorf("respuesta no exitosa: %s", resp.Status)
+	}
+
+	// Deserializa la respuesta JSON a un objeto Instruction
+	err = json.NewDecoder(resp.Body).Decode(&instruction)
+	if err != nil {
+		fmt.Errorf("error al deserializar la respuesta: %v", err)
+	}
+	// Devuelve la instrucción obtenida
+	//return &instruction, nil
+	//falta ver que se hacen con los datos enviados por memoria en response.
+	//log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
+}
+
+func DeleteProcess(){
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "process",
+		Queries: map[string]string{
+			"pid": fmt.Sprint(config.Pcb.PID),
+		},
+	})
+
+	req, err := http.NewRequest(http.MethodDelete,url,nil)
+	if err != nil {
+		slog.Error("Error al crear la solicitud DELETE", "error", err)
+		return
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("Fallo la solicitud para eliminar proceso. ", "error", err)
 		return
 	}
 
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error leyendo respuesta de memoria: %v", err)
-		return
-	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Memoria devolvió estado %d: %s", resp.StatusCode, string(body))
+		slog.Error("Memoria respondió con error al eliminar el proceso. ", "status", resp.StatusCode)
 		return
 	}
 
-	var response config.ResponsePayload
-	if err := json.Unmarshal(body, &response); err != nil {
-		log.Printf("Error parseando respuesta JSON: %v", err)
+	slog.Info("Proceso eliminado exitosamente en Memoria", "pid", config.Pcb.PID)
+}
+
+func initProcess(){
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "process",
+		Queries: map[string]string{
+			"pid": fmt.Sprint(config.Pcb.PID),
+			"name": config.Exec_values.Str,
+		},
+	})
+
+	resp,err := http.Post(url,http.MethodPost,http.NoBody)
+
+	if err != nil{
+		slog.Error("Fallo la solicitud para crear el proceso. ","error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK{
+
+		slog.Error("Memoria respondió con error al crear el proceso. ","status",resp.StatusCode)
 		return
 	}
 
-	//falta ver que se hacen con los datos enviados por memoria en response.
-	//log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
+	slog.Info("Proceso creado exitosamente en Memoria. ","pid",config.Pcb.PID)
 }
 
 func createKernelConnection(
@@ -282,39 +330,42 @@ func exec() {
 		time.Sleep(1 * time.Millisecond)
 		fmt.Println("se espero 1 milisegundo.")
 		//no hace nada
-
+		//TODO
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-
+		//TODO
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-
+		//TODO
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
 		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
 		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
-
+		return
+	
+	//SYSCALLS
 	case "IO":
 		time.Sleep(time.Millisecond * time.Duration(config.Exec_values.Arg1))
 		fmt.Printf("se espero %d milisegundo.\n", config.Exec_values.Arg1)
 		//simula una IO por un tiempo igual al arg1
-
+		//TODO
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
-
+		initProcess()
 	case "DUMP_MEMORY":
 		//vacia la memoria
-
+		//TODO
 	case "EXIT":
 		//fin de proceso
-
+		DeleteProcess()
 	default:
 
 	}
 	config.Pcb.PC++
 }
-
+/*
 func asign(bruto string) {
+
 	partes := strings.Fields(bruto)
 
 	if len(partes) == 0 {
@@ -348,4 +399,79 @@ func asign(bruto string) {
 	if config.Exec_values.Arg2 != -1 {
 		fmt.Println("Argumento 2:", config.Exec_values.Arg2)
 	}
+}*/
+
+func asign(){
+
+	switch(instruction.Opcode){
+		case codeutils.NOOP:
+			config.Instruccion= "NOOP"
+
+		case codeutils.WRITE:
+			config.Instruccion = "WRITE"
+			if len(instruction.Args) != 2 {
+				slog.Error("WRITE requiere 2 argumentos")
+			}
+			arg1, err := strconv.Atoi(instruction.Args[0])
+			if err != nil {
+				slog.Error("error convirtiendo Dirección en WRITE: %v", err)
+			}
+			config.Exec_values.Arg1 = arg1
+			config.Exec_values.Str = instruction.Args[1]
+		
+		case codeutils.READ:
+			config.Instruccion = "READ"
+			if len(instruction.Args) != 2 {
+				slog.Error("READ requiere 2 argumentos")
+			}
+			arg1, err1 := strconv.Atoi(instruction.Args[0])
+			arg2, err2 := strconv.Atoi(instruction.Args[1])
+			if err1 != nil || err2 != nil {
+				slog.Error("error convirtiendo argumentos en READ")
+			}
+			config.Exec_values.Arg1 = arg1
+			config.Exec_values.Arg2 = arg2
+		
+		case codeutils.GOTO:
+			config.Instruccion = "GOTO"
+			if len(instruction.Args) != 1 {
+				slog.Error("GOTO requiere 1 argumento")
+			}
+			arg1, err := strconv.Atoi(instruction.Args[0])
+			if err != nil {
+				slog.Error("error convirtiendo Valor en GOTO: %v", err)
+			}
+			config.Exec_values.Arg1 = arg1
+
+		//SYSCALLS
+		case codeutils.IO:
+			config.Instruccion = "IO"
+			if len(instruction.Args) != 2 {
+				slog.Error("IO requiere 2 argumentos")
+			}
+			tiempo, err := strconv.Atoi(instruction.Args[1])
+			if err != nil {
+				slog.Error("error convirtiendo Tiempo en IO: %v", err)
+			}
+			config.Exec_values.Str = instruction.Args[0]
+			config.Exec_values.Arg1 = tiempo
+		
+		case codeutils.INIT_PROC:
+			config.Instruccion = "INIT_PROC"
+			if len(instruction.Args) != 2{
+				slog.Error("INIT_PROC requiere 2 argumentos")
+			}
+			arg1, err := strconv.Atoi(instruction.Args[1])
+			if err != nil {
+				slog.Error("error convirtiendo Valor en INIT_PROC: %v", err)
+			}
+			config.Exec_values.Str = instruction.Args[0]
+			config.Exec_values.Arg1 = arg1
+		
+		case codeutils.EXIT:
+			config.Instruccion = "EXIT"
+		
+		case codeutils.DUMP_MEMORY:
+			config.Instruccion = "DUMP_MEMORY"
+	}	
 }
