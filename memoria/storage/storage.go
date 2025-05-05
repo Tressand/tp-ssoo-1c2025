@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
-	"os"
 	"ssoo-utils/codeutils"
 	"strings"
 )
@@ -66,19 +66,14 @@ func LogSystemMemory() {
 	fmt.Print(msg)
 }
 
-func CreateProcess(newpid uint, codePath string, memoryRequirement int) error {
+func CreateProcess(newpid uint, codeFile io.ReadCloser, memoryRequirement int) error {
+	defer codeFile.Close()
 	if memoryRequirement > remainingMemory {
 		return errors.New("not enough user memory")
 	}
 
 	newProcessData := new(process_data)
 	newProcessData.pid = newpid
-
-	codeFile, err := os.OpenFile(codePath, os.O_RDONLY, 0666)
-	if err != nil {
-		return err
-	}
-	defer codeFile.Close()
 
 	scanner := bufio.NewScanner(codeFile)
 	for scanner.Scan() {
@@ -97,7 +92,7 @@ func CreateProcess(newpid uint, codePath string, memoryRequirement int) error {
 		newProcessData.code = append(newProcessData.code, instruction{Opcode: newOpCode, Args: parts[1:]})
 	}
 
-	err = allocateMemory(newpid, memoryRequirement)
+	err := allocateMemory(newpid, memoryRequirement)
 	if err != nil {
 		return err
 	}

@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"ssoo-memoria/config"
 	"ssoo-memoria/storage"
+	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
@@ -51,51 +53,27 @@ func main() {
 	// #region MENU
 
 	mainMenu := menu.Create()
-	storageMenu := menu.Create()
-	storageMenu.Add("Save value on memory", func() {
-		var key string
-		var value string
-
-		fmt.Print("Enter key: ")
-		fmt.Scanln(&key)
-		fmt.Print("Enter value (string): ")
-		fmt.Scanln(&value)
-
-		saveValue(key, value)
-	})
-	storageMenu.Add("Read value from memory", func() {
-		var key string
-
-		fmt.Print("Enter key: ")
-		fmt.Scanln(&key)
-
-		fmt.Println(retrieveValue(key))
-	})
-	storageMenu.Add("List all values stored", func() {
-		for key, value := range testStorage {
-			fmt.Printf("%s | %v\n", key, value)
-		}
-	})
-	storageMenu.Add("Delete value from memory", func() {
-		var key string
-
-		fmt.Print("Enter key: ")
-		fmt.Scanln(&key)
-
-		deleteValue(key)
-	})
-	mainMenu.Add("Access Storage", func() {
-		storageMenu.Activate()
-	})
 	mainMenu.Add("Create Process", func() {
-		codeFolder := config.Values.CodeFolder
+		var codeFolder string
+		if configManager.IsCompiledEnv() {
+			codeFolder, _ = filepath.Abs("./code")
+		} else {
+			codeFolder, _ = filepath.Abs("../code")
+		}
+
 		files, _ := os.ReadDir(codeFolder)
 		var names []string
 		for _, file := range files {
 			names = append(names, file.Name())
 		}
 		i := menu.SliceSelect(names)
-		err := storage.CreateProcess(1, codeFolder+"/"+files[i].Name(), 0)
+
+		codeFile, err := os.OpenFile(codeFolder+"/"+files[i].Name(), os.O_RDONLY, 0666)
+		if err != nil {
+			slog.Error("error opening file")
+			return
+		}
+		err = storage.CreateProcess(1, codeFile, 0)
 		if err != nil {
 			slog.Error("process could not be created", "error", err)
 		} else {
@@ -178,14 +156,13 @@ func processRequestHandler() http.HandlerFunc {
 			w.Write(body)
 
 		case "POST":
-			if !params.Has("code") || !params.Has("req") {
+			if !params.Has("req") {
 				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte("missing codefile or memory requirement"))
+				w.Write([]byte("missing memory requirement"))
 				return
 			}
 			req, _ := strconv.Atoi(params.Get("req"))
-			codepath := config.Values.CodeFolder + "/" + params.Get("code")
-			err := storage.CreateProcess(pid, codepath, req)
+			err := storage.CreateProcess(pid, r.Body, req)
 			if err != nil {
 				w.WriteHeader(http.StatusBadGateway)
 				w.Write([]byte(err.Error()))

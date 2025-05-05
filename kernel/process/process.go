@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"sort"
 	"ssoo-kernel/config"
 	kernel_globals "ssoo-kernel/globals"
@@ -76,22 +77,26 @@ func requestMemoryProcess(pid uint, codePath string, size int) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
-		Endpoint: "/process",
+		Endpoint: "process",
 		Queries: map[string]string{
-			"pid":  fmt.Sprint(pid),
-			"path": codePath,
-			"size": fmt.Sprint(size),
+			"pid": fmt.Sprint(pid),
+			"req": fmt.Sprint(size),
 		},
 	})
 
-	resp, err := http.Post(url, "text/plain", nil)
+	codeFile, err := os.OpenFile(codePath, os.O_RDONLY, 0666)
+	if err != nil {
+		return fmt.Errorf("error al abrir el archivo de código: %v", err)
+	}
+
+	resp, err := http.Post(url, "text/plain", codeFile)
 	if err != nil {
 		return fmt.Errorf("error al llamar a Memoria: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Memoria rechazó la creación (código %d)", resp.StatusCode)
+		return fmt.Errorf("memoria rechazó la creación (código %d)", resp.StatusCode)
 	}
 
 	return nil

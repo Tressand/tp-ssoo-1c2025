@@ -39,19 +39,20 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca Kernel")
 
-	// nota: arreglar después para que los argumentos sean opcionales.
 	if len(os.Args) > 1 {
 		if len(os.Args) < 3 {
 			fmt.Println("Faltan argumentos! Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso] [...args]")
 			return
 		}
-
-		pathFile := os.Args[1]
-
-		if _, err := os.Stat(pathFile); os.IsNotExist(err) {
-			fmt.Printf("El archivo de pseudocódigo '%s' no existe.\n", pathFile)
+		/*
+			el cambio adapta las rutas que hizo gero en createProcess, entonces simplemente hacemos ./bin/kernel prueba(obtiene la ruta y la comprueba) 33 (tamanio)
+		*/
+		AbsolutepathFile := config.Values.CodeFolder + "/" + os.Args[1]
+		if _, err := os.Stat(AbsolutepathFile); os.IsNotExist(err) {
+			fmt.Printf("El archivo de pseudocódigo '%s' no existe.\n", AbsolutepathFile)
 			return
 		}
+		pathFile := os.Args[1]
 
 		processSizeStr := os.Args[2]
 		processSize, processSizeErr := strconv.Atoi(processSizeStr)
@@ -61,7 +62,10 @@ func main() {
 			return
 		}
 
-		process.CreateProcess(pathFile, processSize)
+		process.CreateProcess(pathFile, processSize) // ? Va aca o en el menu?
+	} else {
+		slog.Info("Activando funcionamiento por defecto.")
+		process.CreateProcess(config.Values.CodeFolder+"/"+"helloworld", 1024)
 	}
 
 	// #endregion
