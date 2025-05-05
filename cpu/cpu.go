@@ -135,19 +135,19 @@ func sendPidPcToMemory() {
 
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Errorf("error al realizar la solicitud a la memoria: %v", err)
+		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Errorf("respuesta no exitosa: %s", resp.Status)
+		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
 	}
 
 	// Deserializa la respuesta JSON a un objeto Instruction
 	err = json.NewDecoder(resp.Body).Decode(&instruction)
 	if err != nil {
-		fmt.Errorf("error al deserializar la respuesta: %v", err)
+		slog.Error("error al deserializar la respuesta", "error", err)
 	}
 	// Devuelve la instrucción obtenida
 	//return &instruction, nil
@@ -243,7 +243,7 @@ func readMemory(){
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error: %s", resp.Status)
+		slog.Error("memoria respondió con error","respuesta", resp.Status)
 		return
 	}
 
@@ -255,8 +255,8 @@ func readMemory(){
 		return
 	}
 
-	fmt.Println("El dato en la direccion es: %s",result.Contenido)
-	slog.Info("El dato en la direccion es: ",result.Contenido)
+	fmt.Printf("El dato en la direccion es: %s ",result.Contenido)
+	slog.Info("El dato en la direccion es ","dato",result.Contenido)
 }
 
 func writeMemory(){
@@ -286,7 +286,7 @@ func writeMemory(){
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error: %s", resp.Status)
+		slog.Error("memoria respondió con error ","error", resp.Status)
 		return
 	}
 
@@ -310,7 +310,7 @@ func dumpMemory(){
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error: %s", resp.Status)
+		slog.Error("memoria respondió con error ", "error", resp.Status)
 		return
 	}
 
@@ -477,6 +477,8 @@ func exec() {
 	config.Pcb.PC++
 }
 
+//#region decode
+
 func asign(){
 
 	switch(instruction.Opcode){
@@ -490,7 +492,7 @@ func asign(){
 			}
 			arg1, err := strconv.Atoi(instruction.Args[0])
 			if err != nil {
-				slog.Error("error convirtiendo Dirección en WRITE: %v", err)
+				slog.Error("error convirtiendo Dirección en WRITE ","error", err)
 			}
 			config.Exec_values.Arg1 = arg1
 			config.Exec_values.Str = instruction.Args[1]
@@ -515,7 +517,7 @@ func asign(){
 			}
 			arg1, err := strconv.Atoi(instruction.Args[0])
 			if err != nil {
-				slog.Error("error convirtiendo Valor en GOTO: %v", err)
+				slog.Error("error convirtiendo Valor en GOTO ","error", err)
 			}
 			config.Exec_values.Arg1 = arg1
 
@@ -527,7 +529,7 @@ func asign(){
 			}
 			tiempo, err := strconv.Atoi(instruction.Args[1])
 			if err != nil {
-				slog.Error("error convirtiendo Tiempo en IO: %v", err)
+				slog.Error("error convirtiendo Tiempo en IO ","error", err)
 			}
 			config.Exec_values.Str = instruction.Args[0]
 			config.Exec_values.Arg1 = tiempo
@@ -539,7 +541,7 @@ func asign(){
 			}
 			arg1, err := strconv.Atoi(instruction.Args[1])
 			if err != nil {
-				slog.Error("error convirtiendo Valor en INIT_PROC: %v", err)
+				slog.Error("error convirtiendo Valor en INIT_PROC ","error", err)
 			}
 			config.Exec_values.Str = instruction.Args[0]
 			config.Exec_values.Arg1 = arg1
@@ -551,3 +553,4 @@ func asign(){
 			config.Instruccion = "DUMP_MEMORY"
 	}	
 }
+//#endregion
