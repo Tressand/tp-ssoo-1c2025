@@ -34,5 +34,5 @@ func Load() {
 		panic(err)
 	}
 
-	storage.InitializeUserMemory(Values.MemorySize)
+	storage.InitializeUserMemory(Values.MemorySize, Values.PageSize, Values.EntriesPerPage, Values.NumberOfLevels)
 }

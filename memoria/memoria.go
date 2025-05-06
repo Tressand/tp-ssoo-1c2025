@@ -30,7 +30,6 @@ func main() {
 	}
 	log := logger.Instance
 	log.Info("Arranca Memoria")
-	storage.InitializeUserMemory(config.Values.MemorySize)
 
 	// #endregion
 
