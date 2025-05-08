@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"os"
+	"sort"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	process_module "ssoo-kernel/process"
@@ -33,17 +34,37 @@ func LTS() {
 
 			<-WaitingForMemoryCh
 
-			go InitProcessFIFO(&process)
-
+			go InitProcess(&process)
 		case "PMCP":
-			fmt.Println("PMCP")
+			<-RetryProcessCh
+
+			globals.LTSMutex.Lock()
+
+			if len(globals.LTS) == 0 {
+				globals.LTSMutex.Unlock()
+				continue
+			}
+
+			sort.Slice(globals.LTS, func(i, j int) bool {
+				return globals.LTS[i].Size < globals.LTS[j].Size
+			})
+
+			// Tomar el proceso más pequeño
+			process := globals.LTS[0]
+			globals.LTS = globals.LTS[1:]
+
+			globals.LTSMutex.Unlock()
+
+			<-WaitingForMemoryCh
+
+			go InitProcess(&process)
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
 		}
 	}
 }
 
-func InitProcessFIFO(process *globals.Process) {
+func InitProcess(process *globals.Process) {
 	for {
 		err := process_module.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.GetSize())
 		fmt.Println(err)

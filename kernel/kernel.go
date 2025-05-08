@@ -65,11 +65,12 @@ func main() {
 		}
 
 		process.CreateProcess(pathFile, processSize)
+
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
 		process.CreateProcess("helloworld", 1024)
 	}
-
+	process.CreateProcess("helloworld", 1024)
 	// #endregion
 
 	globals.SchedulerStatus = "STOP" // El planificador debe estar frenado por defecto
@@ -112,7 +113,7 @@ func main() {
 		}
 	})
 	moduleMenu.Add("[TEST] Create process", func() {
-		process.CreateProcess(config.Values.CodeFolder+"/prueba", 250)
+		process.CreateProcess("prueba", 250)
 	})
 	moduleMenu.Add("Send IO Signal", sendToIO)
 	moduleMenu.Add("Send CPU Interrupt", sendInterrupt)
