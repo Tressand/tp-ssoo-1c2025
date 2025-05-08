@@ -29,8 +29,8 @@ import (
 func main() {
 	// #region SETUP
 
-	// load config
 	config.Load()
+
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 	err := logger.SetupDefault("kernel", config.Values.LogLevel)
 	defer logger.Close()
@@ -67,7 +67,7 @@ func main() {
 		process.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
-		process.CreateProcess(config.Values.CodeFolder+"/"+"helloworld", 1024)
+		process.CreateProcess("helloworld", 1024)
 	}
 
 	// #endregion

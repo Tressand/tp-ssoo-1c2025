@@ -20,6 +20,10 @@ func LTS() {
 			<-RetryProcessCh
 
 			globals.LTSMutex.Lock()
+			if len(globals.LTS) == 0 {
+				globals.LTSMutex.Unlock()
+				continue // o  time.Sleep()
+			}
 			process := globals.LTS[0]
 			globals.LTS = globals.LTS[1:]
 

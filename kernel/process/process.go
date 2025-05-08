@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"ssoo-cpu/config"
+	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"

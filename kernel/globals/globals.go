@@ -1,6 +1,7 @@
 package globals
 
 import (
+	configKernel "ssoo-kernel/config"
 	"ssoo-utils/pcb"
 	"sync"
 )
@@ -22,6 +23,6 @@ type Process struct {
 	Size int
 }
 
-func (p Process) GetPath() string { return p.Path }
+func (p Process) GetPath() string { return configKernel.Values.CodeFolder + "/" + p.Path }
 
 func (p Process) GetSize() int { return p.Size }
