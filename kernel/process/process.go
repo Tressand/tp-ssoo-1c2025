@@ -2,78 +2,45 @@ package process
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
-	"sort"
-	"ssoo-kernel/config"
-	kernel_globals "ssoo-kernel/globals"
+	"ssoo-cpu/config"
+	globals "ssoo-kernel/globals"
 	"ssoo-utils/httputils"
+	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 )
 
-// Estructura para manejar la cola de nuevos procesos
-type ProcessQueueItem struct {
-	PCB  *pcb.PCB
-	Size int
-}
-
-var NewQueue []ProcessQueueItem = make([]ProcessQueueItem, 0)
-
-func CreateProcess(pathFile string, processSize int) {
-	newProcess := pcb.Create(
-		kernel_globals.GetNextPID(),
-		pathFile,
-	)
-
-	err := requestMemoryProcess(newProcess.GetPID(), pathFile, processSize)
-	if err != nil {
-		slog.Error("No se pudo crear el proceso en Memoria", "error", err)
-		return
-	}
-
-	addToNewQueue(newProcess, processSize)
-
-	kernel_globals.Processes = append(kernel_globals.Processes, newProcess)
-
-	slog.Info(fmt.Sprintf(
-		"## (%d) Se crea el proceso - Estado: NEW - Tamaño: %d KB",
-		newProcess.GetPID(),
-		processSize,
-	))
-}
-
-func addToNewQueue(pcb *pcb.PCB, size int) {
-	newItem := ProcessQueueItem{
-		PCB:  pcb,
+func CreateProcess(path string, size int) {
+	newProcess := globals.Process{
+		PCB: pcb.Create(
+			GetNextPID(),
+			path,
+		),
+		Path: path,
 		Size: size,
 	}
 
-	switch config.Values.ReadyIngressAlgorithm {
-	case "FIFO":
-		NewQueue = append(NewQueue, newItem)
-	case "PMCP":
-		// Proceso más chico primero: Ordenamos la cola por tamaño ascendente
-		NewQueue = append(NewQueue, newItem)
-		sort.Slice(NewQueue, func(i, j int) bool {
-			return NewQueue[i].Size < NewQueue[j].Size
-		})
-	default:
-		NewQueue = append(NewQueue, newItem) // Por defecto FIFO
-	}
+	QueueToLTS(newProcess)
+
+	logger.RequiredLog(true, newProcess.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": newProcess.PCB.GetState().String(), "Tamaño": fmt.Sprintf("%d KB", size)})
 }
 
-// Función para obtener el siguiente proceso de la cola
-func GetNextProcessFromQueue() (*pcb.PCB, int) {
-	if len(NewQueue) == 0 {
-		return nil, 0
-	}
-	nextItem := NewQueue[0]
-	NewQueue = NewQueue[1:] // Elimina el primer elemento
-	return nextItem.PCB, nextItem.Size
+func QueueToLTS(process globals.Process) {
+	globals.LTSMutex.Lock()
+	defer globals.LTSMutex.Unlock()
+	globals.LTS = append(globals.LTS, process)
 }
 
-func requestMemoryProcess(pid uint, codePath string, size int) error {
+func GetNextPID() uint {
+	globals.PIDMutex.Lock()
+	defer globals.PIDMutex.Unlock()
+	pid := globals.NextPID
+	globals.NextPID++
+	return pid
+}
+
+func InitializeProcessInMemory(pid uint, codePath string, size int) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,

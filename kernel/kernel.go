@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"ssoo-kernel/config"
+	globals "ssoo-kernel/globals"
 	process "ssoo-kernel/process"
+	scheduler "ssoo-kernel/scheduler"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
@@ -62,13 +64,15 @@ func main() {
 			return
 		}
 
-		process.CreateProcess(pathFile, processSize) // ? Va aca o en el menu?
+		process.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
 		process.CreateProcess(config.Values.CodeFolder+"/"+"helloworld", 1024)
 	}
 
 	// #endregion
+
+	globals.SchedulerStatus = "STOP" // El planificador debe estar frenado por defecto
 
 	// #region CREATE SERVER
 
@@ -98,6 +102,18 @@ func main() {
 	mainMenu := menu.Create()
 	moduleMenu := menu.Create()
 
+	moduleMenu.Add("Init scheduler", func() {
+		if globals.SchedulerStatus == "STOP" {
+			globals.SchedulerStatus = "START"
+			go scheduler.LTS()
+			scheduler.RetryProcessCh <- struct{}{}
+			scheduler.WaitingForMemoryCh <- struct{}{}
+			logger.Instance.Info("Scheduler initialized")
+		}
+	})
+	moduleMenu.Add("[TEST] Create process", func() {
+		process.CreateProcess(config.Values.CodeFolder+"/prueba", 250)
+	})
 	moduleMenu.Add("Send IO Signal", sendToIO)
 	moduleMenu.Add("Send CPU Interrupt", sendInterrupt)
 	moduleMenu.Add("Ask CPU to work", askCPU)

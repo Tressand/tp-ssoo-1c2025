@@ -65,3 +65,11 @@ func (pcb *PCB) SetState(newState STATE) {
 		slog.Error("SetState on PCB package must be fixed. metrics and pcb.k_metrics are not same.")
 	}
 }
+
+func (s STATE) String() string {
+	states := [...]string{"EXIT", "NEW", "READY", "EXEC", "BLOCKED", "SUSP_BLOCKED", "SUSP_READY"}
+	if s < 0 || int(s) >= len(states) {
+		return "UNKNOWN"
+	}
+	return states[s]
+}
