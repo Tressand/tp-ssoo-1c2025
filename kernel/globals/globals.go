@@ -14,7 +14,7 @@ var (
 	LTSMutex        sync.Mutex
 	STS             []Process = make([]Process, 0)
 	STSMutex        sync.Mutex
-	LTSNotEmpty     = make(chan bool, 1)
+	LTSEmpty        = make(chan struct{})
 )
 
 type Process struct {

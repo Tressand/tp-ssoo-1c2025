@@ -30,6 +30,11 @@ func QueueToLTS(process globals.Process) {
 	globals.LTSMutex.Lock()
 	defer globals.LTSMutex.Unlock()
 	globals.LTS = append(globals.LTS, process)
+
+	if len(globals.LTS) == 1 && globals.SchedulerStatus == "START" { // Estaba vacia
+		globals.LTSEmpty <- struct{}{}
+	}
+
 }
 
 func GetNextPID() uint {

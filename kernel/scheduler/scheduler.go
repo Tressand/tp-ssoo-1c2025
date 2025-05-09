@@ -3,7 +3,6 @@ package scheduler
 import (
 	"fmt"
 	"os"
-	"sort"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	process_module "ssoo-kernel/process"
@@ -12,68 +11,48 @@ import (
 )
 
 var RetryProcessCh = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
-var WaitingForMemoryCh = make(chan struct{})
+var WaitingForMemoryCh = make(chan struct{}, 1)
 
 func LTS() {
 	for {
 		switch config.Values.ReadyIngressAlgorithm {
 		case "FIFO":
-			<-RetryProcessCh
 
 			globals.LTSMutex.Lock()
 			if len(globals.LTS) == 0 {
 				globals.LTSMutex.Unlock()
-				continue // o  time.Sleep()
+				<-globals.LTSEmpty
+				globals.LTSMutex.Lock()
 			}
-			process := globals.LTS[0]
-			globals.LTS = globals.LTS[1:]
-
-			fmt.Println(globals.LTS)
-			fmt.Println(process)
-			globals.LTSMutex.Unlock()
 
 			<-WaitingForMemoryCh
+			
+			process := globals.LTS[0]
+			globals.LTS = globals.LTS[1:]
+			globals.LTSMutex.Unlock()
 
-			go InitProcess(&process)
+			go func(p *globals.Process) {
+				InitProcessFIFO(p)
+				WaitingForMemoryCh <- struct{}{}
+			}(&process)
+
 		case "PMCP":
-			<-RetryProcessCh
-
-			globals.LTSMutex.Lock()
-
-			if len(globals.LTS) == 0 {
-				globals.LTSMutex.Unlock()
-				continue
-			}
-
-			sort.Slice(globals.LTS, func(i, j int) bool {
-				return globals.LTS[i].Size < globals.LTS[j].Size
-			})
-
-			// Tomar el proceso más pequeño
-			process := globals.LTS[0]
-			globals.LTS = globals.LTS[1:]
-
-			globals.LTSMutex.Unlock()
-
-			<-WaitingForMemoryCh
-
-			go InitProcess(&process)
+			fmt.Println("PMCP")
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
 		}
 	}
 }
 
-func InitProcess(process *globals.Process) {
+func InitProcessFIFO(process *globals.Process) {
 	for {
 		err := process_module.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.GetSize())
 		fmt.Println(err)
 		if err == nil {
 			queueToSTS(process)
-			RetryProcessCh <- struct{}{}
-			WaitingForMemoryCh <- struct{}{}
 			return
 		}
+		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d entra en espera. Memoria no pudo inicializarlo", process.PCB.GetPID()))
 		<-RetryProcessCh // Este espera ser desbloqueado desde Finalización de Proceso
 	}
 }

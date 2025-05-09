@@ -65,12 +65,11 @@ func main() {
 		}
 
 		process.CreateProcess(pathFile, processSize)
-
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
 		process.CreateProcess("helloworld", 1024)
 	}
-	process.CreateProcess("helloworld", 1024)
+
 	// #endregion
 
 	globals.SchedulerStatus = "STOP" // El planificador debe estar frenado por defecto
@@ -107,7 +106,6 @@ func main() {
 		if globals.SchedulerStatus == "STOP" {
 			globals.SchedulerStatus = "START"
 			go scheduler.LTS()
-			scheduler.RetryProcessCh <- struct{}{}
 			scheduler.WaitingForMemoryCh <- struct{}{}
 			logger.Instance.Info("Scheduler initialized")
 		}
