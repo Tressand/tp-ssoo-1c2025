@@ -50,15 +50,12 @@ func LTS() {
 				return globals.LTS[i].Size < globals.LTS[j].Size
 			})
 
-			<-WaitingForMemoryCh
-
 			process := globals.LTS[0]
 			globals.LTS = globals.LTS[1:]
 			globals.LTSMutex.Unlock()
 
 			go func(p *globals.Process) {
 				InitProcess(p)
-				WaitingForMemoryCh <- struct{}{}
 			}(&process)
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
