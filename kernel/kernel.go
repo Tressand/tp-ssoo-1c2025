@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"ssoo-kernel/config"
@@ -111,7 +112,8 @@ func main() {
 		}
 	})
 	moduleMenu.Add("[TEST] Create process", func() {
-		process.CreateProcess("prueba", 250)
+		size := 100 + (rand.Intn(900))
+		process.CreateProcess("prueba", size)
 	})
 	moduleMenu.Add("Send IO Signal", sendToIO)
 	moduleMenu.Add("Send CPU Interrupt", sendInterrupt)

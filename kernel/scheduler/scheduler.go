@@ -39,7 +39,7 @@ func LTS() {
 
 		case "PMCP":
 			globals.LTSMutex.Lock()
-			for len(globals.LTS) == 0 {
+			if len(globals.LTS) == 0 {
 				globals.LTSMutex.Unlock()
 				<-globals.LTSEmpty
 				globals.LTSMutex.Lock()
@@ -50,15 +50,38 @@ func LTS() {
 				return globals.LTS[i].Size < globals.LTS[j].Size
 			})
 
+			<-WaitingForMemoryCh
+
 			process := globals.LTS[0]
 			globals.LTS = globals.LTS[1:]
 			globals.LTSMutex.Unlock()
 
 			go func(p *globals.Process) {
 				InitProcess(p)
+				WaitingForMemoryCh <- struct{}{}
 			}(&process)
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
+			return
+		}
+	}
+}
+
+func STS() {
+	for {
+		switch config.Values.SchedulerAlgorithm {
+		case "FIFO":
+			fmt.Println("FIFO")
+			return
+		case "SJF":
+			fmt.Println("SJF")
+			return
+		case "SRT":
+			fmt.Println("SRT")
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.SchedulerAlgorithm)
+			return
 		}
 	}
 }

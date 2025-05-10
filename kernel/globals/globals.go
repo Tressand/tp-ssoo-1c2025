@@ -15,6 +15,7 @@ var (
 	STS             []Process = make([]Process, 0)
 	STSMutex        sync.Mutex
 	LTSEmpty        = make(chan struct{})
+	STSEmpty        = make(chan struct{})
 )
 
 type Process struct {
