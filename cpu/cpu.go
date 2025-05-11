@@ -155,67 +155,6 @@ func sendPidPcToMemory() {
 	//log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
 }
 
-func DeleteProcess(){
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "process",
-		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
-		},
-	})
-
-	req, err := http.NewRequest(http.MethodDelete,url,nil)
-	if err != nil {
-		slog.Error("Error al crear la solicitud DELETE", "error", err)
-		return
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("Fallo la solicitud para eliminar proceso. ", "error", err)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("Memoria respondió con error al eliminar el proceso. ", "status", resp.StatusCode)
-		return
-	}
-
-	slog.Info("Proceso eliminado exitosamente en Memoria", "pid", config.Pcb.PID)
-}
-
-func initProcess(){
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "process",
-		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
-			"name": config.Exec_values.Str,
-		},
-	})
-
-	resp,err := http.Post(url,http.MethodPost,http.NoBody)
-
-	if err != nil{
-		slog.Error("Fallo la solicitud para crear el proceso. ","error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK{
-
-		slog.Error("Memoria respondió con error al crear el proceso. ","status",resp.StatusCode)
-		return
-	}
-
-	slog.Info("Proceso creado exitosamente en Memoria. ","pid",config.Pcb.PID)
-}
-
 func readMemory(){
 
 	//TODO HALLAR LA DIRECCION FISICA A PARTIR DE LA DIRECCION LOGICA
@@ -293,11 +232,107 @@ func writeMemory(){
 	slog.Info("Se ha guardado el contenido exitosamente.")
 }
 
+func sendIO(){
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "syscall",
+		Queries: map[string]string{
+			"instruccion": fmt.Sprint(instruction),
+		},
+	})
+
+	req, err := http.NewRequest(http.MethodDelete,url,nil)
+	if err != nil {
+		slog.Error("Error al crear la solicitud IO", "error", err)
+		return
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("Fallo la solicitud para IO. ", "error", err)
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Kernel respondió con error al recibir IO. ", "status", resp.StatusCode)
+		return
+	}
+
+	slog.Info("Kernel recibió la orden de IO", "pid", config.Pcb.PID)
+}
+
+func DeleteProcess(){
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "syscall",
+		Queries: map[string]string{
+			"instruccion": fmt.Sprint(instruction),
+		},
+	})
+
+	req, err := http.NewRequest(http.MethodDelete,url,nil)
+	if err != nil {
+		slog.Error("Error al crear la solicitud DELETE", "error", err)
+		return
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("Fallo la solicitud para eliminar proceso. ", "error", err)
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Kernel respondió con error al eliminar el proceso. ", "status", resp.StatusCode)
+		return
+	}
+
+	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
+}
+
+func initProcess(){
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "syscall",
+		Queries: map[string]string{
+			"instruccion": fmt.Sprint(instruction),
+		},
+	})
+
+	resp,err := http.Post(url,http.MethodPost,http.NoBody)
+	
+	if err != nil{
+		slog.Error("Fallo la solicitud para crear el proceso. ","error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK{
+
+		slog.Error("Kernel respondió con error al crear el proceso. ","status",resp.StatusCode)
+		return
+	}
+
+	slog.Info("Kernel recibió la orden de init Process. ","pid",config.Pcb.PID)
+}
+
 func dumpMemory(){
 	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "free_space",
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "syscall",
+		Queries: map[string]string{
+			"instruccion": fmt.Sprint(instruction),
+		},
 	})
 
 	resp, err := http.Get(url)
@@ -455,10 +490,9 @@ func exec() {
 	
 	//SYSCALLS
 	case "IO":
-		time.Sleep(time.Millisecond * time.Duration(config.Exec_values.Arg1))
-		fmt.Printf("se espero %d milisegundo.\n", config.Exec_values.Arg1)
-		//simula una IO por un tiempo igual al arg1
-		//TODO
+		//habilita la IO a traves de kernel
+		sendIO();
+
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
 		initProcess()
