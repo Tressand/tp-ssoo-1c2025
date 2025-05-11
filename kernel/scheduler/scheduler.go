@@ -26,8 +26,6 @@ func LTS() {
 				globals.LTSMutex.Lock()
 			}
 
-			<-WaitingForMemoryCh
-
 			process := globals.LTS[0]
 			globals.LTS = globals.LTS[1:]
 			globals.LTSMutex.Unlock()
@@ -37,7 +35,9 @@ func LTS() {
 				WaitingForMemoryCh <- struct{}{}
 			}(&process)
 
+			<-WaitingForMemoryCh
 		case "PMCP":
+
 			globals.LTSMutex.Lock()
 			if len(globals.LTS) == 0 {
 				globals.LTSMutex.Unlock()
@@ -50,8 +50,6 @@ func LTS() {
 				return globals.LTS[i].Size < globals.LTS[j].Size
 			})
 
-			<-WaitingForMemoryCh
-
 			process := globals.LTS[0]
 			globals.LTS = globals.LTS[1:]
 			globals.LTSMutex.Unlock()
@@ -60,6 +58,8 @@ func LTS() {
 				InitProcess(p)
 				WaitingForMemoryCh <- struct{}{}
 			}(&process)
+
+			<-WaitingForMemoryCh
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
 			return
