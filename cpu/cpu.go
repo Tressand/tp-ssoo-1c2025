@@ -96,7 +96,7 @@ func main() {
 
 func ciclo(){
 	
-	
+
 	for{
 		slog.Info("Inicio de ciclo de instrucción", "PC", config.Pcb.PC)
 
@@ -110,9 +110,6 @@ func ciclo(){
 
 		//execute
 		exec()
-		if instruction.Opcode == 1{//me esta pidiendo que salga.
-			return
-		}
 
 		select{
 			case <-config.InterruptChan:
