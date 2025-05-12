@@ -75,7 +75,7 @@ func main() {
 	ctx, cancelctx := context.WithCancel(context.Background())
 
 	wg.Add(1)
-	go createKernelConnection("CPU1", 3, 5, &wg, ctx)
+	go createKernelConnection("CPU_"+identificadorStr, 3, 5, &wg, ctx)
 
 	//crear menu
 	mainMenu := menu.Create()
@@ -88,6 +88,7 @@ func main() {
 		close(shutdownSignal)
 		os.Exit(0)
 	})
+	mainMenu.Add("Start cicle.",func(){ciclo()})
 	for {
 		mainMenu.Activate()
 	}
@@ -522,7 +523,61 @@ func notifyKernel(id string, ctx context.Context) (bool, error) {
 	return true,nil
 }
 
+func notifyExitKernel(id string, ctx context.Context) (bool, error) { //lo mismo pero envia el pid y el pc para recibirlos de nuevo.
+	log := slog.With("name", id)
+	log.Info("Notificando a Kernel...")
 
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "cpu-notify",
+		Queries: map[string]string{
+			"ip":   httputils.GetOutboundIP(),
+			"port": fmt.Sprint(config.Values.PortCPU),
+			"id":   id,
+			"pc": fmt.Sprint(config.Pcb.PC),
+			"pid": fmt.Sprint(config.Pcb.PID),
+		},
+	})
+
+	client := &http.Client{
+		Timeout: 0,
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, http.NoBody)
+	if err != nil{
+		log.Error("Error creando la request a Kernel", "error", err)
+		return false, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil{
+		log.Error("Error en la request","error",err)
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusTeapot{
+			log.Info("Kernel pidió shutdown.")
+			return false,nil
+		}
+		log.Error("Respuesta inesperada del kernel","status", resp.StatusCode)
+		return true, fmt.Errorf("response status: %d", resp.StatusCode)
+	}
+
+	//leer y parsear los datos de proceso
+	if err := json.NewDecoder(resp.Body).Decode(&config.KernelResp);err !=nil {
+		log.Error("Error decodificando JSON", "error", err)
+		return false, err
+	}
+
+	log.Info("Proceso recibido del kernel", "PID", config.KernelResp.PID, "pc", config.KernelResp.PC)
+	config.Pcb.PID = int(config.KernelResp.PID)
+	config.Pcb.PC = int(config.KernelResp.PC)
+
+	return true,nil
+}
 
 
 
