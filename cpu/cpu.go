@@ -49,10 +49,6 @@ func main() {
 		config.Values.PortCPU += identificador
 	}
 
-	//Ejecucion de practica
-	//asign("IO 8")
-	//exec()
-
 	//crear logger
 	err := logger.SetupDefault("cpu", config.Values.LogLevel)
 	defer logger.Close()
@@ -377,6 +373,7 @@ func DeleteProcess(){
 	}
 
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
+	config.ExitChan <- "" //aviso que hay que sacar este proceso
 }
 
 func initProcess(){
