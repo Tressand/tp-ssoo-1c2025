@@ -58,6 +58,7 @@ var Identificador int
 var configFilePath string = "/config/cpu_config.json"
 
 var InterruptChan  chan string = make(chan string)
+var ExitChan  chan string = make(chan string)
 
 var KernelResp KernelResponse
 

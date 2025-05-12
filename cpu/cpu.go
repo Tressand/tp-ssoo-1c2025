@@ -118,6 +118,9 @@ func ciclo(){
 				logger.Instance.Info("Interrupción recibida","PID", config.Pcb.PID)
 				//atender interrupción
 				return
+			case <-config.ExitChan:
+				logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
+				//atender exit
 			default:
 		}
 
