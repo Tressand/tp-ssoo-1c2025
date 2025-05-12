@@ -17,9 +17,10 @@ var opcodeStrings map[codeutils.Opcode]string = codeutils.OpcodeStrings
 //#region SECTION: SYSTEM MEMORY
 
 type process_data struct {
-	pid     uint
-	code    []instruction
-	metrics memory_metrics
+	pid      uint
+	code     []instruction
+	reserved int
+	metrics  memory_metrics
 }
 
 func GetDataByPID(pid uint) (data *process_data, index int) {
@@ -43,6 +44,19 @@ func GetInstruction(pid uint, pc int) (*instruction, error) {
 }
 
 var systemMemory []process_data = make([]process_data, 0)
+
+type basic_process_data struct {
+	PID  uint
+	Size int
+}
+
+func GetProcesses() []basic_process_data {
+	var processes []basic_process_data
+	for _, process := range systemMemory {
+		processes = append(processes, basic_process_data{PID: process.pid, Size: process.reserved})
+	}
+	return processes
+}
 
 func LogSystemMemory() {
 	if len(systemMemory) == 0 {
@@ -92,10 +106,11 @@ func CreateProcess(newpid uint, codeFile io.ReadCloser, memoryRequirement int) e
 		newProcessData.code = append(newProcessData.code, instruction{Opcode: newOpCode, Args: parts[1:]})
 	}
 
-	err := allocateMemory(newpid, memoryRequirement)
+	err := allocateMemory(memoryRequirement)
 	if err != nil {
 		return err
 	}
+	newProcessData.reserved = memoryRequirement
 
 	systemMemory = append(systemMemory, *newProcessData)
 	return nil
@@ -142,13 +157,20 @@ func InitializeUserMemory(size int) {
 	slog.Info("Memoria de Usuario Inicializada", "size", remainingMemory)
 }
 
-func allocateMemory(pid uint, size int) error {
-	// Not implemented
+func allocateMemory(size int) error {
+	if remainingMemory-size < 0 {
+		panic("memory got negative bro wtf")
+	}
+	remainingMemory -= size
 	return nil
 }
 
 func deallocateMemory(pid uint) error {
-	// Not implemented
+	process_data, _ := GetDataByPID(pid)
+	if process_data == nil {
+		return errors.New("couldn't find process with pid")
+	}
+	remainingMemory += process_data.reserved
 	return nil
 }
 

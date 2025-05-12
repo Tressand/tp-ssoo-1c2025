@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"ssoo-memoria/config"
 	"ssoo-memoria/storage"
-	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
@@ -53,13 +52,10 @@ func main() {
 	// #region MENU
 
 	mainMenu := menu.Create()
+
+	var _internalProcessCounter uint
 	mainMenu.Add("Create Process", func() {
-		var codeFolder string
-		if configManager.IsCompiledEnv() {
-			codeFolder, _ = filepath.Abs("./code")
-		} else {
-			codeFolder, _ = filepath.Abs("../code")
-		}
+		codeFolder, _ := filepath.Abs("./code")
 
 		files, _ := os.ReadDir(codeFolder)
 		var names []string
@@ -73,12 +69,32 @@ func main() {
 			slog.Error("error opening file")
 			return
 		}
-		err = storage.CreateProcess(1, codeFile, 0)
+		defer codeFile.Close()
+
+		fmt.Print("Process size: ")
+		var input string
+		fmt.Scanln(&input)
+
+		size, err := strconv.Atoi(input)
+		if err != nil {
+			slog.Error("size not a number")
+		}
+
+		err = storage.CreateProcess(_internalProcessCounter, codeFile, size)
 		if err != nil {
 			slog.Error("process could not be created", "error", err)
-		} else {
-			slog.Info("process created")
+			return
 		}
+		slog.Info("process created", "name", _internalProcessCounter, "size", size)
+		_internalProcessCounter++
+	})
+	mainMenu.Add("Kill process", func() {
+		processes := storage.GetProcesses()
+		if len(processes) == 0 {
+			return
+		}
+		i := menu.SliceSelect(processes)
+		storage.DeleteProcess(processes[i].PID)
 	})
 	mainMenu.Add("Log processes", storage.LogSystemMemory)
 	mainMenu.Add("Close Server and Exit Program", func() {
