@@ -93,6 +93,39 @@ func main() {
 	}
 }
 
+func ciclo(){
+	
+	
+	for{
+		slog.Info("Inicio de ciclo de instrucción", "PC", config.Pcb.PC)
+
+		//obtengo la intruccion (fetch)
+		sendPidPcToMemory()
+
+		//loggearla
+		slog.Info("Instruccion:", fmt.Sprint(instruction))
+		//decode
+		asign()
+
+		//execute
+		exec()
+		if instruction.Opcode == 1{//me esta pidiendo que salga.
+			return
+		}
+
+		select{
+			case <-config.InterruptChan:
+				logger.Instance.Info("Interrupción recibida","PID", config.Pcb.PID)
+				//atender interrupción
+				return
+			default:
+		}
+
+		//pequeña pausa para ver mejor el tema de los logs
+		time.Sleep(1 * time.Second)
+	}
+}
+
 func sendValueToMemory(key string, value string) {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -118,8 +151,6 @@ func sendValueToMemory(key string, value string) {
 
 	slog.Info("POST to Memory succeded")
 }
-
-//#region Execute
 
 func sendPidPcToMemory() {
 
@@ -154,6 +185,52 @@ func sendPidPcToMemory() {
 	//falta ver que se hacen con los datos enviados por memoria en response.
 	//log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
 }
+
+//#region Execute
+func exec() {
+	switch config.Instruccion {
+	case "NOOP":
+		time.Sleep(1 * time.Millisecond)
+		slog.Info("se espero 1 milisegundo por instruccion NOOP.")
+
+	case "WRITE":
+		//write en la direccion del arg1 con el dato en arg2
+		writeMemory()
+
+	case "READ":
+		//read en la direccion del arg1 con el tamaño en arg2
+		readMemory()
+
+	case "GOTO":
+		config.Pcb.PC = config.Exec_values.Arg1
+		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
+		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
+		return
+	
+	//SYSCALLS
+	case "IO":
+		//habilita la IO a traves de kernel
+		sendIO();
+
+	case "INIT_PROC":
+		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
+		initProcess()
+
+	case "DUMP_MEMORY":
+		//vacia la memoria
+		dumpMemory()
+
+	case "EXIT":
+		//fin de proceso
+		DeleteProcess()
+
+	default:
+
+	}
+	config.Pcb.PC++
+}
+
+
 
 func readMemory(){
 
@@ -231,6 +308,9 @@ func writeMemory(){
 
 	slog.Info("Se ha guardado el contenido exitosamente.")
 }
+
+//#endregion
+//#region Syscalls
 
 func sendIO(){
 	url := httputils.BuildUrl(httputils.URLData{
@@ -356,6 +436,8 @@ func dumpMemory(){
 
 //#endregion
 
+//#region kernel Connection
+
 func createKernelConnection(
 	name string,
 	retryAmount int,
@@ -398,47 +480,55 @@ func notifyKernel(id string, ctx context.Context) (bool, error) {
 		},
 	})
 
-	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	client := &http.Client{
+		Timeout: 0,
+	}
 
-	if err != nil {
-		fmt.Println("Probably the server is not running, logging error")
-		log.Error("Error making POST request", "error", err)
-		return true, err
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, http.NoBody)
+	if err != nil{
+		log.Error("Error creando la request a Kernel", "error", err)
+		return false, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil{
+		log.Error("Error en la request","error",err)
+		return false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusTeapot {
-			log.Info("Server asked for shutdown.")
-			return false, nil
+		if resp.StatusCode == http.StatusTeapot{
+			log.Info("Kernel pidió shutdown.")
+			return false,nil
 		}
-		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
-		return true, fmt.Errorf("response error: %w", err)
+		log.Error("Respuesta inesperada del kernel","status", resp.StatusCode)
+		return true, fmt.Errorf("response status: %d", resp.StatusCode)
 	}
 
-	data, _ := io.ReadAll(resp.Body)
-	duration, _ := strconv.Atoi(string(data))
-	log.Info("Recibió respuesta, durmiendo...", "timer", duration)
-
-	sleepDone := make(chan struct{})
-	go func() {
-		time.Sleep(time.Duration(duration) * time.Millisecond)
-		sleepDone <- struct{}{}
-		fmt.Println("sleep goroutine closed")
-	}()
-	defer close(sleepDone)
-
-	select {
-	case <-sleepDone:
-		return true, nil
-	case <-ctx.Done():
-		return false, nil
+	//leer y parsear los datos de proceso
+	if err := json.NewDecoder(resp.Body).Decode(&config.KernelResp);err !=nil {
+		log.Error("Error decodificando JSON", "error", err)
+		return false, err
 	}
+
+	log.Info("Proceso recibido del kernel", "PID", config.KernelResp.PID, "pc", config.KernelResp.PC)
+	config.Pcb.PID = int(config.KernelResp.PID)
+	config.Pcb.PC = int(config.KernelResp.PC)
+
+	return true,nil
 }
+
+
+
+
+
+//#endregion
+
+//#region interrupt
 
 func interrupt() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Interruptions not implemented
 
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -448,14 +538,25 @@ func interrupt() http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		message := string(data)
-		logger.Instance.Info("Received message from kernel", "message", message)
+		pidStr := string(data)
+		pidRecibido, err := strconv.Atoi(pidStr)
+		
+		if err != nil {
+			http.Error(w, "PID invalido", http.StatusBadRequest)
+			return
+		}
 
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Message received."))
+		if pidRecibido == config.Pcb.PID {
+			config.InterruptChan <- "" // Interrupción al proceso
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("Proceso interrumpido."))
+		} else {
+			http.Error(w, "PID no coincide con el proceso en ejecución", http.StatusBadRequest)
+		}
 	}
 }
+
+//#endregion
 
 func getInput() (string, string) {
 	fmt.Print("Key: ")
@@ -466,49 +567,6 @@ func getInput() (string, string) {
 	fmt.Scanln(&value)
 
 	return key, value
-}
-
-func exec() {
-	switch config.Instruccion {
-	case "NOOP":
-		time.Sleep(1 * time.Millisecond)
-		slog.Info("se espero 1 milisegundo por instruccion NOOP.")
-
-	case "WRITE":
-		//write en la direccion del arg1 con el dato en arg2
-		writeMemory()
-
-	case "READ":
-		//read en la direccion del arg1 con el tamaño en arg2
-		readMemory()
-
-	case "GOTO":
-		config.Pcb.PC = config.Exec_values.Arg1
-		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
-		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
-		return
-	
-	//SYSCALLS
-	case "IO":
-		//habilita la IO a traves de kernel
-		sendIO();
-
-	case "INIT_PROC":
-		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
-		initProcess()
-
-	case "DUMP_MEMORY":
-		//vacia la memoria
-		dumpMemory()
-
-	case "EXIT":
-		//fin de proceso
-		DeleteProcess()
-
-	default:
-
-	}
-	config.Pcb.PC++
 }
 
 //#region decode

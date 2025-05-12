@@ -39,6 +39,11 @@ type RequestPayload struct {
 	PC  int `json:"pc"`
 }
 
+type KernelResponse struct{
+	PID int `json:"pid"`
+	PC int `json:"pc"`
+}
+
 type ResponsePayload = codeutils.Instruction
 
 var Values CPUConfig
@@ -51,6 +56,10 @@ var Exec_values = Exec_valuesS{
 var Instruccion string
 var Identificador int
 var configFilePath string = "/config/cpu_config.json"
+
+var InterruptChan  chan string = make(chan string)
+
+var KernelResp KernelResponse
 
 func SetFilePath(path string) {
 	configFilePath = path
