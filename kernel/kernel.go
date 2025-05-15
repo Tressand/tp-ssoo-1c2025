@@ -179,7 +179,7 @@ func test() http.HandlerFunc {
 // #endregion
 
 // #region SECTION: HANDLE CPU CONNECTIONS
-
+// TODO: Lo pase a otro archivo temporalmente
 type CPUConnection struct {
 	id      string
 	ip      string
