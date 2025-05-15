@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	kernel_cpu_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	process_module "ssoo-kernel/process"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
+	slices "ssoo-utils/slices"
 )
 
 var RetryProcessCh = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
-var WaitingForMemoryCh = make(chan struct{}, 1)
+var WaitingForMemory = make(chan struct{}, 1)
 
 func LTS() {
 	for {
@@ -20,8 +22,9 @@ func LTS() {
 		case "FIFO":
 
 			globals.LTSMutex.Lock()
-			if len(globals.LTS) == 0 {
+			if slices.IsEmpty(globals.LTS) {
 				globals.LTSMutex.Unlock()
+				logger.Instance.Info("La cola de procesos en NEW esta vacia")
 				<-globals.LTSEmpty
 				globals.LTSMutex.Lock()
 			}
@@ -32,15 +35,18 @@ func LTS() {
 
 			go func(p *globals.Process) {
 				InitProcess(p)
-				WaitingForMemoryCh <- struct{}{}
+				logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", p.PCB.GetPID()))
+				WaitingForMemory <- struct{}{}
 			}(&process)
 
-			<-WaitingForMemoryCh
+			<-WaitingForMemory
+
 		case "PMCP":
 
 			globals.LTSMutex.Lock()
-			if len(globals.LTS) == 0 {
+			if slices.IsEmpty(globals.LTS) {
 				globals.LTSMutex.Unlock()
+				logger.Instance.Info("La cola de procesos en NEW esta vacia")
 				<-globals.LTSEmpty
 				globals.LTSMutex.Lock()
 			}
@@ -56,10 +62,12 @@ func LTS() {
 
 			go func(p *globals.Process) {
 				InitProcess(p)
-				WaitingForMemoryCh <- struct{}{}
+				logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", p.PCB.GetPID()))
+				WaitingForMemory <- struct{}{}
 			}(&process)
 
-			<-WaitingForMemoryCh
+			<-WaitingForMemory
+
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
 			return
@@ -67,29 +75,11 @@ func LTS() {
 	}
 }
 
-func STS() {
-	for {
-		switch config.Values.SchedulerAlgorithm {
-		case "FIFO":
-			fmt.Println("FIFO")
-			return
-		case "SJF":
-			fmt.Println("SJF")
-			return
-		case "SRT":
-			fmt.Println("SRT")
-			return
-		default:
-			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.SchedulerAlgorithm)
-			return
-		}
-	}
-}
-
 func InitProcess(process *globals.Process) {
 	for {
+		logger.Instance.Info(fmt.Sprintf("Se intenta inicializar el proceso con el pid %d en Memoria", process.PCB.GetPID()))
 		err := process_module.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.GetSize())
-		fmt.Println(err)
+
 		if err == nil {
 			queueToSTS(process)
 			return
@@ -106,5 +96,79 @@ func queueToSTS(process *globals.Process) {
 	process.PCB.SetState(pcb.READY)
 	actualState := process.PCB.GetState()
 	globals.STS = append(globals.STS, *process)
+	/* TODO: Me estaba bloqueando el planificador jajajja, sacar cuando este andando STS
+	if len(globals.STS) == 1 {
+		globals.STSEmpty <- struct{}{}
+	}
+	*/
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
+}
+
+var WaitingForCPU = make(chan struct{}, 1)
+
+func STS() {
+	for {
+		switch config.Values.SchedulerAlgorithm {
+		case "FIFO":
+			globals.STSMutex.Lock()
+			if slices.IsEmpty(globals.STS) {
+				globals.STSMutex.Unlock()
+				<-globals.STSEmpty
+				globals.STSMutex.Lock()
+			}
+
+			process := globals.STS[0]
+			globals.STS = globals.STS[1:]
+			globals.STSMutex.Unlock()
+
+			go func(p *globals.Process) {
+				SendToExecute(p)
+				WaitingForCPU <- struct{}{}
+			}(&process)
+
+			<-WaitingForCPU
+		case "SJF":
+			fmt.Println("SJF")
+			return
+		case "SRT":
+			fmt.Println("SRT")
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.SchedulerAlgorithm)
+			return
+		}
+	}
+}
+
+var AvailableCpu = make(chan struct{}, 1)
+
+func SendToExecute(process *globals.Process) {
+	globals.STSMutex.Lock()
+
+	lastState := process.PCB.GetState()
+	process.PCB.SetState(pcb.EXEC)
+	actualState := process.PCB.GetState()
+	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
+
+	globals.STSMutex.Unlock()
+
+	cpus := kernel_cpu_api.GetCPUList(false)
+
+	if slices.IsEmpty(cpus) {
+		for {
+			cpus = kernel_cpu_api.GetCPUList(false)
+
+			if len(cpus) != 0 {
+				break
+			}
+			<-AvailableCpu
+		}
+	}
+
+	cpu := cpus[0]
+
+	cpu.SendToWork(kernel_cpu_api.CPURequest{
+		PID: process.PCB.GetPID(),
+		PC:  process.PCB.GetPC(),
+	})
 }

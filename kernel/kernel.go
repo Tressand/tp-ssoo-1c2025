@@ -68,7 +68,7 @@ func main() {
 		process.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
-		process.CreateProcess("helloworld", 1024)
+		process.CreateProcess("helloworld", 4096)
 	}
 
 	// #endregion
@@ -107,13 +107,17 @@ func main() {
 		if globals.SchedulerStatus == "STOP" {
 			globals.SchedulerStatus = "START"
 			go scheduler.LTS()
-			scheduler.WaitingForMemoryCh <- struct{}{}
 			logger.Instance.Info("Scheduler initialized")
 		}
 	})
 	moduleMenu.Add("[TEST] Create process", func() {
 		size := 100 + (rand.Intn(900))
 		process.CreateProcess("prueba", size)
+	})
+	moduleMenu.Add("[TEST] Retry request", func() {
+		if globals.SchedulerStatus == "START" {
+			scheduler.RetryProcessCh <- struct{}{}
+		}
 	})
 	moduleMenu.Add("Send IO Signal", sendToIO)
 	moduleMenu.Add("Send CPU Interrupt", sendInterrupt)
