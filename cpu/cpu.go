@@ -60,18 +60,21 @@ func main() {
 	log.Info("Arranca CPU")
 
 	//iniciar server
+	var wg sync.WaitGroup
+	ctx, cancelctx := context.WithCancel(context.Background())
+
 	var mux *http.ServeMux = http.NewServeMux()
 
 	mux.Handle("/interrupt", interrupt())
+	mux.Handle("/dispatch", receivePIDPC(ctx))
 
 	shutdownSignal := make(chan any)
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
-	var wg sync.WaitGroup
-	ctx, cancelctx := context.WithCancel(context.Background())
-
 	wg.Add(1)
 	go createKernelConnection("CPU_"+identificadorStr, 3, 5, &wg, ctx)
+	
+
 
 	//crear menu
 	mainMenu := menu.Create()
@@ -110,10 +113,12 @@ func ciclo(){
 		select{
 			case <-config.InterruptChan:
 				logger.Instance.Info("Interrupción recibida","PID", config.Pcb.PID)
-				//atender interrupción
+				config.CicloDone <- "Interrupt"
 				return
 			case <-config.ExitChan:
 				logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
+				config.CicloDone <- "Exit"
+				return
 				//atender exit
 			default:
 		}
@@ -478,99 +483,84 @@ func notifyKernel(id string, ctx context.Context) (bool, error) {
 		},
 	})
 
-	client := &http.Client{
-		Timeout: 0,
-	}
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, http.NoBody)
-	if err != nil{
-		log.Error("Error creando la request a Kernel", "error", err)
-		return false, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil{
-		log.Error("Error en la request","error",err)
-		return false, err
+	if err != nil {
+		fmt.Println("Probably the server is not running, logging error")
+		log.Error("Error making POST request", "error", err)
+		return true, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusTeapot{
-			log.Info("Kernel pidió shutdown.")
-			return false,nil
+		if resp.StatusCode == http.StatusTeapot {
+			log.Info("Server asked for shutdown.")
+			return false, nil
 		}
-		log.Error("Respuesta inesperada del kernel","status", resp.StatusCode)
-		return true, fmt.Errorf("response status: %d", resp.StatusCode)
+		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
+		return true, fmt.Errorf("response error: %w", err)
 	}
 
-	//leer y parsear los datos de proceso
-	if err := json.NewDecoder(resp.Body).Decode(&config.KernelResp);err !=nil {
-		log.Error("Error decodificando JSON", "error", err)
-		return false, err
+	data, _ := io.ReadAll(resp.Body)
+	duration, _ := strconv.Atoi(string(data))
+	log.Info("Recibió respuesta, durmiendo...", "timer", duration)
+
+	sleepDone := make(chan struct{})
+	go func() {
+		time.Sleep(time.Duration(duration) * time.Millisecond)
+		sleepDone <- struct{}{}
+		fmt.Println("sleep goroutine closed")
+	}()
+	defer close(sleepDone)
+
+	select {
+	case <-sleepDone:
+		return true, nil
+	case <-ctx.Done():
+		return false, nil
 	}
-
-	log.Info("Proceso recibido del kernel", "PID", config.KernelResp.PID, "pc", config.KernelResp.PC)
-	config.Pcb.PID = int(config.KernelResp.PID)
-	config.Pcb.PC = int(config.KernelResp.PC)
-
-	return true,nil
 }
 
-func notifyExitKernel(id string, ctx context.Context) (bool, error) { //lo mismo pero envia el pid y el pc para recibirlos de nuevo.
-	log := slog.With("name", id)
-	log.Info("Notificando a Kernel...")
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpKernel,
-		Port:     config.Values.PortKernel,
-		Endpoint: "cpu-notify",
-		Queries: map[string]string{
-			"ip":   httputils.GetOutboundIP(),
-			"port": fmt.Sprint(config.Values.PortCPU),
-			"id":   id,
-			"pc": fmt.Sprint(config.Pcb.PC),
-			"pid": fmt.Sprint(config.Pcb.PID),
-		},
-	})
-
-	client := &http.Client{
-		Timeout: 0,
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, http.NoBody)
-	if err != nil{
-		log.Error("Error creando la request a Kernel", "error", err)
-		return false, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil{
-		log.Error("Error en la request","error",err)
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusTeapot{
-			log.Info("Kernel pidió shutdown.")
-			return false,nil
+func receivePIDPC(ctx context.Context) http.HandlerFunc{
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
-		log.Error("Respuesta inesperada del kernel","status", resp.StatusCode)
-		return true, fmt.Errorf("response status: %d", resp.StatusCode)
+		var req config.KernelResponse
+
+		err := json.NewDecoder(r.Body).Decode(&req);
+		if err != nil {
+			logger.Instance.Error("Error decodificando JSON: %v", err)
+			http.Error(w, "JSON inválido", http.StatusBadRequest)
+			return
+		}
+
+		slog.Info("Recibido desde Kernel: PID: ",req.PID," PC: ", req.PC)
+
+		// Guardar la info en config global
+		config.Pcb.PID = req.PID
+		config.Pcb.PC = req.PC
+		
+		// Iniciar ciclo
+		go ciclo()
+
+
+		// Esperar que el ciclo termine y devuelva el motivo
+		select {
+		case motivo := <-config.CicloDone:
+			resp := config.DispatchResponse{
+				PID:    req.PID,
+				PC:     req.PC, // o el valor actualizado si cambia durante el ciclo
+				Motivo: motivo,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+
+		case <-ctx.Done():
+			http.Error(w, "Contexto cancelado", http.StatusInternalServerError)
+		}
 	}
-
-	//leer y parsear los datos de proceso
-	if err := json.NewDecoder(resp.Body).Decode(&config.KernelResp);err !=nil {
-		log.Error("Error decodificando JSON", "error", err)
-		return false, err
-	}
-
-	log.Info("Proceso recibido del kernel", "PID", config.KernelResp.PID, "pc", config.KernelResp.PC)
-	config.Pcb.PID = int(config.KernelResp.PID)
-	config.Pcb.PC = int(config.KernelResp.PC)
-
-	return true,nil
 }
 
 

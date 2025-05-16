@@ -44,6 +44,12 @@ type KernelResponse struct{
 	PC int `json:"pc"`
 }
 
+type DispatchResponse struct {
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
+	Motivo string `json:"motivo"`
+}
+
 type ResponsePayload = codeutils.Instruction
 
 var Values CPUConfig
@@ -59,6 +65,7 @@ var configFilePath string = "/config/cpu_config.json"
 
 var InterruptChan  chan string = make(chan string)
 var ExitChan  chan string = make(chan string)
+var CicloDone chan string = make(chan string)
 
 var KernelResp KernelResponse
 
