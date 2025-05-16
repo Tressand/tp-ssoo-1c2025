@@ -97,7 +97,7 @@ func ciclo(){
 	
 
 	for{
-		slog.Info("Inicio de ciclo de instrucción", "PC", config.Pcb.PC)
+		slog.Info("Inicio de ciclo de instrucción","PID",config.Pcb.PID, "PC", config.Pcb.PC)
 
 		//obtengo la intruccion (fetch)
 		sendPidPcToMemory()
@@ -119,7 +119,6 @@ func ciclo(){
 				logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
 				config.CicloDone <- "Exit"
 				return
-				//atender exit
 			default:
 		}
 
