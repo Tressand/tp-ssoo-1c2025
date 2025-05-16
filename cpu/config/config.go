@@ -50,6 +50,16 @@ type DispatchResponse struct {
 	Motivo string `json:"motivo"`
 }
 
+type Tlb_entries struct{
+	page int
+	frame int
+}
+
+type Logic_Direction struct{
+	entrys []int
+	scrolling int
+}
+
 type ResponsePayload = codeutils.Instruction
 
 var Values CPUConfig
@@ -68,6 +78,8 @@ var ExitChan  chan string = make(chan string)
 var CicloDone chan string = make(chan string)
 
 var KernelResp KernelResponse
+
+var TLB []Tlb_entries
 
 func SetFilePath(path string) {
 	configFilePath = path
