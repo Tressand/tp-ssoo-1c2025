@@ -323,7 +323,7 @@ func sendIO(){
 		},
 	})
 
-	req, err := http.NewRequest(http.MethodDelete,url,nil)
+	req, err := http.Post(url,http.MethodPost,http.NoBody)
 	if err != nil {
 		slog.Error("Error al crear la solicitud IO", "error", err)
 		return
@@ -356,7 +356,7 @@ func DeleteProcess(){
 		},
 	})
 
-	req, err := http.NewRequest(http.MethodDelete,url,nil)
+	req, err := http.Post(url,http.MethodPost,http.NoBody)
 	if err != nil {
 		slog.Error("Error al crear la solicitud DELETE", "error", err)
 		return
@@ -417,7 +417,7 @@ func dumpMemory(){
 		},
 	})
 
-	resp, err := http.Get(url)
+	resp, err := http.Post(url,http.MethodPost,http.NoBody)
 
 	if err != nil {
 		slog.Error("Error al solicitar el vaciado de la memoria. ", "error",err)

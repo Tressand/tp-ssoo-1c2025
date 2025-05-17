@@ -51,8 +51,15 @@ type DispatchResponse struct {
 }
 
 type Tlb_entries struct{
-	page int
-	frame int
+	Page uint32
+	Frame uint32
+	LastUsed int64
+}
+
+type TLB struct {
+	Entries []Tlb_entries
+	Capacity int
+	ReplacementAlg string
 }
 
 type Logic_Direction struct{
@@ -79,7 +86,7 @@ var CicloDone chan string = make(chan string)
 
 var KernelResp KernelResponse
 
-var TLB []Tlb_entries
+var Tlb TLB
 
 func SetFilePath(path string) {
 	configFilePath = path
