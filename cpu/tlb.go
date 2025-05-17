@@ -58,6 +58,7 @@ func AddEntry(page, frame uint32){
 func initTLB(capacity int, alg string){
 	config.Tlb.Capacity = capacity
 	config.Tlb.ReplacementAlg = alg
+	Clear()
 }
 
 func Clear() {

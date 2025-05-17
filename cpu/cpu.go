@@ -59,6 +59,9 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca CPU")
 
+	//iniciar tlb
+	initTLB(config.Values.TLBEntries,config.Values.TLBReplacement)
+
 	//iniciar server
 	var wg sync.WaitGroup
 	ctx, cancelctx := context.WithCancel(context.Background())
@@ -323,16 +326,9 @@ func sendIO(){
 		},
 	})
 
-	req, err := http.Post(url,http.MethodPost,http.NoBody)
+	resp, err := http.Post(url,http.MethodPost,http.NoBody)
 	if err != nil {
 		slog.Error("Error al crear la solicitud IO", "error", err)
-		return
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("Fallo la solicitud para IO. ", "error", err)
 		return
 	}
 
@@ -356,14 +352,8 @@ func DeleteProcess(){
 		},
 	})
 
-	req, err := http.Post(url,http.MethodPost,http.NoBody)
-	if err != nil {
-		slog.Error("Error al crear la solicitud DELETE", "error", err)
-		return
-	}
+	resp, err := http.Post(url,http.MethodPost,http.NoBody)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
 	if err != nil {
 		slog.Error("Fallo la solicitud para eliminar proceso. ", "error", err)
 		return
