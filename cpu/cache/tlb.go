@@ -1,17 +1,28 @@
 package main
 
 import (
+	"log/slog"
 	"ssoo-cpu/config"
 	"time"
 )
 
 //"ssoo-cpu/config"
 
-func tlb(){
+func lookupTlb(page uint32)(uint32,bool){
 
-
-
-	
+	for i, entry:= range config.Tlb.Entries{
+		if entry.Page == page{
+			//tlb hit
+			if config.Tlb.ReplacementAlg == "LRU"{
+				config.Tlb.Entries[i].LastUsed = time.Now().UnixNano()
+			}
+			slog.Info("TLB HIT","pagina",page,"marco",entry.Frame)
+			return entry.Frame,true
+		}
+	}
+	//tlb miss
+	slog.Info("TLB Miss","pagina",page)
+	return 0,false
 }
 
 func AddEntry(page, frame uint32){
