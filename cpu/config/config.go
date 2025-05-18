@@ -39,6 +39,34 @@ type RequestPayload struct {
 	PC  int `json:"pc"`
 }
 
+type KernelResponse struct{
+	PID int `json:"pid"`
+	PC int `json:"pc"`
+}
+
+type DispatchResponse struct {
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
+	Motivo string `json:"motivo"`
+}
+
+type Tlb_entries struct{
+	Page uint32
+	Frame uint32
+	LastUsed int64
+}
+
+type TLB struct {
+	Entries []Tlb_entries
+	Capacity int
+	ReplacementAlg string
+}
+
+type Logic_Direction struct{
+	entrys []int
+	scrolling int
+}
+
 type ResponsePayload = codeutils.Instruction
 
 var Values CPUConfig
@@ -51,6 +79,14 @@ var Exec_values = Exec_valuesS{
 var Instruccion string
 var Identificador int
 var configFilePath string = "/config/cpu_config.json"
+
+var InterruptChan  chan string = make(chan string)
+var ExitChan  chan string = make(chan string)
+var CicloDone chan string = make(chan string)
+
+var KernelResp KernelResponse
+
+var Tlb TLB
 
 func SetFilePath(path string) {
 	configFilePath = path
