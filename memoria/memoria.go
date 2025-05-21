@@ -168,6 +168,7 @@ func processRequestHandler() http.HandlerFunc {
 				w.Write([]byte(err.Error()))
 				return
 			}
+			fmt.Printf(string(body))
 			w.WriteHeader(http.StatusOK)
 			w.Write(body)
 

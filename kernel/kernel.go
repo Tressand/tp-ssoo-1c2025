@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 	globals "ssoo-kernel/globals"
 	process "ssoo-kernel/process"
 	scheduler "ssoo-kernel/scheduler"
+	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
@@ -90,7 +93,7 @@ func main() {
 	// Pass the globalCloser to handlers that will block.
 	mux.Handle("/cpu-notify", receiveCPU(ctx))
 	mux.Handle("/io-notify", recieveIO(ctx))
-
+	mux.Handle("/syscall", receiveSyscall())
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
 	shutdownSignal := make(chan any)
@@ -480,6 +483,49 @@ func sendToIO() {
 
 func sendIORequest(pid uint, timer int, io *IOConnection) {
 	io.handler <- IORequest{pid: pid, timer: timer}
+}
+
+func receiveSyscall() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var instruction codeutils.Instruction
+
+		// Leer el cuerpo del request
+		err := json.NewDecoder(r.Body).Decode(&instruction)
+		if err != nil {
+			http.Error(w, "Error al parsear JSON de instrucción: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		opcode := codeutils.Opcode(instruction.Opcode)
+
+		switch opcode {
+		case codeutils.IO:
+			if len(instruction.Args) != 2 {
+				http.Error(w, "IO requiere 2 argumentos", http.StatusBadRequest)
+				return
+			}
+			device := instruction.Args[0]
+			timeMs, err := strconv.Atoi(instruction.Args[1])
+			if err != nil {
+				http.Error(w, "Tiempo inválido", http.StatusBadRequest)
+				return
+			}
+			log.Printf("Recibida syscall IO: dispositivo=%s, tiempo=%d", device, timeMs)
+
+		case codeutils.INIT_PROC:
+
+		case codeutils.DUMP_MEMORY:
+
+		case codeutils.EXIT:
+
+		default:
+			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Syscall procesada"))
+	}
 }
 
 // #endregion
