@@ -507,12 +507,30 @@ func receiveSyscall() http.HandlerFunc {
 			device := instruction.Args[0]
 			timeMs, err := strconv.Atoi(instruction.Args[1])
 			if err != nil {
-				http.Error(w, "Tiempo inválido", http.StatusBadRequest)
+				http.Error(w, "Tiempo invalido", http.StatusBadRequest)
 				return
 			}
 			log.Printf("Recibida syscall IO: dispositivo=%s, tiempo=%d", device, timeMs)
 
+			for _, io := range availableIOs {
+				if io.name == device {
+					//logica
+					break
+				}
+			}
+			//
 		case codeutils.INIT_PROC:
+			if len(instruction.Args) != 2 {
+				http.Error(w, "IO requiere 2 argumentos", http.StatusBadRequest)
+				return
+			}
+			codePath := instruction.Args[0]
+			size, err := strconv.Atoi(instruction.Args[1])
+			if err != nil {
+				http.Error(w, "tamaño invalido", http.StatusBadRequest)
+				return
+			}
+			process.CreateProcess(codePath, size)
 
 		case codeutils.DUMP_MEMORY:
 
@@ -526,6 +544,7 @@ func receiveSyscall() http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Syscall procesada"))
 	}
+
 }
 
 // #endregion
