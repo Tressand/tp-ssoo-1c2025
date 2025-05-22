@@ -1,7 +1,9 @@
 package pcb
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -72,4 +74,12 @@ func (s STATE) String() string {
 		return "UNKNOWN"
 	}
 	return states[s]
+}
+
+func (k kernel_metrics) String() string {
+	var sb strings.Builder
+	for i := 0; i < len(k.Frequency); i++ {
+		sb.WriteString(fmt.Sprintf("%s (%d) (%v), ", STATE(i).String(), k.Frequency[i], k.Time_spent[i]))
+	}
+	return sb.String()
 }
