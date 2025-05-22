@@ -1,4 +1,4 @@
-package process
+package processes
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
+	slices "ssoo-utils/slices"
 )
 
 func CreateProcess(path string, size int) {
@@ -24,6 +25,47 @@ func CreateProcess(path string, size int) {
 	QueueToLTS(newProcess)
 
 	logger.RequiredLog(true, newProcess.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": newProcess.PCB.GetState().String(), "Tamaño": fmt.Sprintf("%d KB", size)})
+}
+
+func TerminateProcess(process *globals.Process) {
+	pid := process.PCB.GetPID()
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "process",
+		Queries: map[string]string{
+			"pid": fmt.Sprint(pid),
+		},
+	})
+
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		logger.RequiredLog(true, pid, "Error creando request DELETE", map[string]string{"Error": err.Error()})
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logger.RequiredLog(true, pid, "Error al eliminar el proceso de memoria", map[string]string{"Error": err.Error()})
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		logger.RequiredLog(true, pid, "Error al eliminar el proceso de memoria", map[string]string{"Código": fmt.Sprint(resp.StatusCode)})
+		return
+	}
+
+	defer resp.Body.Close()
+
+	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
+
+	if slices.IsEmpty(globals.ReadySusp) { // TODO: Los procesos en READY SUSPEND van en la cola LTS. Falta implementar algo como isPresent(state) y findFirst(state)
+		globals.RetryProcessCh <- struct{}{}
+		fmt.Println("No hay procesos en SUSP. READY. Se intenta inicializar el proceso en memoria")
+	} else {
+		fmt.Println("Hay procesos en READY SUSPEND")
+	}
+
 }
 
 func QueueToLTS(process globals.Process) {

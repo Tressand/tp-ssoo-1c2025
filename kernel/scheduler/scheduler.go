@@ -4,17 +4,14 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	kernel_cpu_api "ssoo-kernel/api"
+	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
-	process_module "ssoo-kernel/process"
+	processes "ssoo-kernel/processes"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	slices "ssoo-utils/slices"
 )
-
-var RetryProcessCh = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
-var WaitingForMemory = make(chan struct{}, 1)
 
 func LTS() {
 	for {
@@ -36,10 +33,10 @@ func LTS() {
 			go func(p *globals.Process) {
 				InitProcess(p)
 				logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", p.PCB.GetPID()))
-				WaitingForMemory <- struct{}{}
+				globals.WaitingForMemory <- struct{}{}
 			}(&process)
 
-			<-WaitingForMemory
+			<-globals.WaitingForMemory
 
 		case "PMCP":
 
@@ -63,10 +60,10 @@ func LTS() {
 			go func(p *globals.Process) {
 				InitProcess(p)
 				logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", p.PCB.GetPID()))
-				WaitingForMemory <- struct{}{}
+				globals.WaitingForMemory <- struct{}{}
 			}(&process)
 
-			<-WaitingForMemory
+			<-globals.WaitingForMemory
 
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
@@ -78,14 +75,14 @@ func LTS() {
 func InitProcess(process *globals.Process) {
 	for {
 		logger.Instance.Info(fmt.Sprintf("Se intenta inicializar el proceso con el pid %d en Memoria", process.PCB.GetPID()))
-		err := process_module.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.GetSize())
+		err := processes.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.GetSize())
 
 		if err == nil {
 			queueToSTS(process)
 			return
 		}
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d entra en espera. Memoria no pudo inicializarlo", process.PCB.GetPID()))
-		<-RetryProcessCh // Este espera ser desbloqueado desde Finalización de Proceso
+		<-globals.RetryProcessCh // Este espera ser desbloqueado desde Finalización de Proceso
 	}
 }
 
@@ -96,7 +93,7 @@ func queueToSTS(process *globals.Process) {
 	process.PCB.SetState(pcb.READY)
 	actualState := process.PCB.GetState()
 	globals.STS = append(globals.STS, *process)
-	/* TODO: Me estaba bloqueando el planificador jajajja, sacar cuando este andando STS
+	/* TODO: Lo dejo comentado hasta tener Exit o Interrupt implementado
 	if len(globals.STS) == 1 {
 		globals.STSEmpty <- struct{}{}
 	}
@@ -104,9 +101,9 @@ func queueToSTS(process *globals.Process) {
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 }
 
-var WaitingForCPU = make(chan struct{}, 1)
 
-func STS() {
+
+func STS() { // Esto hay que tirarlo con una go routine antes de LTS
 	for {
 		switch config.Values.SchedulerAlgorithm {
 		case "FIFO":
@@ -123,10 +120,10 @@ func STS() {
 
 			go func(p *globals.Process) {
 				SendToExecute(p)
-				WaitingForCPU <- struct{}{}
+				globals.WaitingForCPU <- struct{}{}
 			}(&process)
 
-			<-WaitingForCPU
+			<-globals.WaitingForCPU
 		case "SJF":
 			fmt.Println("SJF")
 			return
@@ -140,35 +137,52 @@ func STS() {
 	}
 }
 
-var AvailableCpu = make(chan struct{}, 1)
-
 func SendToExecute(process *globals.Process) {
-	globals.STSMutex.Lock()
 
 	lastState := process.PCB.GetState()
 	process.PCB.SetState(pcb.EXEC)
 	actualState := process.PCB.GetState()
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 
-	globals.STSMutex.Unlock()
-
-	cpus := kernel_cpu_api.GetCPUList(false)
+	cpus := kernel_api.GetCPUList(false)
 
 	if slices.IsEmpty(cpus) {
 		for {
-			cpus = kernel_cpu_api.GetCPUList(false)
+			cpus = kernel_api.GetCPUList(false)
 
 			if len(cpus) != 0 {
 				break
 			}
-			<-AvailableCpu
+			<-globals.AvailableCpu // Aca deberia buscar donde guardo las nuevas CPUs, y mandar la señal.
 		}
 	}
 
 	cpu := cpus[0]
 
-	cpu.SendToWork(kernel_cpu_api.CPURequest{
+	request := globals.CPURequest{
 		PID: process.PCB.GetPID(),
 		PC:  process.PCB.GetPC(),
-	})
+	}
+
+	dispatchResp, err := kernel_api.SendToWork(cpu, request)
+
+	<-globals.PCBReceived // TODO:
+
+	if err != nil {
+		logger.Instance.Error("Error al enviar el proceso a la CPU", "error", err)
+		return
+	}
+
+	switch dispatchResp.Motivo {
+	case "Interrupt":
+		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue interrumpido por la CPU", dispatchResp.PID))
+		return
+	case "Exit":
+		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", dispatchResp.PID))
+		return
+	default:
+		logger.Instance.Error("Motivo desconocido", "Motivo", dispatchResp.Motivo)
+		return
+	}
+
 }
