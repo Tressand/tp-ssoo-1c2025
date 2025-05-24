@@ -80,7 +80,7 @@ func main() {
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
 	wg.Add(1)
-	go createKernelConnection("CPU_"+identificadorStr, 3, 5, &wg, ctx)
+	go createKernelConnection(identificadorStr, &wg, ctx)
 
 	//crear menu
 	mainMenu := menu.Create()
@@ -322,6 +322,9 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: endpoint,
+		Queries: map[string]string{
+			"id": fmt.Sprint(config.Identificador),
+		},
 	})
 
 	jsonData, err := json.Marshal(syscallInst)
@@ -402,33 +405,21 @@ func dumpMemory() {
 
 //#endregion
 
-//#region kernel Connection
-
+// #region kernel Connection
 func createKernelConnection(
 	name string,
-	retryAmount int,
-	retrySeconds int,
-	wg *sync.WaitGroup,
+	wg *sync.WaitGroup, // AHORA HACE CONEXIÓN UNICA YA NO REINTENTA.
 	ctx context.Context) {
 	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			retry, err := notifyKernel(name, ctx)
-			if !retry {
-				return
-			}
-			if err != nil {
-				if retryAmount <= 0 {
-					return
-				}
-				time.Sleep(time.Duration(retrySeconds) * time.Second)
-				retryAmount--
-			}
-		}
+
+	// Intenta conectar una sola vez
+	_, err := notifyKernel(name, ctx)
+	if err != nil {
+		slog.Error("Error al notificar al Kernel", "error", err)
+		return
 	}
+
+	slog.Info("Notificación al Kernel completada exitosamente")
 }
 
 func notifyKernel(id string, ctx context.Context) (bool, error) {

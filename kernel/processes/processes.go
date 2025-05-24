@@ -1,6 +1,7 @@
 package processes
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,6 +26,18 @@ func CreateProcess(path string, size int) {
 	QueueToLTS(newProcess)
 
 	logger.RequiredLog(true, newProcess.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": newProcess.PCB.GetState().String(), "Tamaño": fmt.Sprintf("%d KB", size)})
+}
+
+// TODO :
+func SearchProcessInExec(id string) (*globals.Process, error) {
+	for _, processExec := range globals.ProcessExec {
+		if processExec.Cpu.ID == id {
+			fmt.Printf("Proceso de pid %v encontrado", processExec.Process.PCB.GetPID())
+			return &processExec.Process, nil
+		}
+	}
+
+	return nil, errors.New("proceso no encontrado")
 }
 
 func TerminateProcess(process *globals.Process) {

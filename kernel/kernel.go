@@ -10,11 +10,11 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-
 	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
-	processes "ssoo-kernel/processes"
+	"ssoo-kernel/processes"
+	process "ssoo-kernel/processes"
 	scheduler "ssoo-kernel/scheduler"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
@@ -67,14 +67,14 @@ func main() {
 			return
 		}
 
-		processes.CreateProcess(pathFile, processSize)
+		process.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
-		processes.CreateProcess("helloworld", 4096)
+		process.CreateProcess("helloworld", 300)
 	}
 
 	// #endregion
-
+	go scheduler.STS()
 	globals.SchedulerStatus = "STOP" // El planificador debe estar frenado por defecto
 
 	// #region CREATE SERVER
@@ -85,6 +85,9 @@ func main() {
 	// Closing this context with cancelctx() will trigger a select statement on io connections (see below)
 	// Serving as a closer for all established connections.
 	ctx, cancelctx := context.WithCancel(context.Background())
+
+	// Add routes to mux
+	mux.Handle("/test", test())
 
 	// Pass the globalCloser to handlers that will block.
 	mux.Handle("/cpu-notify", kernel_api.ReceiveCPU(ctx))
@@ -109,9 +112,9 @@ func main() {
 			logger.Instance.Info("Scheduler initialized")
 		}
 	})
-	moduleMenu.Add("[TEST] Create processes", func() {
+	moduleMenu.Add("[TEST] Create process", func() {
 		size := 100 + (rand.Intn(900))
-		processes.CreateProcess("prueba", size)
+		process.CreateProcess("prueba", size)
 	})
 	moduleMenu.Add("[TEST] Retry request", func() {
 		if globals.SchedulerStatus == "START" {
@@ -119,12 +122,9 @@ func main() {
 		}
 	})
 	moduleMenu.Add("Send IO Signal", sendToIO)
-	moduleMenu.Add("Send CPU Interrupt", func() {
-		fmt.Println("Sending CPU interrupt...")
-	})
-	moduleMenu.Add("Ask CPU to work", func() {
-		fmt.Println("Asking CPU to work...")
-	})
+	/*moduleMenu.Add("Send CPU Interrupt", sendInterrupt)
+	moduleMenu.Add("Ask CPU to work", askCPU)*/
+
 	moduleMenu.Add("Store value on Memory", func() {
 		fmt.Print("Key: ")
 		var key string
@@ -165,6 +165,35 @@ func main() {
 
 	// #endregion
 }
+
+// #endregion
+
+// #region SECTION: TEST ENDPOINT
+
+func test() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Instance.Info("Test endpoint hit")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("Test recieved."))
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// #endregion
+
+// #region SECTION: HANDLE CPU CONNECTIONS
+// TODO: Lo pase a otro archivo temporalmente
+type CPUConnection struct {
+	id      string
+	ip      string
+	port    int
+	handler chan int
+	working bool
+}
+
+var connectedCPUs []CPUConnection
+
+var avCPUmu sync.Mutex
 
 // #endregion
 
@@ -290,18 +319,26 @@ func sendIORequest(pid uint, timer int, io *IOConnection) {
 
 func receiveSyscall() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var instruction codeutils.Instruction
-
-		// Leer el cuerpo del request
-		err := json.NewDecoder(r.Body).Decode(&instruction)
-		if err != nil {
-			http.Error(w, "Error al parsear JSON de instrucción: "+err.Error(), http.StatusBadRequest)
+		// 1. Obtener el PID del query parameter
+		cpuID := r.URL.Query().Get("id")
+		if cpuID == "" {
+			http.Error(w, "Parámetro 'id' requerido", http.StatusBadRequest)
 			return
 		}
 
+		// 2. Leer la instrucción del body (en lugar de URL-encoded query param)
+		var instruction codeutils.Instruction
+		if err := json.NewDecoder(r.Body).Decode(&instruction); err != nil {
+			http.Error(w, "Error al parsear JSON de instrucción: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		// 3. Procesar la syscall con el PID disponible
 		opcode := codeutils.Opcode(instruction.Opcode)
 
 		switch opcode {
+
 		case codeutils.IO:
 			if len(instruction.Args) != 2 {
 				http.Error(w, "IO requiere 2 argumentos", http.StatusBadRequest)
@@ -338,6 +375,14 @@ func receiveSyscall() http.HandlerFunc {
 		case codeutils.DUMP_MEMORY:
 
 		case codeutils.EXIT:
+
+			proceso, err := processes.SearchProcessInExec(cpuID)
+			fmt.Printf("la cpu es %v", cpuID)
+			if err != nil {
+				fmt.Print("No se pudo encontrar la CPU")
+				return
+			}
+			processes.TerminateProcess(proceso)
 
 		default:
 			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)

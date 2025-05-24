@@ -93,15 +93,13 @@ func queueToSTS(process *globals.Process) {
 	process.PCB.SetState(pcb.READY)
 	actualState := process.PCB.GetState()
 	globals.STS = append(globals.STS, *process)
-	/* TODO: Lo dejo comentado hasta tener Exit o Interrupt implementado
+	//TODO:Lo dejo comentado hasta tener Exit o Interrupt implementado
 	if len(globals.STS) == 1 {
 		globals.STSEmpty <- struct{}{}
 	}
-	*/
+
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 }
-
-
 
 func STS() { // Esto hay que tirarlo con una go routine antes de LTS
 	for {
@@ -159,14 +157,17 @@ func SendToExecute(process *globals.Process) {
 
 	cpu := cpus[0]
 
+	globals.ProcessExec = append(globals.ProcessExec, globals.CurrentProcess{
+		Cpu:     cpu,
+		Process: *process,
+	})
+
 	request := globals.CPURequest{
 		PID: process.PCB.GetPID(),
 		PC:  process.PCB.GetPC(),
 	}
 
 	dispatchResp, err := kernel_api.SendToWork(cpu, request)
-
-	<-globals.PCBReceived // TODO:
 
 	if err != nil {
 		logger.Instance.Error("Error al enviar el proceso a la CPU", "error", err)

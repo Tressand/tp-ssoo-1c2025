@@ -7,24 +7,31 @@ import (
 )
 
 var (
-	SchedulerStatus  string
-	NextPID          uint = 0
-	PIDMutex         sync.Mutex
-	LTS              []Process = make([]Process, 0)
-	LTSMutex         sync.Mutex
-	STS              []Process = make([]Process, 0)
-	STSMutex         sync.Mutex
-	ReadySusp        []Process = make([]Process, 0) // Temporal
-	LTSEmpty                   = make(chan struct{})
-	STSEmpty                   = make(chan struct{})
-	AvailableCpu               = make(chan struct{}, 1)
-	PCBReceived                = make(chan struct{}, 1)
-	AvailableCPUs    []CPUConnection
+	SchedulerStatus string
+	NextPID         uint = 0
+	PIDMutex        sync.Mutex
+	ProcessExec     []CurrentProcess = make([]CurrentProcess, 0)
+	LTS             []Process        = make([]Process, 0)
+	LTSMutex        sync.Mutex
+	STS             []Process = make([]Process, 0)
+	STSMutex        sync.Mutex
+	ReadySusp       []Process = make([]Process, 0) // Temporal
+	LTSEmpty                  = make(chan struct{})
+	STSEmpty                  = make(chan struct{})
+	AvailableCpu              = make(chan struct{}, 1)
+	PCBReceived               = make(chan struct{}, 1)
+	AvailableCPUs   []CPUConnection
+
 	CpuListMutex     sync.Mutex
 	RetryProcessCh   = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
 	WaitingForMemory = make(chan struct{}, 1)
 	WaitingForCPU    = make(chan struct{}, 1)
 )
+
+type CurrentProcess struct {
+	Cpu     CPUConnection
+	Process Process
+}
 
 type CPUConnection struct {
 	ID      string
