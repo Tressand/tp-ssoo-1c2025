@@ -23,6 +23,7 @@ import (
 	"ssoo-utils/parsers"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // #endregion
@@ -229,6 +230,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		thisConnection := IOConnection{
 			name:    name,
 			handler: connHandler,
+			disp:    true,
 		}
 
 		// Note: Mutex is to prevent race condition on the availableIOs' list
@@ -309,7 +311,7 @@ func sendToIO() {
 		timer = conversion
 		break
 	}
-
+	target.disp = false // esto habria q modificarlo, cosa de que cuando acepte la solicitud recien se ponga en false.
 	// Send the timer through the targets channel, this will trigger the recieveIO()'s response.
 	sendIORequest(0, timer, target)
 }
@@ -359,40 +361,61 @@ func receiveSyscall() http.HandlerFunc {
 			fmt.Printf("Recibida syscall IO: dispositivo=%s, tiempo=%d\n", device, timeMs)
 
 			deviceFound := false
-
-			// Buscar el dispositivo IO solicitado
-			for i := range availableIOs {
-				if availableIOs[i].name == device {
+			/* Ahora mismo, si esta ocupado, sigue con la ejecución, pero se bloquea si la envia.*/
+			var selectedIO *IOConnection
+			avIOmu.Lock()
+			for i, io := range availableIOs {
+				if io.name == device && io.disp {
 					deviceFound = true
-					if availableIOs[i].disp { // Asumiendo que disp indica disponibilidad
-						// Bloquear el proceso antes de enviar la solicitud
-						proceso.PCB.SetState(4) // BLOCKED
-						// Enviar solicitud al dispositivo
-						sendIORequest(proceso.PCB.GetPID(), timeMs, &availableIOs[i])
-					}
-
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte("Operación IO iniciada"))
-					return
+					selectedIO = &availableIOs[i]
+					break
 				}
 			}
+			avIOmu.Unlock()
 
 			if !deviceFound {
-				// Dispositivo no existe, terminar proceso
+
 				process.TerminateProcess(proceso)
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Dispositivo no existe - proceso terminado"))
 				return
 			}
+			if selectedIO == nil {
+				http.Error(w, "IO device no disponible o no encontrado", http.StatusServiceUnavailable)
+				return
+			}
 
-			// Si llegamos aquí, el dispositivo existe pero está ocupado
-			proceso.PCB.SetState(4) // BLOCKED
+			if !selectedIO.disp {
+				proceso.PCB.SetState(4)
+				globals.MTS = append(globals.MTS, *proceso)
 
-			// Encolar proceso (asegurando manejo de concurrencia si es necesario)
-			globals.QueueBlocked = append(globals.QueueBlocked, *proceso)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
+			}
+			// Marcar como no disponible y enviar la solicitud
+			selectedIO.disp = false
+
+			go func(io *IOConnection) {
+
+				sendIORequest(proceso.PCB.GetPID(), timeMs, selectedIO)
+
+				// simula el tiempo de señal de io, asi vuelve a ready
+				time.Sleep(time.Duration(timeMs) * time.Millisecond)
+
+				// Liberar dispositivo
+				avIOmu.Lock()
+				io.disp = true
+				avIOmu.Unlock()
+
+				// Reactivar proceso
+				proceso.PCB.SetState(1) // READY
+				globals.STS = append(globals.LTS, *proceso)
+			}(selectedIO)
 
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
+			w.Write([]byte("Operación IO iniciada (en background)"))
+			return
+
 			//
 		case codeutils.INIT_PROC:
 			if len(instruction.Args) != 2 {

@@ -15,6 +15,8 @@ var (
 	LTSMutex        sync.Mutex
 	STS             []Process = make([]Process, 0)
 	STSMutex        sync.Mutex
+	MTS             []Process = make([]Process, 0)
+	MTSMutex        sync.Mutex
 	ReadySusp       []Process = make([]Process, 0) // Temporal
 	QueueBlocked    []Process = make([]Process, 0) // Temporal
 	LTSEmpty                  = make(chan struct{})
