@@ -16,6 +16,7 @@ var (
 	STS             []Process = make([]Process, 0)
 	STSMutex        sync.Mutex
 	ReadySusp       []Process = make([]Process, 0) // Temporal
+	QueueBlocked    []Process = make([]Process, 0) // Temporal
 	LTSEmpty                  = make(chan struct{})
 	STSEmpty                  = make(chan struct{})
 	AvailableCpu              = make(chan struct{}, 1)

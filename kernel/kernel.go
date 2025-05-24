@@ -202,6 +202,7 @@ var avCPUmu sync.Mutex
 type IOConnection struct {
 	name    string
 	handler chan IORequest
+	disp    bool
 }
 
 type IORequest struct {
@@ -325,7 +326,12 @@ func receiveSyscall() http.HandlerFunc {
 			http.Error(w, "Parámetro 'id' requerido", http.StatusBadRequest)
 			return
 		}
+		proceso, err := processes.SearchProcessInExec(cpuID)
 
+		if err != nil {
+			fmt.Print("No se pudo encontrar la CPU")
+			return
+		}
 		// 2. Leer la instrucción del body (en lugar de URL-encoded query param)
 		var instruction codeutils.Instruction
 		if err := json.NewDecoder(r.Body).Decode(&instruction); err != nil {
@@ -350,14 +356,43 @@ func receiveSyscall() http.HandlerFunc {
 				http.Error(w, "Tiempo invalido", http.StatusBadRequest)
 				return
 			}
-			fmt.Printf("Recibida syscall IO: dispositivo=%s, tiempo=%d", device, timeMs)
+			fmt.Printf("Recibida syscall IO: dispositivo=%s, tiempo=%d\n", device, timeMs)
 
-			for _, io := range availableIOs {
-				if io.name == device {
-					//logica
-					break
+			deviceFound := false
+
+			// Buscar el dispositivo IO solicitado
+			for i := range availableIOs {
+				if availableIOs[i].name == device {
+					deviceFound = true
+					if availableIOs[i].disp { // Asumiendo que disp indica disponibilidad
+						// Bloquear el proceso antes de enviar la solicitud
+						proceso.PCB.SetState(4) // BLOCKED
+						// Enviar solicitud al dispositivo
+						sendIORequest(proceso.PCB.GetPID(), timeMs, &availableIOs[i])
+					}
+
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("Operación IO iniciada"))
+					return
 				}
 			}
+
+			if !deviceFound {
+				// Dispositivo no existe, terminar proceso
+				process.TerminateProcess(proceso)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("Dispositivo no existe - proceso terminado"))
+				return
+			}
+
+			// Si llegamos aquí, el dispositivo existe pero está ocupado
+			proceso.PCB.SetState(4) // BLOCKED
+
+			// Encolar proceso (asegurando manejo de concurrencia si es necesario)
+			globals.QueueBlocked = append(globals.QueueBlocked, *proceso)
+
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
 			//
 		case codeutils.INIT_PROC:
 			if len(instruction.Args) != 2 {
@@ -376,12 +411,6 @@ func receiveSyscall() http.HandlerFunc {
 
 		case codeutils.EXIT:
 
-			proceso, err := processes.SearchProcessInExec(cpuID)
-			fmt.Printf("la cpu es %v", cpuID)
-			if err != nil {
-				fmt.Print("No se pudo encontrar la CPU")
-				return
-			}
 			processes.TerminateProcess(proceso)
 
 		default:
@@ -392,7 +421,6 @@ func receiveSyscall() http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Syscall procesada"))
 	}
-
 }
 
 // #endregion
