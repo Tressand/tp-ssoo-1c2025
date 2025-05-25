@@ -1,18 +1,13 @@
 package main
 
 import (
-	//"bytes"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-
-	//"log"
 	"log/slog"
 	"net/http"
-
-	//"net/url"
 	"os"
 	"ssoo-cpu/config"
 	"ssoo-utils/codeutils"
@@ -22,8 +17,6 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
-
-	//"strings"
 	"sync"
 	"time"
 )
@@ -80,11 +73,10 @@ func main() {
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
 	wg.Add(1)
-	go createKernelConnection(identificadorStr, &wg, ctx)
+	go createKernelConnection(identificadorStr, &wg)
 
 	//crear menu
 	mainMenu := menu.Create()
-	mainMenu.Add("Store value on Memory", func() { sendValueToMemory(getInput()) })
 	mainMenu.Add("Send Pid and Pc to memory", func() { sendPidPcToMemory() })
 	mainMenu.Add("Close Server and Exit Program", func() {
 		cancelctx()
@@ -108,7 +100,7 @@ func ciclo() {
 		sendPidPcToMemory()
 
 		//loggearla
-		slog.Info("Instruccion:", fmt.Sprint(instruction))
+		slog.Info("Instruccion recibida", "instruccion", fmt.Sprint(instruction))
 		//decode
 		asign()
 
@@ -130,32 +122,6 @@ func ciclo() {
 		//pequeña pausa para ver mejor el tema de los logs
 		time.Sleep(1 * time.Second)
 	}
-}
-
-func sendValueToMemory(key string, value string) {
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "storage",
-		Queries: map[string]string{
-			"key":   key,
-			"value": value,
-		},
-	})
-
-	fmt.Printf("Connecting to %s\n", url)
-	resp, err := http.Post(url, http.MethodPost, http.NoBody)
-	if err != nil {
-		slog.Error("POST to Memory failed", "Error", err)
-	}
-	resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("POST to Memory status wrong", "status", resp.StatusCode)
-		return
-	}
-
-	slog.Info("POST to Memory succeded")
 }
 
 func sendPidPcToMemory() {
@@ -203,11 +169,13 @@ func exec() {
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		writeMemory()
+		slog.Info("WRITE Instruction not implemented.")
+		//writeMemory()
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		readMemory()
+		slog.Info("READ Instruction not implemented.")
+		//readMemory()
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
@@ -226,7 +194,8 @@ func exec() {
 
 	case "DUMP_MEMORY":
 		//vacia la memoria
-		dumpMemory()
+		slog.Info("DUMP_MEMORY Instruction not implemented.")
+		//dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
@@ -238,84 +207,8 @@ func exec() {
 	config.Pcb.PC++
 }
 
-func readMemory() {
-
-	//TODO HALLAR LA DIRECCION FISICA A PARTIR DE LA DIRECCION LOGICA
-
-	var dir_fisica = 10210
-
-	//parte HTTP
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "process",
-		Queries: map[string]string{
-			"direction": fmt.Sprint(dir_fisica),
-			"size":      fmt.Sprint(config.Exec_values.Arg1),
-		},
-	})
-
-	resp, err := http.Get(url)
-
-	if err != nil {
-		slog.Error("Error al solicitar el dato de memoria. ", "error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error", "respuesta", resp.Status)
-		return
-	}
-
-	var result struct {
-		Contenido string `json:"contenido"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		slog.Error("error al decodificar respuesta de memoria: %w", err)
-		return
-	}
-
-	fmt.Printf("El dato en la direccion es: %s ", result.Contenido)
-	slog.Info("El dato en la direccion es ", "dato", result.Contenido)
-}
-
-func writeMemory() {
-
-	//TODO HALLAR LA DIRECCION FISICA A PARTIR DE LA DIRECCION LOGICA
-
-	var dir_fisica = 10210
-
-	//parte HTTP
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "process",
-		Queries: map[string]string{
-			"direction": fmt.Sprint(dir_fisica),
-			"size":      fmt.Sprint(config.Exec_values.Arg1),
-		},
-	})
-
-	resp, err := http.Post(url, http.MethodPost, http.NoBody)
-
-	if err != nil {
-		slog.Error("Error al solicitar el dato de memoria. ", "error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error ", "error", resp.Status)
-		return
-	}
-
-	slog.Info("Se ha guardado el contenido exitosamente.")
-}
-
 // #endregion
+
 // #region Syscalls
 func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, error) {
 	url := httputils.BuildUrl(httputils.URLData{
@@ -387,33 +280,17 @@ func initProcess() {
 	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
 }
 
-func dumpMemory() {
-	resp, err := sendSyscall("syscall", instruction)
-	if err != nil {
-		slog.Error("Error al solicitar el vaciado de la memoria.", "error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error", "status", resp.StatusCode)
-		return
-	}
-
-	slog.Info("Se ha borrado la memoria.")
-}
-
 //#endregion
 
 // #region kernel Connection
 func createKernelConnection(
 	name string,
 	wg *sync.WaitGroup, // AHORA HACE CONEXIÓN UNICA YA NO REINTENTA.
-	ctx context.Context) {
+) {
 	defer wg.Done()
 
 	// Intenta conectar una sola vez
-	_, err := notifyKernel(name, ctx)
+	err := notifyKernel(name)
 	if err != nil {
 		slog.Error("Error al notificar al Kernel", "error", err)
 		return
@@ -422,7 +299,7 @@ func createKernelConnection(
 	slog.Info("Notificación al Kernel completada exitosamente")
 }
 
-func notifyKernel(id string, ctx context.Context) (bool, error) {
+func notifyKernel(id string) error {
 	log := slog.With("name", id)
 	log.Info("Notificando a Kernel...")
 
@@ -442,37 +319,19 @@ func notifyKernel(id string, ctx context.Context) (bool, error) {
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
 		log.Error("Error making POST request", "error", err)
-		return true, err
+		return err
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusTeapot {
 			log.Info("Server asked for shutdown.")
-			return false, nil
+			return nil
 		}
 		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
-		return true, fmt.Errorf("response error: %w", err)
+		return fmt.Errorf("response error: %w", err)
 	}
 
-	data, _ := io.ReadAll(resp.Body)
-	duration, _ := strconv.Atoi(string(data))
-	log.Info("Recibió respuesta, durmiendo...", "timer", duration)
-
-	sleepDone := make(chan struct{})
-	go func() {
-		time.Sleep(time.Duration(duration) * time.Millisecond)
-		sleepDone <- struct{}{}
-		fmt.Println("sleep goroutine closed")
-	}()
-	defer close(sleepDone)
-
-	select {
-	case <-sleepDone:
-		return true, nil
-	case <-ctx.Done():
-		return false, nil
-	}
+	return nil
 }
 
 func receivePIDPC(ctx context.Context) http.HandlerFunc {
@@ -485,12 +344,12 @@ func receivePIDPC(ctx context.Context) http.HandlerFunc {
 
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
-			logger.Instance.Error("Error decodificando JSON: %v", err)
+			slog.Error("Error decodificando JSON: %v", "error", err)
 			http.Error(w, "JSON inválido", http.StatusBadRequest)
 			return
 		}
 
-		slog.Info("Recibido desde Kernel: PID: ", req.PID, " PC: ", req.PC)
+		slog.Info("Recibido desde Kernel", "PID", req.PID, " PC", req.PC)
 
 		// Guardar la info en config global
 		config.Pcb.PID = req.PID
@@ -522,7 +381,6 @@ func receivePIDPC(ctx context.Context) http.HandlerFunc {
 
 func interrupt() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			logger.Instance.Error("Error reading request body", "error", err)
@@ -531,8 +389,7 @@ func interrupt() http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		pidStr := string(data)
-		pidRecibido, err := strconv.Atoi(pidStr)
+		pidRecibido, err := strconv.Atoi(string(data))
 
 		if err != nil {
 			http.Error(w, "PID invalido", http.StatusBadRequest)
@@ -550,17 +407,6 @@ func interrupt() http.HandlerFunc {
 }
 
 //#endregion
-
-func getInput() (string, string) {
-	fmt.Print("Key: ")
-	var key string
-	var value string
-	fmt.Scanln(&key)
-	fmt.Print("Value: ")
-	fmt.Scanln(&value)
-
-	return key, value
-}
 
 //#region decode
 

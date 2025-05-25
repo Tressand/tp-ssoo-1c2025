@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	kernel_api "ssoo-kernel/api"
@@ -74,34 +75,34 @@ func LTS() {
 
 func InitProcess(process *globals.Process) {
 	for {
-		logger.Instance.Info(fmt.Sprintf("Se intenta inicializar el proceso con el pid %d en Memoria", process.PCB.GetPID()))
-		err := processes.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.GetSize())
+		slog.Info("Intentando inicializar proceso", "name", process.PCB.GetPID())
+		err := processes.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.Size)
 
 		if err == nil {
 			queueToSTS(process)
 			return
 		}
-		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d entra en espera. Memoria no pudo inicializarlo", process.PCB.GetPID()))
+		slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "name", process.PCB.GetPID())
 		<-globals.RetryProcessCh // Este espera ser desbloqueado desde Finalización de Proceso
 	}
 }
 
 func queueToSTS(process *globals.Process) {
-	globals.STSMutex.Lock()
-	defer globals.STSMutex.Unlock()
 	lastState := process.PCB.GetState()
 	process.PCB.SetState(pcb.READY)
 	actualState := process.PCB.GetState()
+
+	globals.STSMutex.Lock()
 	globals.STS = append(globals.STS, *process)
-	//TODO:Lo dejo comentado hasta tener Exit o Interrupt implementado
 	if len(globals.STS) == 1 {
 		globals.STSEmpty <- struct{}{}
 	}
+	globals.STSMutex.Unlock()
 
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 }
 
-func STS() { // Esto hay que tirarlo con una go routine antes de LTS
+func STS() {
 	for {
 		switch config.Values.SchedulerAlgorithm {
 		case "FIFO":
