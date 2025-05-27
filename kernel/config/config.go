@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"path/filepath"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 )
@@ -12,9 +13,10 @@ type KernelConfig struct {
 	PortKernel            int        `json:"port_kernel"`
 	SchedulerAlgorithm    string     `json:"scheduler_algorithm"`
 	ReadyIngressAlgorithm string     `json:"ready_ingress_algorithm"`
-	Alpha                 string     `json:"alpha"`
+	Alpha                 float64    `json:"alpha"`
 	SuspensionTime        int        `json:"suspension_time"`
 	LogLevel              slog.Level `json:"log_level"`
+	CodeFolder            string     `json:"code_folder"`
 }
 
 var Values KernelConfig
@@ -34,5 +36,11 @@ func Load() {
 
 	if Values.IpMemory == "self" {
 		Values.IpMemory = httputils.GetOutboundIP()
+	}
+
+	if configManager.IsCompiledEnv() {
+		Values.CodeFolder, _ = filepath.Abs(configManager.GetDefaultExePath() + "/code")
+	} else {
+		Values.CodeFolder, _ = filepath.Abs(configManager.GetDefaultExePath() + "/../code")
 	}
 }

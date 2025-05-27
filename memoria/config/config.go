@@ -2,7 +2,6 @@ package config
 
 import (
 	"log/slog"
-	"path/filepath"
 	"ssoo-memoria/storage"
 	"ssoo-utils/configManager"
 )
@@ -18,7 +17,6 @@ type MemoryConfig struct {
 	SwapDelay      int        `json:"swap_delay"`
 	DumpPath       string     `json:"dump_path"`
 	LogLevel       slog.Level `json:"log_level"`
-	CodeFolder     string     `json:"code_folder"`
 }
 
 var Values MemoryConfig
@@ -37,11 +35,4 @@ func Load() {
 	}
 
 	storage.InitializeUserMemory(Values.MemorySize)
-
-	if configManager.IsCompiledEnv() {
-		Values.CodeFolder, _ = filepath.Abs(configManager.GetDefaultExePath() + "/code")
-	} else {
-		Values.CodeFolder, _ = filepath.Abs(configManager.GetDefaultExePath() + "/../code")
-	}
-
 }

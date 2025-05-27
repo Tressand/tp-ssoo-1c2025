@@ -1,16 +1,13 @@
 package main
 
 import (
-	//"bytes"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-
-	//"log"
 	"log/slog"
 	"net/http"
-	//"net/url"
 	"os"
 	"ssoo-cpu/config"
 	"ssoo-utils/codeutils"
@@ -20,11 +17,12 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
-	//"strings"
 	"sync"
 	"time"
 )
+
 type Instruction = codeutils.Instruction
+
 var instruction Instruction
 
 func main() {
@@ -59,6 +57,9 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca CPU")
 
+	//iniciar tlb
+	//initTLB(config.Values.TLBEntries, config.Values.TLBReplacement)
+
 	//iniciar server
 	var wg sync.WaitGroup
 	ctx, cancelctx := context.WithCancel(context.Background())
@@ -72,14 +73,11 @@ func main() {
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
 	wg.Add(1)
-	go createKernelConnection("CPU_"+identificadorStr, 3, 5, &wg, ctx)
-	
-
+	go createKernelConnection(identificadorStr, &wg)
 
 	//crear menu
 	mainMenu := menu.Create()
-	mainMenu.Add("Store value on Memory", func() { sendValueToMemory(getInput()) })
-	mainMenu.Add("Send Pid and Pc to memory", func() {sendPidPcToMemory()})
+	mainMenu.Add("Send Pid and Pc to memory", func() { sendPidPcToMemory() })
 	mainMenu.Add("Close Server and Exit Program", func() {
 		cancelctx()
 		shutdownSignal <- struct{}{}
@@ -87,70 +85,43 @@ func main() {
 		close(shutdownSignal)
 		os.Exit(0)
 	})
-	mainMenu.Add("Start cicle.",func(){ciclo()})
+	mainMenu.Add("Start cicle.", func() { ciclo() })
 	for {
 		mainMenu.Activate()
 	}
 }
 
-func ciclo(){
-	
+func ciclo() {
 
-	for{
-		slog.Info("Inicio de ciclo de instrucción","PID",config.Pcb.PID, "PC", config.Pcb.PC)
+	for {
+		slog.Info("Inicio de ciclo de instrucción", "PID", config.Pcb.PID, "PC", config.Pcb.PC)
 
 		//obtengo la intruccion (fetch)
 		sendPidPcToMemory()
 
 		//loggearla
-		slog.Info("Instruccion:", fmt.Sprint(instruction))
+		slog.Info("Instruccion recibida", "instruccion", fmt.Sprint(instruction))
 		//decode
 		asign()
 
 		//execute
 		exec()
 
-		select{
-			case <-config.InterruptChan:
-				logger.Instance.Info("Interrupción recibida","PID", config.Pcb.PID)
-				config.CicloDone <- "Interrupt"
-				return
-			case <-config.ExitChan:
-				logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
-				config.CicloDone <- "Exit"
-				return
-			default:
+		select {
+		case <-config.InterruptChan:
+			logger.Instance.Info("Interrupción recibida", "PID", config.Pcb.PID)
+			config.CicloDone <- "Interrupt"
+			return
+		case <-config.ExitChan:
+			logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
+			config.CicloDone <- "Exit"
+			return
+		default:
 		}
 
 		//pequeña pausa para ver mejor el tema de los logs
 		time.Sleep(1 * time.Second)
 	}
-}
-
-func sendValueToMemory(key string, value string) {
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "storage",
-		Queries: map[string]string{
-			"key":   key,
-			"value": value,
-		},
-	})
-
-	fmt.Printf("Connecting to %s\n", url)
-	resp, err := http.Post(url, http.MethodPost, http.NoBody)
-	if err != nil {
-		slog.Error("POST to Memory failed", "Error", err)
-	}
-	resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("POST to Memory status wrong", "status", resp.StatusCode)
-		return
-	}
-
-	slog.Info("POST to Memory succeded")
 }
 
 func sendPidPcToMemory() {
@@ -178,6 +149,7 @@ func sendPidPcToMemory() {
 
 	// Deserializa la respuesta JSON a un objeto Instruction
 	err = json.NewDecoder(resp.Body).Decode(&instruction)
+	fmt.Printf("%v", instruction)
 	if err != nil {
 		slog.Error("error al deserializar la respuesta", "error", err)
 	}
@@ -187,8 +159,9 @@ func sendPidPcToMemory() {
 	//log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
 }
 
-//#region Execute
+// #region Execute
 func exec() {
+
 	switch config.Instruccion {
 	case "NOOP":
 		time.Sleep(1 * time.Millisecond)
@@ -196,22 +169,24 @@ func exec() {
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		writeMemory()
+		slog.Info("WRITE Instruction not implemented.")
+		//writeMemory()
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		readMemory()
+		slog.Info("READ Instruction not implemented.")
+		//readMemory()
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
 		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
 		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
 		return
-	
+
 	//SYSCALLS
 	case "IO":
 		//habilita la IO a traves de kernel
-		sendIO();
+		sendIO()
 
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
@@ -219,7 +194,8 @@ func exec() {
 
 	case "DUMP_MEMORY":
 		//vacia la memoria
-		dumpMemory()
+		slog.Info("DUMP_MEMORY Instruction not implemented.")
+		//dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
@@ -231,231 +207,95 @@ func exec() {
 	config.Pcb.PC++
 }
 
+// #endregion
 
-
-func readMemory(){
-
-	//TODO HALLAR LA DIRECCION FISICA A PARTIR DE LA DIRECCION LOGICA
-
-	var dir_fisica = 10210
-
-	//parte HTTP
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "process",
-		Queries: map[string]string{
-			"direction": fmt.Sprint(dir_fisica),
-			"size": fmt.Sprint(config.Exec_values.Arg1),
-		},
-	})
-
-	resp, err := http.Get(url)
-
-	if err != nil {
-		slog.Error("Error al solicitar el dato de memoria. ", "error",err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error","respuesta", resp.Status)
-		return
-	}
-
-	var result struct {
-		Contenido string `json:"contenido"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		slog.Error("error al decodificar respuesta de memoria: %w", err)
-		return
-	}
-
-	fmt.Printf("El dato en la direccion es: %s ",result.Contenido)
-	slog.Info("El dato en la direccion es ","dato",result.Contenido)
-}
-
-func writeMemory(){
-
-	//TODO HALLAR LA DIRECCION FISICA A PARTIR DE LA DIRECCION LOGICA
-
-	var dir_fisica = 10210
-
-	//parte HTTP
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "process",
-		Queries: map[string]string{
-			"direction": fmt.Sprint(dir_fisica),
-			"size": fmt.Sprint(config.Exec_values.Arg1),
-		},
-	})
-
-	resp, err := http.Post(url,http.MethodPost,http.NoBody)
-
-	if err != nil {
-		slog.Error("Error al solicitar el dato de memoria. ", "error",err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error ","error", resp.Status)
-		return
-	}
-
-	slog.Info("Se ha guardado el contenido exitosamente.")
-}
-
-//#endregion
-//#region Syscalls
-
-func sendIO(){
+// #region Syscalls
+func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, error) {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
-		Endpoint: "syscall",
+		Endpoint: endpoint,
 		Queries: map[string]string{
-			"instruccion": fmt.Sprint(instruction),
+			"id": fmt.Sprint(config.Identificador),
 		},
 	})
 
 	resp, err := http.Post(url,http.MethodPost,http.NoBody)
 	if err != nil {
-		slog.Error("Error al crear la solicitud IO", "error", err)
-		return
+		return nil, fmt.Errorf("error al serializar instruccion: %w", err)
 	}
 
 
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("Kernel respondió con error al recibir IO. ", "status", resp.StatusCode)
-		return
-	}
-
-	slog.Info("Kernel recibió la orden de IO", "pid", config.Pcb.PID)
+	return resp, nil
 }
 
-func DeleteProcess(){
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpKernel,
-		Port:     config.Values.PortKernel,
-		Endpoint: "syscall",
-		Queries: map[string]string{
-			"instruccion": fmt.Sprint(instruction),
-		},
-	})
-
-	resp, err := http.Post(url,http.MethodPost,http.NoBody)
-
+func sendIO() {
+	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
-		slog.Error("Fallo la solicitud para eliminar proceso. ", "error", err)
+		slog.Error("Error en syscall IO", "error", err)
 		return
 	}
+	defer resp.Body.Close()
+	slog.Info("Syscall IO enviada correctamente")
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
+		return
+	}
+}
 
+func DeleteProcess() {
+	resp, err := sendSyscall("syscall", instruction)
+	if err != nil {
+		slog.Error("Fallo la solicitud para eliminar proceso.", "error", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("Kernel respondió con error al eliminar el proceso. ", "status", resp.StatusCode)
+		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
 		return
 	}
 
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
-	config.ExitChan <- "" //aviso que hay que sacar este proceso
+	config.ExitChan <- "" // aviso que hay que sacar este proceso
 }
 
-func initProcess(){
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpKernel,
-		Port:     config.Values.PortKernel,
-		Endpoint: "syscall",
-		Queries: map[string]string{
-			"instruccion": fmt.Sprint(instruction),
-		},
-	})
-
-	resp,err := http.Post(url,http.MethodPost,http.NoBody)
-	
-	if err != nil{
-		slog.Error("Fallo la solicitud para crear el proceso. ","error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK{
-
-		slog.Error("Kernel respondió con error al crear el proceso. ","status",resp.StatusCode)
-		return
-	}
-
-	slog.Info("Kernel recibió la orden de init Process. ","pid",config.Pcb.PID)
-}
-
-func dumpMemory(){
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpKernel,
-		Port:     config.Values.PortKernel,
-		Endpoint: "syscall",
-		Queries: map[string]string{
-			"instruccion": fmt.Sprint(instruction),
-		},
-	})
-
-	resp, err := http.Post(url,http.MethodPost,http.NoBody)
-
+func initProcess() {
+	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
-		slog.Error("Error al solicitar el vaciado de la memoria. ", "error",err)
+		slog.Error("Fallo la solicitud para crear el proceso.", "error", err)
 		return
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("memoria respondió con error ", "error", resp.Status)
+		slog.Error("Kernel respondió con error al crear el proceso.", "status", resp.StatusCode)
 		return
 	}
 
-	slog.Info("Se ha borrado la memoria. ")
-
+	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
 }
-
 
 //#endregion
 
-//#region kernel Connection
-
+// #region kernel Connection
 func createKernelConnection(
 	name string,
-	retryAmount int,
-	retrySeconds int,
-	wg *sync.WaitGroup,
-	ctx context.Context) {
+	wg *sync.WaitGroup, // AHORA HACE CONEXIÓN UNICA YA NO REINTENTA.
+) {
 	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			retry, err := notifyKernel(name, ctx)
-			if !retry {
-				return
-			}
-			if err != nil {
-				if retryAmount <= 0 {
-					return
-				}
-				time.Sleep(time.Duration(retrySeconds) * time.Second)
-				retryAmount--
-			}
-		}
+
+	// Intenta conectar una sola vez
+	err := notifyKernel(name)
+	if err != nil {
+		slog.Error("Error al notificar al Kernel", "error", err)
+		return
 	}
+
+	slog.Info("Notificación al Kernel completada exitosamente")
 }
 
-func notifyKernel(id string, ctx context.Context) (bool, error) {
+func notifyKernel(id string) error {
 	log := slog.With("name", id)
 	log.Info("Notificando a Kernel...")
 
@@ -475,40 +315,22 @@ func notifyKernel(id string, ctx context.Context) (bool, error) {
 	if err != nil {
 		fmt.Println("Probably the server is not running, logging error")
 		log.Error("Error making POST request", "error", err)
-		return true, err
+		return err
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusTeapot {
 			log.Info("Server asked for shutdown.")
-			return false, nil
+			return nil
 		}
 		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
-		return true, fmt.Errorf("response error: %w", err)
+		return fmt.Errorf("response error: %w", err)
 	}
 
-	data, _ := io.ReadAll(resp.Body)
-	duration, _ := strconv.Atoi(string(data))
-	log.Info("Recibió respuesta, durmiendo...", "timer", duration)
-
-	sleepDone := make(chan struct{})
-	go func() {
-		time.Sleep(time.Duration(duration) * time.Millisecond)
-		sleepDone <- struct{}{}
-		fmt.Println("sleep goroutine closed")
-	}()
-	defer close(sleepDone)
-
-	select {
-	case <-sleepDone:
-		return true, nil
-	case <-ctx.Done():
-		return false, nil
-	}
+	return nil
 }
 
-func receivePIDPC(ctx context.Context) http.HandlerFunc{
+func receivePIDPC(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -516,22 +338,21 @@ func receivePIDPC(ctx context.Context) http.HandlerFunc{
 		}
 		var req config.KernelResponse
 
-		err := json.NewDecoder(r.Body).Decode(&req);
+		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
-			logger.Instance.Error("Error decodificando JSON: %v", err)
+			slog.Error("Error decodificando JSON: %v", "error", err)
 			http.Error(w, "JSON inválido", http.StatusBadRequest)
 			return
 		}
 
-		slog.Info("Recibido desde Kernel: PID: ",req.PID," PC: ", req.PC)
+		slog.Info("Recibido desde Kernel", "PID", req.PID, " PC", req.PC)
 
 		// Guardar la info en config global
 		config.Pcb.PID = req.PID
 		config.Pcb.PC = req.PC
-		
+
 		// Iniciar ciclo
 		go ciclo()
-
 
 		// Esperar que el ciclo termine y devuelva el motivo
 		select {
@@ -550,15 +371,12 @@ func receivePIDPC(ctx context.Context) http.HandlerFunc{
 	}
 }
 
-
-
 //#endregion
 
 //#region interrupt
 
 func interrupt() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			logger.Instance.Error("Error reading request body", "error", err)
@@ -567,9 +385,8 @@ func interrupt() http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		pidStr := string(data)
-		pidRecibido, err := strconv.Atoi(pidStr)
-		
+		pidRecibido, err := strconv.Atoi(string(data))
+
 		if err != nil {
 			http.Error(w, "PID invalido", http.StatusBadRequest)
 			return
@@ -587,91 +404,81 @@ func interrupt() http.HandlerFunc {
 
 //#endregion
 
-func getInput() (string, string) {
-	fmt.Print("Key: ")
-	var key string
-	var value string
-	fmt.Scanln(&key)
-	fmt.Print("Value: ")
-	fmt.Scanln(&value)
-
-	return key, value
-}
-
 //#region decode
 
-func asign(){
+func asign() {
 
-	switch(instruction.Opcode){
-		case codeutils.NOOP:
-			config.Instruccion= "NOOP"
+	switch instruction.Opcode {
+	case codeutils.NOOP:
+		config.Instruccion = "NOOP"
 
-		case codeutils.WRITE:
-			config.Instruccion = "WRITE"
-			if len(instruction.Args) != 2 {
-				slog.Error("WRITE requiere 2 argumentos")
-			}
-			arg1, err := strconv.Atoi(instruction.Args[0])
-			if err != nil {
-				slog.Error("error convirtiendo Dirección en WRITE ","error", err)
-			}
-			config.Exec_values.Arg1 = arg1
-			config.Exec_values.Str = instruction.Args[1]
-		
-		case codeutils.READ:
-			config.Instruccion = "READ"
-			if len(instruction.Args) != 2 {
-				slog.Error("READ requiere 2 argumentos")
-			}
-			arg1, err1 := strconv.Atoi(instruction.Args[0])
-			arg2, err2 := strconv.Atoi(instruction.Args[1])
-			if err1 != nil || err2 != nil {
-				slog.Error("error convirtiendo argumentos en READ")
-			}
-			config.Exec_values.Arg1 = arg1
-			config.Exec_values.Arg2 = arg2
-		
-		case codeutils.GOTO:
-			config.Instruccion = "GOTO"
-			if len(instruction.Args) != 1 {
-				slog.Error("GOTO requiere 1 argumento")
-			}
-			arg1, err := strconv.Atoi(instruction.Args[0])
-			if err != nil {
-				slog.Error("error convirtiendo Valor en GOTO ","error", err)
-			}
-			config.Exec_values.Arg1 = arg1
+	case codeutils.WRITE:
+		config.Instruccion = "WRITE"
+		if len(instruction.Args) != 2 {
+			slog.Error("WRITE requiere 2 argumentos")
+		}
+		arg1, err := strconv.Atoi(instruction.Args[0])
+		if err != nil {
+			slog.Error("error convirtiendo Dirección en WRITE ", "error", err)
+		}
+		config.Exec_values.Arg1 = arg1
+		config.Exec_values.Str = instruction.Args[1]
 
-		//SYSCALLS
-		case codeutils.IO:
-			config.Instruccion = "IO"
-			if len(instruction.Args) != 2 {
-				slog.Error("IO requiere 2 argumentos")
-			}
-			tiempo, err := strconv.Atoi(instruction.Args[1])
-			if err != nil {
-				slog.Error("error convirtiendo Tiempo en IO ","error", err)
-			}
-			config.Exec_values.Str = instruction.Args[0]
-			config.Exec_values.Arg1 = tiempo
-		
-		case codeutils.INIT_PROC:
-			config.Instruccion = "INIT_PROC"
-			if len(instruction.Args) != 2{
-				slog.Error("INIT_PROC requiere 2 argumentos")
-			}
-			arg1, err := strconv.Atoi(instruction.Args[1])
-			if err != nil {
-				slog.Error("error convirtiendo Valor en INIT_PROC ","error", err)
-			}
-			config.Exec_values.Str = instruction.Args[0]
-			config.Exec_values.Arg1 = arg1
-		
-		case codeutils.EXIT:
-			config.Instruccion = "EXIT"
-		
-		case codeutils.DUMP_MEMORY:
-			config.Instruccion = "DUMP_MEMORY"
-	}	
+	case codeutils.READ:
+		config.Instruccion = "READ"
+		if len(instruction.Args) != 2 {
+			slog.Error("READ requiere 2 argumentos")
+		}
+		arg1, err1 := strconv.Atoi(instruction.Args[0])
+		arg2, err2 := strconv.Atoi(instruction.Args[1])
+		if err1 != nil || err2 != nil {
+			slog.Error("error convirtiendo argumentos en READ")
+		}
+		config.Exec_values.Arg1 = arg1
+		config.Exec_values.Arg2 = arg2
+
+	case codeutils.GOTO:
+		config.Instruccion = "GOTO"
+		if len(instruction.Args) != 1 {
+			slog.Error("GOTO requiere 1 argumento")
+		}
+		arg1, err := strconv.Atoi(instruction.Args[0])
+		if err != nil {
+			slog.Error("error convirtiendo Valor en GOTO ", "error", err)
+		}
+		config.Exec_values.Arg1 = arg1
+
+	//SYSCALLS
+	case codeutils.IO:
+		config.Instruccion = "IO"
+		if len(instruction.Args) != 2 {
+			slog.Error("IO requiere 2 argumentos")
+		}
+		tiempo, err := strconv.Atoi(instruction.Args[1])
+		if err != nil {
+			slog.Error("error convirtiendo Tiempo en IO ", "error", err)
+		}
+		config.Exec_values.Str = instruction.Args[0]
+		config.Exec_values.Arg1 = tiempo
+
+	case codeutils.INIT_PROC:
+		config.Instruccion = "INIT_PROC"
+		if len(instruction.Args) != 2 {
+			slog.Error("INIT_PROC requiere 2 argumentos")
+		}
+		arg1, err := strconv.Atoi(instruction.Args[1])
+		if err != nil {
+			slog.Error("error convirtiendo Valor en INIT_PROC ", "error", err)
+		}
+		config.Exec_values.Str = instruction.Args[0]
+		config.Exec_values.Arg1 = arg1
+
+	case codeutils.EXIT:
+		config.Instruccion = "EXIT"
+
+	case codeutils.DUMP_MEMORY:
+		config.Instruccion = "DUMP_MEMORY"
+	}
 }
+
 //#endregion
