@@ -38,7 +38,6 @@ func main() {
 	var mux *http.ServeMux = http.NewServeMux()
 
 	// Add routes to mux
-	mux.Handle("/storage", testStorageRequestHandler())
 	mux.Handle("/process", processRequestHandler())
 	mux.Handle("/free_space", freeSpaceRequestHandler())
 	// Sending anything to this channel will shutdown the server.
@@ -196,40 +195,4 @@ func processRequestHandler() http.HandlerFunc {
 			w.WriteHeader(http.StatusOK)
 		}
 	}
-}
-
-func testStorageRequestHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Request: ", r.Method, ":/", r.RequestURI)
-		params := r.URL.Query()
-		if !params.Has("key") || (r.Method == "POST" && !params.Has("value")) {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Header().Add("contentType", "text/plain")
-		key := params.Get("key")
-		switch r.Method {
-		case "GET":
-			w.Write([]byte(fmt.Sprint(retrieveValue(key))))
-		case "POST":
-			saveValue(key, params.Get("value"))
-		case "DELETE":
-			deleteValue(key)
-		}
-	}
-}
-
-var testStorage map[string]string = make(map[string]string)
-
-func saveValue(key string, value string) {
-	testStorage[key] = value
-}
-
-func retrieveValue(key string) string {
-	return testStorage[key]
-}
-
-func deleteValue(key string) {
-	delete(testStorage, key)
 }
