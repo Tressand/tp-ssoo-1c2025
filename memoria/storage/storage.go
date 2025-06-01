@@ -18,11 +18,10 @@ var opcodeStrings map[codeutils.Opcode]string = codeutils.OpcodeStrings
 //#region SECTION: SYSTEM MEMORY
 
 type process_data struct {
-	pid           uint
-	code          []instruction
-	pageTable     []any
-	reservedPages []int
-	metrics       memory_metrics
+	pid       uint
+	code      []instruction
+	pageBases []int
+	metrics   memory_metrics
 }
 
 func GetDataByPID(pid uint) (data *process_data, index int) {
@@ -55,7 +54,10 @@ type BasicProcessData struct {
 func GetProcesses() []BasicProcessData {
 	var processes []BasicProcessData
 	for _, process := range systemMemory {
-		processes = append(processes, BasicProcessData{PID: process.pid, Size: len(process.reservedPages) * pageSize})
+		processes = append(processes, BasicProcessData{
+			PID:  process.pid,
+			Size: len(process.pageBases) * paginationConfig.pageSize,
+		})
 	}
 	return processes
 }
@@ -69,7 +71,11 @@ func LogSystemMemory() {
 	for _, p := range systemMemory {
 		msg += "------------------------\n"
 		msg += "|  PID: " + fmt.Sprint(p.pid) + "\n|\n"
-		msg += "|  Reserved pages: " + fmt.Sprint(p.reservedPages) + "\n|\n"
+		msg += "|  Reserved pages: ["
+		for _, base := range p.pageBases {
+			msg += fmt.Sprint(base/paginationConfig.pageSize) + ", "
+		}
+		msg = msg[:len(msg)-2] + "]\n|\n"
 		msg += "|  Code (" + fmt.Sprint(len(p.code)) + " instructions)\n"
 		for index, inst := range p.code {
 			msg += "|    " + opcodeStrings[inst.Opcode] + " " + fmt.Sprint(inst.Args) + "\n"
@@ -108,13 +114,13 @@ func CreateProcess(newpid uint, codeFile io.Reader, memoryRequirement int) error
 		newProcessData.code = append(newProcessData.code, instruction{Opcode: newOpCode, Args: parts[1:]})
 	}
 
-	pageTable, reservedPages, err := allocateMemory(memoryRequirement)
+	reservedPageBases, err := allocateMemory(memoryRequirement)
 	if err != nil {
+		slog.Error("failed memory allocation", "error", err)
 		return err
 	}
 
-	newProcessData.pageTable = pageTable
-	newProcessData.reservedPages = reservedPages
+	newProcessData.pageBases = reservedPageBases
 
 	systemMemory = append(systemMemory, *newProcessData)
 	return nil
@@ -148,166 +154,39 @@ type memory_metrics struct {
 	Writes                 int
 }
 
-type PageTableConfig struct {
+type PaginationConfig struct {
+	pageSize       int
 	entriesPerPage int
 	levels         int
 }
 
-var pageTableConfig PageTableConfig
+var paginationConfig PaginationConfig
 
 var memorySize int
 var remainingMemory = 0
 var userMemory []byte
 
-var pageSize int
-var pagination [][]byte
-
+var nPages int
+var pageBases []int
 var reservationBits []bool
 
 func GetRemainingMemory() int {
 	return remainingMemory
 }
 
-func logPage(page []any, showValue bool) {
+func logPage(pageBase int) {
 	var msg string = "----------\n"
 
-	for index, entry := range page {
-		var i string = fmt.Sprint(index)
-		msg += i
+	for delta := range paginationConfig.pageSize {
+		var i string = fmt.Sprint(delta)
+		msg += fmt.Sprint(delta)
 		msg += strings.Repeat(" ", 6-len(i))
 		msg += " | "
-		if showValue {
-			msg += fmt.Sprintf("%v", *entry.(*any))
-		} else {
-			msg += fmt.Sprintf("%p", entry)
-		}
+		msg += fmt.Sprint(userMemory[pageBase+delta])
 		msg += "\n"
 	}
 	msg += "----------\n"
 	fmt.Print(msg)
-}
-
-func untypedPaginate[T any](base []T, pageSize int) []any {
-	var pageList []any
-	totalPages := int(math.Ceil(float64(len(base)) / float64(pageSize)))
-
-	for i_page := range totalPages {
-		var newPage []any
-		for i_value := range pageSize {
-			index := i_page*pageSize + i_value
-			if index > (len(base) - 1) {
-				newPage = append(newPage, nil)
-				continue
-			}
-			newPage = append(newPage, &base[i_page*pageSize+i_value])
-		}
-		pageList = append(pageList, newPage)
-	}
-
-	return pageList
-}
-
-func typedPaginate[T any](base []T, pageSize int) [][]T {
-	if pageSize == 0 {
-		return nil
-	}
-	var pageList [][]T
-	nPages := int(math.Ceil(float64(len(base)) / float64(pageSize)))
-	for i := range nPages {
-		start := i * pageSize
-		end := min(start+pageSize, len(base))
-		pageList = append(pageList, base[start:end])
-	}
-	return pageList
-}
-
-func typedPointerPaginate[T any](base []T, pageSize int) [][]*T {
-	if pageSize == 0 {
-		return nil
-	}
-	var pageList [][]*T
-	nPages := int(math.Ceil(float64(len(base)) / float64(pageSize)))
-	for i := range nPages {
-		var page []*T = make([]*T, pageSize)
-		start := i * pageSize
-		for delta := range pageSize {
-			if start+delta > len(base) {
-				page[delta] = nil
-			}
-			page[delta] = &base[start+delta]
-		}
-		pageList = append(pageList, page)
-	}
-	return pageList
-}
-
-func multiLevelPaginate[T any](data []T, pageSize int, levels int) any {
-	if levels <= 0 || pageSize <= 0 {
-		return data
-	}
-
-	var pages = untypedPaginate(data, pageSize)
-
-	for range levels - 1 {
-		nextLevel := untypedPaginate(pages, pageSize)
-		pages = nextLevel
-	}
-
-	return pages
-}
-
-func getFromPage[BaseType any](page any, index int) (any, error) {
-	elems, ok := page.([]any)
-	if !ok {
-		elems, ok := page.([]BaseType)
-		if ok {
-			return &elems[index], nil
-		}
-		return nil, errors.New("slice conversion failed")
-	}
-	if index >= len(elems) {
-		return nil, errors.New("index out of bounds")
-	}
-	elem := elems[index]
-	ptr, ok := elem.(*any)
-	if !ok {
-		ptr, ok := elem.(*BaseType)
-		if ok {
-			return ptr, nil
-		}
-		return elem, nil
-	}
-	return *ptr, nil
-}
-
-func getFromPagination[BaseType any](pagination any, indexes ...int) (any, error) {
-	if len(indexes) == 0 {
-		return nil, errors.New("must indicate a valid sequence of indexes to search")
-	}
-	pages := pagination
-
-	var elem any
-	var err error
-	for i := range indexes {
-		elem, err = getFromPage[BaseType](pages, indexes[i])
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := elem.(*BaseType); ok {
-			return elem, nil
-		} else {
-			pages, ok = elem.([]any)
-			if !ok {
-				if _, ok = elem.(*[]BaseType); !ok {
-					return pages, errors.New("couldn't convert elem to page")
-				}
-				elem = *elem.(*[]BaseType)
-				pages = elem
-			}
-		}
-	}
-
-	return elem, nil
 }
 
 func InitializeUserMemory(size int, pSize int, entriesPerPage int, levels int) {
@@ -320,41 +199,49 @@ func InitializeUserMemory(size int, pSize int, entriesPerPage int, levels int) {
 		return
 	}
 
-	pageSize = pSize
-	pagination = typedPaginate(userMemory, pageSize)
-	reservationBits = make([]bool, len(pagination))
-	slog.Info("Paginación realizada", "cantidad_de_paginas", len(pagination))
-
-	pageTableConfig = PageTableConfig{
+	paginationConfig = PaginationConfig{
 		entriesPerPage: entriesPerPage,
 		levels:         levels - 1,
+		pageSize:       pSize,
 	}
+	nPages = memorySize / pSize
+	if memorySize%pSize != 0 {
+		slog.Error("memory size couldn't be equally subdivided,"+
+			"remainder memory unaccessible to prevent errors",
+			"memorySize", memorySize, "pageSize", pSize)
+	}
+	pageBases = make([]int, nPages)
+	for i := range nPages {
+		pageBases[i] = i * pSize
+	}
+	reservationBits = make([]bool, nPages)
+	slog.Info("Paginación realizada", "cantidad_de_paginas", nPages)
 }
 
-func allocateMemory(size int) ([]any, []int, error) {
-	requiredPages := int(math.Ceil(float64(size) / float64(pageSize)))
+func allocateMemory(size int) ([]int, error) {
+	if size > remainingMemory {
+		return nil, errors.New("not enough memory.")
+	}
+	requiredPages := int(math.Ceil(float64(size) / float64(paginationConfig.pageSize)))
 	slog.Info("allocating memory", "bytes", size, "pages", requiredPages)
-	remainingMemory -= pageSize * requiredPages
+	remainingMemory -= paginationConfig.pageSize * requiredPages
 	if remainingMemory < 0 {
 		panic("memory got negative, wtf.")
 	}
-	var processPages []any = make([]any, len(pagination))
-	var reservedPages []int
+	var processPageBases []int = make([]int, requiredPages)
 
 	i := 0
-	for index, page := range pagination {
+	for index, pageBase := range pageBases {
 		if !reservationBits[index] {
 			reservationBits[index] = true
-			reservedPages = append(reservedPages, index)
-			processPages[i] = &page
+			processPageBases[i] = pageBase
 			i++
 		}
 		if i == requiredPages {
-			break
+			return processPageBases, nil
 		}
 	}
-	processPagination := multiLevelPaginate(processPages, pageTableConfig.entriesPerPage, pageTableConfig.levels).([]any)
-	return processPagination, reservedPages, nil
+	return nil, errors.New("something wrong ocurred on memory allocation")
 }
 
 func deallocateMemory(pid uint) error {
@@ -362,10 +249,10 @@ func deallocateMemory(pid uint) error {
 	if process_data == nil {
 		return errors.New("couldn't find process with id")
 	}
-	for _, pageIndex := range process_data.reservedPages {
-		reservationBits[pageIndex] = false
+	for _, pageBase := range process_data.pageBases {
+		reservationBits[pageBase/paginationConfig.pageSize] = false
 	}
-	remainingMemory += len(process_data.reservedPages) * pageSize
+	remainingMemory += len(process_data.pageBases) * paginationConfig.pageSize
 	return nil
 }
 
