@@ -100,26 +100,21 @@ func main() {
 
 	moduleMenu.Add("Init scheduler", func() {
 		if globals.SchedulerStatus == "STOP" {
-			globals.SchedulerStatus = "START"
 			go scheduler.LTS()
+			globals.LTSStopped <- struct{}{}
 			logger.Instance.Info("Scheduler initialized")
 		}
 	})
 	/*
-	moduleMenu.Add("Run 40 processes", func() {
-		for i := 0; i < 40; i++ {
-			size := 100 + (rand.Intn(900))
-			process.CreateProcess("helloworld", size)
-		}
-	})*/
+		moduleMenu.Add("Run 40 processes", func() {
+			for i := 0; i < 40; i++ {
+				size := 100 + (rand.Intn(900))
+				process.CreateProcess("helloworld", size)
+			}
+		})*/
 	moduleMenu.Add("[TEST] Create process", func() {
 		size := 100 + (rand.Intn(900))
 		process.CreateProcess("prueba", size)
-	})
-	moduleMenu.Add("[TEST] Retry request", func() {
-		if globals.SchedulerStatus == "START" {
-			globals.RetryProcessCh <- struct{}{}
-		}
 	})
 	mainMenu.Add("Communicate with other module", func() {
 		moduleMenu.Activate()

@@ -80,12 +80,13 @@ func ReceiveCPU() http.HandlerFunc {
 			return
 		}
 
-		id := r.URL.Query().Get("id")
-		ip := r.URL.Query().Get("ip")
-		portStr := r.URL.Query().Get("port")
+		query := r.URL.Query()
 
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
+		id := query.Get("id")
+		ip := query.Get("ip")
+		port, errPort := strconv.Atoi(query.Get("port"))
+
+		if errPort != nil {
 			http.Error(w, "Invalid port", http.StatusBadRequest)
 			return
 		}
@@ -99,8 +100,6 @@ func ReceiveCPU() http.HandlerFunc {
 		}
 
 		globals.CpuListMutex.Lock()
-		defer globals.CpuListMutex.Unlock()
-
 		exists := false
 		for _, c := range globals.AvailableCPUs {
 			if c.ID == id {
@@ -108,16 +107,28 @@ func ReceiveCPU() http.HandlerFunc {
 				break
 			}
 		}
+		globals.CpuListMutex.Unlock()
 
 		if !exists {
+			globals.CpuListMutex.Lock()
 			globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
-			globals.AvailableCpu <- struct{}{}
+			globals.CpuListMutex.Unlock()
+
+			if globals.WaitingForCPU {
+				globals.AvailableCpu <- struct{}{}
+			}
+		} else {
+			slog.Warn("CPU already registered", "id", id)
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte("CPU already registered"))
+			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "CPU %s registered successfully", id)
+		w.Write([]byte("CPU registered successfully"))
 	}
 }
+
 func RecieveSyscall() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1. Obtener el PID del query parameter
@@ -243,98 +254,3 @@ func RecieveSyscall() http.HandlerFunc {
 		w.Write([]byte("Syscall procesada"))
 	}
 }
-
-/*
-TODO: Necesito preparar algo así para testear STS
-func AskCPU() {
-	list := GetCPUList(false)
-	if len(list) == 0 {
-		return
-	}
-
-	var target *CPUConnection
-
-	// List the name of all CPU's available
-	fmt.Println("Current available CPU's:")
-	for _, elem := range list {
-
-		fmt.Println("	- ", elem.ID)
-	}
-
-	fmt.Print("Who are we putting to work? (any) ")
-	var output string
-	fmt.Scanln(&output)
-
-	// Search for the CPU selected
-	if output == "" {
-		target = &list[0]
-	} else {
-		for _, io := range list {
-			if io.id == output {
-				target = &io
-				break
-			}
-		}
-	}
-	if target == nil {
-		fmt.Println("CPU not found.")
-		return
-	}
-
-	// Send the timer through the targets channel, this will trigger the recieveCPU()'s response.
-	target.handler <- CPURequest{}
-}
-
-func SendInterrupt() {
-	list := GetCPUList(true)
-	if len(list) == 0 {
-		return
-	}
-
-	var target *CPUConnection
-
-	fmt.Println("Current working CPUs:")
-	for _, elem := range list {
-		fmt.Println("	- ", elem.id)
-	}
-
-	fmt.Print("Select CPU to interrupt (any) ")
-	var output string
-	fmt.Scanln(&output)
-
-	if output == "" {
-		target = &list[0]
-	} else {
-		for _, cpu := range list {
-			if cpu.id == output {
-				target = &cpu
-				break
-			}
-		}
-	}
-	if target == nil {
-		fmt.Println("CPU not found.")
-		return
-	}
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       target.ip,
-		Port:     target.port,
-		Endpoint: "interrupt",
-		Queries:  map[string]string{}},
-	)
-
-	// Realizar el POST
-	resp, err := http.Post(url, "text/plain", strings.NewReader("Interrupt from Kernel"))
-
-	if err != nil {
-		fmt.Printf("Error sending interrupt to CPU %s: %v\n", target.id, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Leer la respuesta del CPU
-	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Response from CPU %s: %s\n", target.id, string(body))
-}
-*/

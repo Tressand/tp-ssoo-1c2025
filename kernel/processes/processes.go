@@ -22,9 +22,21 @@ func CreateProcess(path string, size int) {
 		Size: size,
 	}
 
-	QueueToNew(newProcess)
-
 	logger.RequiredLog(true, newProcess.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": newProcess.PCB.GetState().String(), "Tamaño": fmt.Sprintf("%d KB", size)})
+
+	QueueToNew(newProcess)
+}
+
+func QueueToNew(process globals.Process) {
+	globals.NewQueueMutex.Lock()
+	globals.NewQueue = append(globals.NewQueue, process)
+	globals.NewQueueMutex.Unlock()
+
+	if globals.WaitingInLTS && globals.SchedulerStatus == "START" {
+		globals.LTSEmpty <- struct{}{}
+	}
+
+	logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se encola en NEW", process.PCB.GetPID()))
 }
 
 func SearchProcessInExec(id string) (*globals.Process, error) {
@@ -70,23 +82,14 @@ func TerminateProcess(process *globals.Process) {
 
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
 
+	globals.SuspReadyQueueMutex.Lock()
 	if len(globals.SuspReadyQueue) == 0 && globals.ProcessWaiting {
 		globals.RetryProcessCh <- struct{}{}
 		fmt.Println("No hay procesos en SUSP. READY. Se intenta inicializar el proceso en memoria")
 	} else {
 		fmt.Println("Hay procesos en READY SUSPEND")
 	}
-
-}
-
-func QueueToNew(process globals.Process) {
-	globals.NewQueueMutex.Lock()
-	defer globals.NewQueueMutex.Unlock()
-	globals.NewQueue = append(globals.NewQueue, process)
-
-	if len(globals.NewQueue) == 1 && globals.SchedulerStatus == "START" { // Estaba vacia
-		globals.LTSEmpty <- struct{}{} // ? Revisar sí sirve tomando en cuenta que ahora hay 2 colas
-	}
+	globals.SuspReadyQueueMutex.Unlock()
 
 }
 

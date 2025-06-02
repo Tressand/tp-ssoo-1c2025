@@ -46,10 +46,13 @@ var (
 	STSEmpty        = make(chan struct{})
 	AvailableCpu    = make(chan struct{}, 1) // Esto me parece que esta de más
 	PCBReceived     = make(chan struct{}, 1)
+	LTSStopped      = make(chan struct{})
 
-	RetryProcessCh   = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
-	WaitingForMemory = make(chan struct{}, 1)
-	WaitingForCPU    = make(chan struct{}, 1)
+	RetryProcessCh             = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
+	WaitingForMemory           = make(chan struct{}, 1)
+	WaitingForCPU         bool = false
+	WaitingInLTS          bool = false
+	WaitingProcessInReady bool = false
 )
 
 type IOConnection struct {
@@ -96,22 +99,4 @@ func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Pa
 
 func SendIORequest(pid uint, timer int, io *IOConnection) {
 	io.Handler <- IORequest{Pid: pid, Timer: timer}
-}
-
-func IsPresent(q []Process, state pcb.STATE) bool {
-	for _, proc := range q {
-		if proc.PCB.GetState() == state {
-			return true
-		}
-	}
-	return false
-}
-
-func FindFirst(q []Process, state pcb.STATE) *Process {
-	for _, proc := range q {
-		if proc.PCB.GetState() == state {
-			return &proc
-		}
-	}
-	return nil
 }

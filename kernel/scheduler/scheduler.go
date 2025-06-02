@@ -14,43 +14,63 @@ import (
 )
 
 func LTS() {
+	<-globals.LTSStopped
+	globals.SchedulerStatus = "START"
+	logger.Instance.Debug("El planificador ha iniciado")
+
 	for {
 		switch config.Values.ReadyIngressAlgorithm {
 		case "FIFO":
-			var process globals.Process
+			logger.Instance.Info("Planificando con FIFO!")
+
+			var process *globals.Process
 			var found bool = false
 
 			globals.SuspReadyQueueMutex.Lock()
 			if len(globals.SuspReadyQueue) != 0 {
-				process = globals.SuspReadyQueue[0]
+				process = &globals.SuspReadyQueue[0]
 				globals.SuspReadyQueue = globals.SuspReadyQueue[1:]
 				found = true
+				logger.Instance.Info("Se encontró un proceso en Susp Ready", "found", found)
 			}
 			globals.SuspReadyQueueMutex.Unlock()
 
+			logger.Instance.Info("No hay procesos en SuspReadyQueue", "found", found)
+
 			globals.NewQueueMutex.Lock()
 			if !found && len(globals.NewQueue) != 0 {
-				process = globals.NewQueue[0]
+				process = &globals.NewQueue[0]
 				globals.NewQueue = globals.NewQueue[1:]
 				found = true
+				logger.Instance.Info("Se encontró un proceso en New", "found", found)
 			}
-			globals.NewQueueMutex.Lock()
+			globals.NewQueueMutex.Unlock()
 
 			if !found {
+				logger.Instance.Info("No hay procesos en SuspReadyQueue o NewQueue. Se bloquea hasta que se agregen procesos nuevos", "found", found)
+				globals.WaitingInLTS = true
 				<-globals.LTSEmpty
+				globals.WaitingInLTS = false
 				continue
 			}
 
-			go func(p *globals.Process) {
+			logger.Instance.Debug("Se intenta inicializar un proceso en LTS", "pid", process.PCB.GetPID())
+
+			waitMemory := make(chan struct{})
+
+			go func(p *globals.Process, w chan struct{}) {
 				InitProcess(p)
 				logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", p.PCB.GetPID()))
-				globals.WaitingForMemory <- struct{}{}
-			}(&process)
+				w <- struct{}{} // Desbloquea el canal waitMemory una vez que el proceso se inicializa
+				logger.Instance.Debug("Se desbloquea el canal waitMemory luego de inicializar el proceso", "pid", p.PCB.GetPID())
+			}(process, waitMemory)
 
-			<-globals.WaitingForMemory
+			logger.Instance.Debug("Se bloquea el canal waitMemory hasta que se inicialice el proceso")
+			<-waitMemory // ?
+			logger.Instance.Debug("Se desbloquea el canal waitMemory")
 
 		case "PMCP":
-			var process globals.Process
+			var process *globals.Process
 			var found bool = false
 
 			globals.SuspReadyQueueMutex.Lock()
@@ -60,7 +80,7 @@ func LTS() {
 					return globals.SuspReadyQueue[i].Size < globals.SuspReadyQueue[j].Size
 				})
 
-				process = globals.SuspReadyQueue[0]
+				process = &globals.SuspReadyQueue[0]
 				globals.SuspReadyQueue = globals.SuspReadyQueue[1:]
 				found = true
 			}
@@ -73,24 +93,28 @@ func LTS() {
 					return globals.NewQueue[i].Size < globals.NewQueue[j].Size
 				})
 
-				process = globals.NewQueue[0]
+				process = &globals.NewQueue[0]
 				globals.NewQueue = globals.NewQueue[1:]
 				found = true
 			}
-			globals.NewQueueMutex.Lock()
+			globals.NewQueueMutex.Unlock()
 
 			if !found {
+				globals.WaitingInLTS = true
 				<-globals.LTSEmpty
+				globals.WaitingInLTS = false
 				continue
 			}
 
-			go func(p *globals.Process) {
+			waitMemory := make(chan struct{}, 1)
+
+			go func(p *globals.Process, w chan struct{}) {
 				InitProcess(p)
 				logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", p.PCB.GetPID()))
-				globals.WaitingForMemory <- struct{}{}
-			}(&process)
+				w <- struct{}{} // Desbloquea el canal waitMemory una vez que el proceso se inicializa
+			}(process, waitMemory)
 
-			<-globals.WaitingForMemory
+			<-waitMemory
 
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
@@ -107,7 +131,10 @@ func InitProcess(process *globals.Process) {
 		if err == nil {
 			slog.Info("Proceso inicializado en memoria", "name", process.PCB.GetPID())
 			QueueToReady(process)
+			slog.Info("No me bloqueo en QueueToReady")
 			globals.ProcessWaiting = false
+			slog.Info("Se desbloquea el canal waitMemory luego de inicializar el proceso")
+			logger.Instance.Debug("Se desbloquea el canal waitMemory luego de inicializar el proceso", "pid", process.PCB.GetPID())
 			return
 		} else {
 			slog.Error(err.Error())
@@ -126,7 +153,8 @@ func QueueToReady(process *globals.Process) {
 
 	globals.ReadyQueueMutex.Lock()
 	globals.ReadyQueue = append(globals.ReadyQueue, *process)
-	if len(globals.ReadyQueue) == 1 {
+	if len(globals.ReadyQueue) != 0 && globals.WaitingProcessInReady {
+		slog.Info("Desbloqueando STS porque hay procesos en READY")
 		globals.STSEmpty <- struct{}{}
 	}
 	globals.ReadyQueueMutex.Unlock()
@@ -136,40 +164,42 @@ func QueueToReady(process *globals.Process) {
 
 func STS() {
 	for {
+		var cpu *globals.CPUConnection
+
+		if len(kernel_api.GetCPUList(false)) == 0 {
+			globals.WaitingForCPU = true
+			<-globals.AvailableCpu
+			continue
+		} else {
+			globals.WaitingForCPU = false
+			cpu = &kernel_api.GetCPUList(false)[0]
+		}
+
 		switch config.Values.SchedulerAlgorithm {
 		case "FIFO":
-			var cpu *globals.CPUConnection
-
-			if len(kernel_api.GetCPUList(false)) == 0 {
-				<-globals.AvailableCpu
-				continue
-			} else {
-				cpus := kernel_api.GetCPUList(false)
-				cpu = &cpus[0]
-			}
-
-			var process globals.Process
+			var process *globals.Process
 			var found bool = false // ?
 
 			globals.ReadyQueueMutex.Lock()
 			if len(globals.ReadyQueue) != 0 {
-				process = globals.ReadyQueue[0]
+				process = &globals.ReadyQueue[0]
 				globals.ReadyQueue = globals.ReadyQueue[1:]
 				found = true
 			}
 			globals.ReadyQueueMutex.Unlock()
 
 			if !found {
+				globals.WaitingProcessInReady = true
+				slog.Info("Me estoy bloqueando en STS porque no hay procesos en READY")
 				<-globals.STSEmpty
+				globals.WaitingProcessInReady = false
+				slog.Info("Me estoy desbloqueo en STS porque ya hay procesos en READY")
 				continue
 			}
 
 			go func(p *globals.Process, c *globals.CPUConnection) {
 				SendToExecute(p, c)
-				globals.WaitingForCPU <- struct{}{}
-			}(&process, cpu)
-
-			<-globals.WaitingForCPU
+			}(process, cpu)
 		case "SJF":
 			fmt.Println("SJF")
 			return
@@ -192,7 +222,6 @@ func SendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	cpu.Working = true
 
-	// ? Saco ExecQueue por esta mientras
 	globals.ProcessesInExec = append(globals.ProcessesInExec, globals.CurrentProcess{
 		Cpu:     *cpu,
 		Process: *process,
