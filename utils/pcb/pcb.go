@@ -1,7 +1,8 @@
 package pcb
 
 import (
-	"log/slog"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -18,12 +19,11 @@ const (
 )
 
 type PCB struct {
-	pid              uint
-	state            STATE
-	pc               int
-	k_metrics        kernel_metrics
-	codeFilePath     string
-	pageTablePointer *any
+	pid          uint
+	state        STATE
+	pc           int
+	k_metrics    kernel_metrics
+	codeFilePath string
 }
 
 func (pcb PCB) GetPID() uint    { return pcb.pid }
@@ -53,15 +53,28 @@ func Create(pid uint, path string) *PCB {
 
 func (pcb *PCB) SetState(newState STATE) {
 	pcb.state = newState
-	metrics := pcb.k_metrics
+	metrics := &pcb.k_metrics
 	metrics.Sequence_list = append(metrics.Sequence_list, newState)
 	metrics.Instants_list = append(metrics.Instants_list, time.Now())
 	metrics.Frequency[newState]++
 	if len(metrics.Instants_list) > 1 {
-		lastDuration := metrics.Instants_list[len(metrics.Instants_list)].Sub(metrics.Instants_list[len(metrics.Instants_list)-1])
+		lastDuration := metrics.Instants_list[len(metrics.Instants_list)-1].Sub(metrics.Instants_list[len(metrics.Instants_list)-2])
 		metrics.Time_spent[newState] += lastDuration
 	}
-	if len(metrics.Sequence_list) != len(pcb.k_metrics.Sequence_list) {
-		slog.Error("SetState on PCB package must be fixed. metrics and pcb.k_metrics are not same.")
+}
+
+func (s STATE) String() string {
+	states := [...]string{"EXIT", "NEW", "READY", "EXEC", "BLOCKED", "SUSP_BLOCKED", "SUSP_READY"}
+	if s < 0 || int(s) >= len(states) {
+		return "UNKNOWN"
 	}
+	return states[s]
+}
+
+func (k kernel_metrics) String() string {
+	var sb strings.Builder
+	for i := 0; i < len(k.Frequency); i++ {
+		sb.WriteString(fmt.Sprintf("%s (%d) (%v), ", STATE(i).String(), k.Frequency[i], k.Time_spent[i]))
+	}
+	return sb.String()
 }

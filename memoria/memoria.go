@@ -58,6 +58,7 @@ func main() {
 	var _internalProcessCounter uint = 1
 
 	mainMenu := menu.Create()
+
 	mainMenu.Add("Create Process", func() {
 		codeFolder, _ := filepath.Abs("./code")
 
