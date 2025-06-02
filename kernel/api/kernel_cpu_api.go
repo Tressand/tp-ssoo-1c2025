@@ -2,7 +2,6 @@ package kernel_api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -74,7 +73,7 @@ func GetCPUList(working bool) []globals.CPUConnection {
 	return result
 }
 
-func ReceiveCPU(ctx context.Context) http.HandlerFunc {
+func ReceiveCPU() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -112,6 +111,7 @@ func ReceiveCPU(ctx context.Context) http.HandlerFunc {
 
 		if !exists {
 			globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
+			globals.AvailableCpu <- struct{}{}
 		}
 
 		w.WriteHeader(http.StatusOK)

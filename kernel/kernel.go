@@ -82,7 +82,7 @@ func main() {
 	// Add routes to mux
 
 	// Pass the globalCloser to handlers that will block.
-	mux.Handle("/cpu-notify", kernel_api.ReceiveCPU(ctx))
+	mux.Handle("/cpu-notify", kernel_api.ReceiveCPU())
 	mux.Handle("/io-notify", recieveIO(ctx))
 	mux.Handle("/syscall", kernel_api.RecieveSyscall())
 
@@ -105,6 +105,13 @@ func main() {
 			logger.Instance.Info("Scheduler initialized")
 		}
 	})
+	/*
+	moduleMenu.Add("Run 40 processes", func() {
+		for i := 0; i < 40; i++ {
+			size := 100 + (rand.Intn(900))
+			process.CreateProcess("helloworld", size)
+		}
+	})*/
 	moduleMenu.Add("[TEST] Create process", func() {
 		size := 100 + (rand.Intn(900))
 		process.CreateProcess("prueba", size)

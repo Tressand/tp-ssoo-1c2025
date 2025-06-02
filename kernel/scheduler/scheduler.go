@@ -11,25 +11,35 @@ import (
 	processes "ssoo-kernel/processes"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
-	slices "ssoo-utils/slices"
 )
 
 func LTS() {
 	for {
 		switch config.Values.ReadyIngressAlgorithm {
 		case "FIFO":
+			var process globals.Process
+			var found bool = false
 
-			globals.LTSMutex.Lock()
-			if slices.IsEmpty(globals.LTS) {
-				globals.LTSMutex.Unlock()
-				logger.Instance.Info("La cola de procesos en NEW esta vacia")
-				<-globals.LTSEmpty
-				globals.LTSMutex.Lock()
+			globals.SuspReadyQueueMutex.Lock()
+			if len(globals.SuspReadyQueue) != 0 {
+				process = globals.SuspReadyQueue[0]
+				globals.SuspReadyQueue = globals.SuspReadyQueue[1:]
+				found = true
 			}
+			globals.SuspReadyQueueMutex.Unlock()
 
-			process := globals.LTS[0]
-			globals.LTS = globals.LTS[1:]
-			globals.LTSMutex.Unlock()
+			globals.NewQueueMutex.Lock()
+			if !found && len(globals.NewQueue) != 0 {
+				process = globals.NewQueue[0]
+				globals.NewQueue = globals.NewQueue[1:]
+				found = true
+			}
+			globals.NewQueueMutex.Lock()
+
+			if !found {
+				<-globals.LTSEmpty
+				continue
+			}
 
 			go func(p *globals.Process) {
 				InitProcess(p)
@@ -40,23 +50,39 @@ func LTS() {
 			<-globals.WaitingForMemory
 
 		case "PMCP":
+			var process globals.Process
+			var found bool = false
 
-			globals.LTSMutex.Lock()
-			if slices.IsEmpty(globals.LTS) {
-				globals.LTSMutex.Unlock()
-				logger.Instance.Info("La cola de procesos en NEW esta vacia")
-				<-globals.LTSEmpty
-				globals.LTSMutex.Lock()
+			globals.SuspReadyQueueMutex.Lock()
+			if len(globals.SuspReadyQueue) != 0 {
+
+				sort.Slice(globals.SuspReadyQueue, func(i, j int) bool {
+					return globals.SuspReadyQueue[i].Size < globals.SuspReadyQueue[j].Size
+				})
+
+				process = globals.SuspReadyQueue[0]
+				globals.SuspReadyQueue = globals.SuspReadyQueue[1:]
+				found = true
 			}
+			globals.SuspReadyQueueMutex.Unlock()
 
-			// Ordenar por tamaño ascendente (más chico primero)
-			sort.Slice(globals.LTS, func(i, j int) bool {
-				return globals.LTS[i].Size < globals.LTS[j].Size
-			})
+			globals.NewQueueMutex.Lock()
+			if !found && len(globals.NewQueue) != 0 {
 
-			process := globals.LTS[0]
-			globals.LTS = globals.LTS[1:]
-			globals.LTSMutex.Unlock()
+				sort.Slice(globals.NewQueue, func(i, j int) bool {
+					return globals.NewQueue[i].Size < globals.NewQueue[j].Size
+				})
+
+				process = globals.NewQueue[0]
+				globals.NewQueue = globals.NewQueue[1:]
+				found = true
+			}
+			globals.NewQueueMutex.Lock()
+
+			if !found {
+				<-globals.LTSEmpty
+				continue
+			}
 
 			go func(p *globals.Process) {
 				InitProcess(p)
@@ -79,25 +105,31 @@ func InitProcess(process *globals.Process) {
 		err := processes.InitializeProcessInMemory(process.PCB.GetPID(), process.GetPath(), process.Size)
 
 		if err == nil {
-			queueToSTS(process)
+			slog.Info("Proceso inicializado en memoria", "name", process.PCB.GetPID())
+			QueueToReady(process)
+			globals.ProcessWaiting = false
 			return
+		} else {
+			slog.Error(err.Error())
+			slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "name", process.PCB.GetPID())
+			globals.ProcessWaiting = true
+			<-globals.RetryProcessCh // Este espera ser desbloqueado desde Finalización de Proceso
 		}
-		slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "name", process.PCB.GetPID())
-		<-globals.RetryProcessCh // Este espera ser desbloqueado desde Finalización de Proceso
+		slog.Info("Reintentando inicializar proceso", "name", process.PCB.GetPID())
 	}
 }
 
-func queueToSTS(process *globals.Process) {
+func QueueToReady(process *globals.Process) {
 	lastState := process.PCB.GetState()
 	process.PCB.SetState(pcb.READY)
 	actualState := process.PCB.GetState()
 
-	globals.STSMutex.Lock()
-	globals.STS = append(globals.STS, *process)
-	if len(globals.STS) == 1 {
+	globals.ReadyQueueMutex.Lock()
+	globals.ReadyQueue = append(globals.ReadyQueue, *process)
+	if len(globals.ReadyQueue) == 1 {
 		globals.STSEmpty <- struct{}{}
 	}
-	globals.STSMutex.Unlock()
+	globals.ReadyQueueMutex.Unlock()
 
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 }
@@ -106,21 +138,36 @@ func STS() {
 	for {
 		switch config.Values.SchedulerAlgorithm {
 		case "FIFO":
-			globals.STSMutex.Lock()
-			if slices.IsEmpty(globals.STS) {
-				globals.STSMutex.Unlock()
-				<-globals.STSEmpty
-				globals.STSMutex.Lock()
+			var cpu *globals.CPUConnection
+
+			if len(kernel_api.GetCPUList(false)) == 0 {
+				<-globals.AvailableCpu
+				continue
+			} else {
+				cpus := kernel_api.GetCPUList(false)
+				cpu = &cpus[0]
 			}
 
-			process := globals.STS[0]
-			globals.STS = globals.STS[1:]
-			globals.STSMutex.Unlock()
+			var process globals.Process
+			var found bool = false // ?
 
-			go func(p *globals.Process) {
-				SendToExecute(p)
+			globals.ReadyQueueMutex.Lock()
+			if len(globals.ReadyQueue) != 0 {
+				process = globals.ReadyQueue[0]
+				globals.ReadyQueue = globals.ReadyQueue[1:]
+				found = true
+			}
+			globals.ReadyQueueMutex.Unlock()
+
+			if !found {
+				<-globals.STSEmpty
+				continue
+			}
+
+			go func(p *globals.Process, c *globals.CPUConnection) {
+				SendToExecute(p, c)
 				globals.WaitingForCPU <- struct{}{}
-			}(&process)
+			}(&process, cpu)
 
 			<-globals.WaitingForCPU
 		case "SJF":
@@ -136,30 +183,18 @@ func STS() {
 	}
 }
 
-func SendToExecute(process *globals.Process) {
+func SendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	lastState := process.PCB.GetState()
 	process.PCB.SetState(pcb.EXEC)
 	actualState := process.PCB.GetState()
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 
-	cpus := kernel_api.GetCPUList(false)
+	cpu.Working = true
 
-	if slices.IsEmpty(cpus) {
-		for {
-			cpus = kernel_api.GetCPUList(false)
-
-			if len(cpus) != 0 {
-				break
-			}
-			<-globals.AvailableCpu // Aca deberia buscar donde guardo las nuevas CPUs, y mandar la señal.
-		}
-	}
-
-	cpu := cpus[0]
-
-	globals.ProcessExec = append(globals.ProcessExec, globals.CurrentProcess{
-		Cpu:     cpu,
+	// ? Saco ExecQueue por esta mientras
+	globals.ProcessesInExec = append(globals.ProcessesInExec, globals.CurrentProcess{
+		Cpu:     *cpu,
 		Process: *process,
 	})
 
@@ -168,7 +203,7 @@ func SendToExecute(process *globals.Process) {
 		PC:  process.PCB.GetPC(),
 	}
 
-	dispatchResp, err := kernel_api.SendToWork(cpu, request)
+	dispatchResp, err := kernel_api.SendToWork(*cpu, request)
 
 	if err != nil {
 		logger.Instance.Error("Error al enviar el proceso a la CPU", "error", err)
@@ -177,7 +212,9 @@ func SendToExecute(process *globals.Process) {
 
 	switch dispatchResp.Motivo {
 	case "Interrupt":
+		// Temp
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue interrumpido por la CPU", dispatchResp.PID))
+		QueueToReady(process)
 		return
 	case "Exit":
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", dispatchResp.PID))

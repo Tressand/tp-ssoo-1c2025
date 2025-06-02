@@ -10,7 +10,6 @@ import (
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
-	slices "ssoo-utils/slices"
 )
 
 func CreateProcess(path string, size int) {
@@ -23,14 +22,13 @@ func CreateProcess(path string, size int) {
 		Size: size,
 	}
 
-	QueueToLTS(newProcess)
+	QueueToNew(newProcess)
 
 	logger.RequiredLog(true, newProcess.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": newProcess.PCB.GetState().String(), "Tamaño": fmt.Sprintf("%d KB", size)})
 }
 
-// TODO :
 func SearchProcessInExec(id string) (*globals.Process, error) {
-	for _, processExec := range globals.ProcessExec {
+	for _, processExec := range globals.ProcessesInExec {
 		if processExec.Cpu.ID == id {
 			fmt.Printf("Proceso de pid %v encontrado", processExec.Process.PCB.GetPID())
 			return &processExec.Process, nil
@@ -72,7 +70,7 @@ func TerminateProcess(process *globals.Process) {
 
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
 
-	if slices.IsEmpty(globals.ReadySusp) { // TODO: Los procesos en READY SUSPEND van en la cola LTS. Falta implementar algo como isPresent(state) y findFirst(state)
+	if len(globals.SuspReadyQueue) == 0 && globals.ProcessWaiting {
 		globals.RetryProcessCh <- struct{}{}
 		fmt.Println("No hay procesos en SUSP. READY. Se intenta inicializar el proceso en memoria")
 	} else {
@@ -81,13 +79,13 @@ func TerminateProcess(process *globals.Process) {
 
 }
 
-func QueueToLTS(process globals.Process) {
-	globals.LTSMutex.Lock()
-	defer globals.LTSMutex.Unlock()
-	globals.LTS = append(globals.LTS, process)
+func QueueToNew(process globals.Process) {
+	globals.NewQueueMutex.Lock()
+	defer globals.NewQueueMutex.Unlock()
+	globals.NewQueue = append(globals.NewQueue, process)
 
-	if len(globals.LTS) == 1 && globals.SchedulerStatus == "START" { // Estaba vacia
-		globals.LTSEmpty <- struct{}{}
+	if len(globals.NewQueue) == 1 && globals.SchedulerStatus == "START" { // Estaba vacia
+		globals.LTSEmpty <- struct{}{} // ? Revisar sí sirve tomando en cuenta que ahora hay 2 colas
 	}
 
 }
