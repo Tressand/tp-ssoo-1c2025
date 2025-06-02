@@ -12,6 +12,7 @@ import (
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
+	"ssoo-utils/pcb"
 	"strconv"
 	"time"
 )
@@ -184,6 +185,11 @@ func RecieveSyscall() http.HandlerFunc {
 
 			if !deviceFound {
 
+				lastState := proceso.PCB.GetState()
+				proceso.PCB.SetState(pcb.EXIT)
+				actualState := proceso.PCB.GetState()
+				logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
+
 				processes.TerminateProcess(proceso)
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Dispositivo no existe - proceso terminado"))
@@ -242,6 +248,11 @@ func RecieveSyscall() http.HandlerFunc {
 		case codeutils.DUMP_MEMORY:
 
 		case codeutils.EXIT:
+
+			lastState := proceso.PCB.GetState()
+			proceso.PCB.SetState(pcb.EXIT)
+			actualState := proceso.PCB.GetState()
+			logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 
 			processes.TerminateProcess(proceso)
 

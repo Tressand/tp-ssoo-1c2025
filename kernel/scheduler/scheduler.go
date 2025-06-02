@@ -16,7 +16,7 @@ import (
 func LTS() {
 	<-globals.LTSStopped
 	globals.SchedulerStatus = "START"
-	logger.Instance.Debug("El planificador ha iniciado")
+	logger.Instance.Debug("El planificador iniciado")
 
 	for {
 		switch config.Values.ReadyIngressAlgorithm {
@@ -131,9 +131,7 @@ func InitProcess(process *globals.Process) {
 		if err == nil {
 			slog.Info("Proceso inicializado en memoria", "name", process.PCB.GetPID())
 			QueueToReady(process)
-			slog.Info("No me bloqueo en QueueToReady")
 			globals.ProcessWaiting = false
-			slog.Info("Se desbloquea el canal waitMemory luego de inicializar el proceso")
 			logger.Instance.Debug("Se desbloquea el canal waitMemory luego de inicializar el proceso", "pid", process.PCB.GetPID())
 			return
 		} else {
@@ -193,7 +191,7 @@ func STS() {
 				slog.Info("Me estoy bloqueando en STS porque no hay procesos en READY")
 				<-globals.STSEmpty
 				globals.WaitingProcessInReady = false
-				slog.Info("Me estoy desbloqueo en STS porque ya hay procesos en READY")
+				slog.Info("Me desbloqueo en STS porque hay procesos en READY")
 				continue
 			}
 
@@ -241,7 +239,6 @@ func SendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	switch dispatchResp.Motivo {
 	case "Interrupt":
-		// Temp
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue interrumpido por la CPU", dispatchResp.PID))
 		QueueToReady(process)
 		return

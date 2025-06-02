@@ -32,7 +32,7 @@ var (
 	CpuListMutex  sync.Mutex
 
 	SchedulerStatus string
-	NextPID         uint = 0
+	NextPID         uint = 1 // ?
 	PIDMutex        sync.Mutex
 	ProcessWaiting  bool             = false
 	ProcessesInExec []CurrentProcess = make([]CurrentProcess, 0)
