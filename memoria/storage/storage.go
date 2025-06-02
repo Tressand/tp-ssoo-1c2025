@@ -24,23 +24,33 @@ type process_data struct {
 	metrics   memory_metrics
 }
 
-func GetDataByPID(pid uint) (data *process_data, index int) {
+func GetDataByPID(pid uint) *process_data {
 	for index, process := range systemMemory {
 		if process.pid == pid {
-			return &systemMemory[index], index
+			return &systemMemory[index]
 		}
 	}
-	return nil, -1
+	return nil
+}
+
+func GetIndexByPID(pid uint) int {
+	for index, process := range systemMemory {
+		if process.pid == pid {
+			return index
+		}
+	}
+	return -1
 }
 
 func GetInstruction(pid uint, pc int) (*instruction, error) {
-	targetProcess, _ := GetDataByPID(pid)
+	targetProcess := GetDataByPID(pid)
 	if targetProcess == nil {
 		return nil, errors.New("process pid=" + fmt.Sprint(pid) + " does not exist")
 	}
 	if pc >= len(targetProcess.code) {
 		return nil, errors.New("out of scope program counter")
 	}
+	targetProcess.metrics.Instructions_requested++
 	return &targetProcess.code[pc], nil
 }
 
@@ -127,7 +137,7 @@ func CreateProcess(newpid uint, codeFile io.Reader, memoryRequirement int) error
 }
 
 func DeleteProcess(pidToDelete uint) error {
-	_, index := GetDataByPID(pidToDelete)
+	index := GetIndexByPID(pidToDelete)
 	if index == -1 {
 		return errors.New("could not find pid to delete")
 	}
@@ -174,6 +184,50 @@ func GetRemainingMemory() int {
 	return remainingMemory
 }
 
+func getFromPage(base int, delta int) (byte, error) {
+	if base+delta > memorySize || delta >= paginationConfig.pageSize || delta < 0 {
+		return 0, errors.New("out of bounds page memory access")
+	}
+	return userMemory[base+delta], nil
+}
+
+func GetLogicAddress(pid uint, address []int) (byte, error) {
+	levels := paginationConfig.levels
+	pageTableSize := paginationConfig.entriesPerPage
+	pageSize := paginationConfig.pageSize
+	if len(address) != paginationConfig.levels+1 {
+		return 0, errors.New(fmt.Sprint("address not matching pagination of ", levels, " levels"))
+	}
+	delta := address[len(address)-1]
+	address = address[:len(address)-1]
+
+	var processPageIndex int
+	var processPageBases []int
+	process := GetDataByPID(pid)
+	if process == nil {
+		return 0, errors.New("could't find process with pid")
+	}
+	processPageBases = process.pageBases
+
+	var f_pageTableSize float64 = float64(pageTableSize)
+	var f_levels float64 = float64(levels)
+	for i, num := range address {
+		if num < 0 || num >= pageTableSize {
+			return 0, errors.New("out of bounds page table access")
+		}
+		processPageIndex += num * int(math.Pow(f_pageTableSize, f_levels-1-float64(i)))
+	}
+
+	if processPageIndex >= len(processPageBases) {
+		return 0, errors.New("out of bounds process memory access")
+	}
+
+	addressBase := processPageBases[processPageIndex]
+
+	fmt.Println("Page:", processPageBases[processPageIndex]/pageSize, "Base: ", addressBase, ". Delta: ", delta)
+	return getFromPage(addressBase, delta)
+}
+
 func logPage(pageBase int) {
 	var msg string = "----------\n"
 
@@ -201,7 +255,7 @@ func InitializeUserMemory(size int, pSize int, entriesPerPage int, levels int) {
 
 	paginationConfig = PaginationConfig{
 		entriesPerPage: entriesPerPage,
-		levels:         levels - 1,
+		levels:         levels,
 		pageSize:       pSize,
 	}
 	nPages = memorySize / pSize
@@ -220,7 +274,7 @@ func InitializeUserMemory(size int, pSize int, entriesPerPage int, levels int) {
 
 func allocateMemory(size int) ([]int, error) {
 	if size > remainingMemory {
-		return nil, errors.New("not enough memory.")
+		return nil, errors.New("not enough memory")
 	}
 	requiredPages := int(math.Ceil(float64(size) / float64(paginationConfig.pageSize)))
 	slog.Info("allocating memory", "bytes", size, "pages", requiredPages)
@@ -245,7 +299,7 @@ func allocateMemory(size int) ([]int, error) {
 }
 
 func deallocateMemory(pid uint) error {
-	process_data, _ := GetDataByPID(pid)
+	process_data := GetDataByPID(pid)
 	if process_data == nil {
 		return errors.New("couldn't find process with id")
 	}

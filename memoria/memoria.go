@@ -14,6 +14,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
+	"strings"
 )
 
 func main() {
@@ -38,8 +39,13 @@ func main() {
 	var mux *http.ServeMux = http.NewServeMux()
 
 	// Add routes to mux
-	mux.Handle("/process", processRequestHandler())
+	mux.Handle("/system_memory", systemMemoryReqHandler())
+	// mux.Handle("/user_memory", userMemoryReqHandler())
+	// mux.Handle("/memory_dump", memoryDumpReqHandler())
+	// mux.Handle("/full_page", fullPageReqHandler())
+	// mux.Handle("/memory_config", memoryConfigReqHandler())
 	mux.Handle("/free_space", freeSpaceRequestHandler())
+
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
 	shutdownSignal := make(chan any)
@@ -95,6 +101,26 @@ func main() {
 		storage.DeleteProcess(processes[i].PID)
 	})
 	mainMenu.Add("Log processes", storage.LogSystemMemory)
+	mainMenu.Add("Test Logic Address", func() {
+	START:
+		for {
+			fmt.Print("Address: ")
+			var input string
+			fmt.Scanln(&input)
+			sliceAddress := strings.Split(input, "|")
+			address := make([]int, len(sliceAddress))
+			for i, char := range sliceAddress {
+				num, err := strconv.Atoi(char)
+				if err != nil {
+					fmt.Println("Invalid Address.")
+					goto START
+				}
+				address[i] = num
+			}
+			fmt.Println("Final Address: ", address)
+			fmt.Println(storage.GetLogicAddress(3, address))
+		}
+	})
 	mainMenu.Add("Close Server and Exit Program", func() {
 		shutdownSignal <- struct{}{}
 		<-shutdownSignal
@@ -109,12 +135,47 @@ func main() {
 
 }
 
-func freeSpaceRequestHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Header().Add("contentType", "text/plain")
-		w.Write([]byte(fmt.Sprint(storage.GetRemainingMemory())))
+type MethodRequestInfo struct {
+	ReqParams []string
+	Callback  func(w http.ResponseWriter, r *http.Request) SimpleResponse
+}
+
+type SimpleResponse struct {
+	Status int
+	Body   []byte
+}
+
+func (response SimpleResponse) send(w http.ResponseWriter) {
+	w.WriteHeader(response.Status)
+	_, err := w.Write(response.Body)
+	if err != nil {
+		slog.Error("error sending response", "status", response.Status, "body", response.Body)
 	}
+}
+
+type RequestOptions map[string]MethodRequestInfo
+
+func genericRequestHandler(w http.ResponseWriter, r *http.Request, options RequestOptions) {
+	defer r.Body.Close()
+	fmt.Println("Request: ", r.Method, ":/", r.URL.String())
+	requestInfo, ok := options[r.Method]
+	if !ok {
+		SimpleResponse{http.StatusMethodNotAllowed, []byte("method " + r.Method + " not allowed")}.send(w)
+		return
+	}
+	params := r.URL.Query()
+	for _, query := range requestInfo.ReqParams {
+		if !params.Has(query) {
+			SimpleResponse{http.StatusBadRequest, []byte("missing " + query + " query param")}.send(w)
+			return
+		}
+	}
+	requestInfo.Callback(w, r).send(w)
+}
+
+func numFromQuery(r *http.Request, key string) int {
+	val, _ := strconv.Atoi(r.URL.Query().Get(key))
+	return val
 }
 
 // esta API de procesos acepta GET, POST y DELETE.
@@ -127,72 +188,73 @@ func freeSpaceRequestHandler() http.HandlerFunc {
 
 // POST:
 
-// 	recibe 2 querys: pid y nombre del archivo de código, la detección de la dirección de dicho archivo es automática.
+// 	recibe 2 querys: pid y size.
+//  recibe el código por body de request.
 // 	devuelve 200:OK si creó el proceso
 
 // DELETE:
 
 // recibe 1 query: pid
 // devuelve 200:OK si encontró el proceso y lo borra.
-func processRequestHandler() http.HandlerFunc {
+
+func systemMemoryReqHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		fmt.Println("Request: ", r.Method, ":/", r.RequestURI)
-		params := r.URL.Query()
-		if !params.Has("pid") {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("missing pid"))
-			return
+		get := MethodRequestInfo{
+			ReqParams: []string{"pid", "pc"},
+			Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+				instruction, err := storage.GetInstruction(
+					uint(numFromQuery(r, "pid")),
+					numFromQuery(r, "pc"),
+				)
+				if err != nil {
+					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
+				}
+				body, err := json.Marshal(instruction)
+				if err != nil {
+					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
+				}
+				return SimpleResponse{200, body}
+			},
 		}
-		conv, _ := strconv.ParseUint(params.Get("pid"), 10, 0)
-		pid := uint(conv)
-
-		switch r.Method {
-		case "GET":
-			if !params.Has("pc") {
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte("missing pc"))
-				return
-			}
-			pc, _ := strconv.Atoi(params.Get("pc"))
-			instruction, err := storage.GetInstruction(pid, pc)
-			if err != nil {
-				w.WriteHeader(http.StatusBadGateway)
-				w.Write([]byte(err.Error()))
-				return
-			}
-			body, err := json.Marshal(instruction)
-			if err != nil {
-				w.WriteHeader(http.StatusBadGateway)
-				w.Write([]byte(err.Error()))
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-			w.Write(body)
-
-		case "POST":
-			if !params.Has("req") {
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte("missing memory requirement"))
-				return
-			}
-			req, _ := strconv.Atoi(params.Get("req"))
-			err := storage.CreateProcess(pid, r.Body, req)
-			if err != nil {
-				w.WriteHeader(http.StatusBadGateway)
-				w.Write([]byte(err.Error()))
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-
-		case "DELETE":
-			err := storage.DeleteProcess(pid)
-			if err != nil {
-				w.WriteHeader(http.StatusBadGateway)
-				w.Write([]byte(err.Error()))
-				return
-			}
-			w.WriteHeader(http.StatusOK)
+		post := MethodRequestInfo{
+			ReqParams: []string{"pid", "size"},
+			Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+				err := storage.CreateProcess(
+					uint(numFromQuery(r, "pid")),
+					r.Body,
+					numFromQuery(r, "size"),
+				)
+				if err != nil {
+					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
+				}
+				return SimpleResponse{200, []byte{}}
+			},
 		}
+		delete := MethodRequestInfo{
+			ReqParams: []string{"pid"},
+			Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+				err := storage.DeleteProcess(uint(numFromQuery(r, "pid")))
+				if err != nil {
+					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
+				}
+				return SimpleResponse{200, []byte{}}
+			},
+		}
+
+		options := RequestOptions{
+			"GET":    get,
+			"POST":   post,
+			"DELETE": delete,
+		}
+
+		genericRequestHandler(w, r, options)
+	}
+}
+
+func freeSpaceRequestHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Header().Add("contentType", "text/plain")
+		w.Write([]byte(fmt.Sprint(storage.GetRemainingMemory())))
 	}
 }
