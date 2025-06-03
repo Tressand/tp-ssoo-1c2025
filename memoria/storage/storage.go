@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"slices"
 	"ssoo-memoria/config"
 	"ssoo-utils/codeutils"
 	"strconv"
@@ -16,11 +17,11 @@ import (
 	"time"
 )
 
+//#region SECTION: SYSTEM MEMORY
+
 type instruction = codeutils.Instruction
 
 var opcodeStrings map[codeutils.Opcode]string = codeutils.OpcodeStrings
-
-//#region SECTION: SYSTEM MEMORY
 
 type process_data struct {
 	pid       uint
@@ -34,7 +35,7 @@ func (p process_data) String() string {
 	msg += "|  PID: " + fmt.Sprint(p.pid) + "\n|\n"
 	msg += "|  Reserved pages: ["
 	for _, base := range p.pageBases {
-		msg += fmt.Sprint(base/paginationConfig.pageSize) + ", "
+		msg += fmt.Sprint(base/paginationConfig.PageSize) + ", "
 	}
 	msg = msg[:len(msg)-2] + "]\n|\n"
 	msg += "|  Code (" + fmt.Sprint(len(p.code)) + " instructions)\n"
@@ -90,7 +91,7 @@ func GetProcesses() []BasicProcessData {
 	for _, process := range systemMemory {
 		processes = append(processes, BasicProcessData{
 			PID:  process.pid,
-			Size: len(process.pageBases) * paginationConfig.pageSize,
+			Size: len(process.pageBases) * paginationConfig.PageSize,
 		})
 	}
 	return processes
@@ -176,12 +177,14 @@ type memory_metrics struct {
 }
 
 type PaginationConfig struct {
-	pageSize       int
-	entriesPerPage int
-	levels         int
+	PageSize       int `json:"page_size"`
+	EntriesPerPage int `json:"entries_per_page"`
+	Levels         int `json:"levels"`
 }
 
 var paginationConfig PaginationConfig
+
+func GetConfig() PaginationConfig { return paginationConfig }
 
 var memorySize int
 var remainingMemory = 0
@@ -193,17 +196,16 @@ func writeToMemory(index int, value byte) {
 	userMemory[index] = value
 	userMemoryMutex.Unlock()
 }
+func GetRemainingMemory() int {
+	return remainingMemory
+}
 
 var nPages int
 var pageBases []int
 var reservationBits []bool
 
-func GetRemainingMemory() int {
-	return remainingMemory
-}
-
 func getFromPage(base int, delta int) (byte, error) {
-	if base+delta > memorySize || delta >= paginationConfig.pageSize || delta < 0 {
+	if base+delta > memorySize || delta >= paginationConfig.PageSize || delta < 0 {
 		return 0, errors.New("out of bounds page memory access")
 	}
 	return userMemory[base+delta], nil
@@ -219,10 +221,10 @@ func StringToLogicAddress(str string) []int {
 }
 
 func logicToPhysicalAddress(pid uint, address []int) (base int, delta int, processPageIndex int, err error) {
-	levels := paginationConfig.levels
-	pageTableSize := paginationConfig.entriesPerPage
-	pageSize := paginationConfig.pageSize
-	if len(address) != paginationConfig.levels+1 {
+	levels := paginationConfig.Levels
+	pageTableSize := paginationConfig.EntriesPerPage
+	pageSize := paginationConfig.PageSize
+	if len(address) != paginationConfig.Levels+1 {
 		err = errors.New(fmt.Sprint("address not matching pagination of ", levels, " levels"))
 		return
 	}
@@ -290,13 +292,20 @@ func WriteToLogicAddress(pid uint, address []int, value []byte) error {
 	return nil
 }
 
+func PageToByteArray(pageBase int) ([]byte, error) {
+	if !slices.Contains(pageBases, pageBase) {
+		return nil, errors.New("page base not valid")
+	}
+	return userMemory[pageBase : pageBase+paginationConfig.PageSize], nil
+}
+
 func pageToString(pageBase int) string {
 	var msg string = "["
-	for delta := range paginationConfig.pageSize {
-		val, err := getFromPage(pageBase, delta)
-		if err != nil {
-			return "Error reading page. " + err.Error()
-		}
+	page, err := PageToByteArray(pageBase)
+	if err != nil {
+		return "Error reading page. " + err.Error()
+	}
+	for _, val := range page {
 		if val == 0 {
 			msg += "˽"
 		} else {
@@ -348,9 +357,9 @@ func InitializeUserMemory() {
 	}
 
 	paginationConfig = PaginationConfig{
-		entriesPerPage: entriesPerPage,
-		levels:         levels,
-		pageSize:       pSize,
+		EntriesPerPage: entriesPerPage,
+		Levels:         levels,
+		PageSize:       pSize,
 	}
 	nPages = memorySize / pSize
 	if memorySize%pSize != 0 {
@@ -366,13 +375,15 @@ func InitializeUserMemory() {
 	slog.Info("Paginación realizada", "cantidad_de_paginas", nPages)
 }
 
+// #region MALLOC/FREE
+
 func allocateMemory(size int) ([]int, error) {
 	if size > remainingMemory {
 		return nil, errors.New("not enough memory")
 	}
-	requiredPages := int(math.Ceil(float64(size) / float64(paginationConfig.pageSize)))
+	requiredPages := int(math.Ceil(float64(size) / float64(paginationConfig.PageSize)))
 	slog.Info("allocating memory", "bytes", size, "pages", requiredPages)
-	remainingMemory -= paginationConfig.pageSize * requiredPages
+	remainingMemory -= paginationConfig.PageSize * requiredPages
 	if remainingMemory < 0 {
 		panic("memory got negative, wtf.")
 	}
@@ -398,10 +409,12 @@ func deallocateMemory(pid uint) error {
 		return errors.New("couldn't find process with id")
 	}
 	for _, pageBase := range process_data.pageBases {
-		reservationBits[pageBase/paginationConfig.pageSize] = false
+		reservationBits[pageBase/paginationConfig.PageSize] = false
 	}
-	remainingMemory += len(process_data.pageBases) * paginationConfig.pageSize
+	remainingMemory += len(process_data.pageBases) * paginationConfig.PageSize
 	return nil
 }
+
+//#endregion
 
 //#endregion

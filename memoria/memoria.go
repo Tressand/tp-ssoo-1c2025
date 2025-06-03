@@ -43,8 +43,8 @@ func main() {
 	mux.Handle("/process", processDataReqHandler())
 	mux.Handle("/user_memory", userMemoryReqHandler())
 	mux.Handle("/memory_dump", memoryDumpReqHandler())
-	// mux.Handle("/full_page", fullPageReqHandler())
-	// mux.Handle("/memory_config", memoryConfigReqHandler())
+	mux.Handle("/full_page", fullPageReqHandler())
+	mux.Handle("/memory_config", memoryConfigReqHandler())
 	mux.Handle("/free_space", freeSpaceRequestHandler())
 
 	// Sending anything to this channel will shutdown the server.
@@ -139,6 +139,8 @@ func main() {
 
 }
 
+// #region GENERIC REQUEST API REST HANDLER
+
 type MethodRequestInfo struct {
 	ReqParams []string
 	Callback  func(w http.ResponseWriter, r *http.Request) SimpleResponse
@@ -181,6 +183,10 @@ func numFromQuery(r *http.Request, key string) int {
 	val, _ := strconv.Atoi(r.URL.Query().Get(key))
 	return val
 }
+
+// #endregion
+
+// #region APIS
 
 // esta API de procesos acepta GET, POST y DELETE.
 // todas las peticiones devuelven 502:BadGateway si tuvo un error interno y 400:BadRequest si la petición está mal.
@@ -297,18 +303,43 @@ func memoryDumpReqHandler() http.HandlerFunc {
 		}
 		err := storage.Memory_Dump(uint(numFromQuery(r, "pid")))
 		if err != nil {
-			w.WriteHeader(http.StatusBadGateway)
-			w.Write([]byte(err.Error()))
+			SimpleResponse{http.StatusBadGateway, []byte(err.Error())}.send(w)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
-func freeSpaceRequestHandler() http.HandlerFunc {
+func memoryConfigReqHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Header().Add("contentType", "text/plain")
-		w.Write([]byte(fmt.Sprint(storage.GetRemainingMemory())))
+		body, err := json.Marshal(storage.GetConfig())
+		if err != nil {
+			SimpleResponse{http.StatusBadGateway, []byte(err.Error())}.send(w)
+			return
+		}
+		SimpleResponse{http.StatusOK, body}.send(w)
 	}
 }
+
+func fullPageReqHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !r.URL.Query().Has("address") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		body, err := storage.PageToByteArray(numFromQuery(r, "address"))
+		if err != nil {
+			SimpleResponse{http.StatusBadGateway, []byte(err.Error())}.send(w)
+			return
+		}
+		SimpleResponse{http.StatusOK, body}.send(w)
+	}
+}
+
+func freeSpaceRequestHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		SimpleResponse{http.StatusOK, []byte(fmt.Sprint(storage.GetRemainingMemory()))}.send(w)
+	}
+}
+
+// #endregion
