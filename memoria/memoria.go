@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,9 +40,9 @@ func main() {
 	var mux *http.ServeMux = http.NewServeMux()
 
 	// Add routes to mux
-	mux.Handle("/system_memory", systemMemoryReqHandler())
-	// mux.Handle("/user_memory", userMemoryReqHandler())
-	// mux.Handle("/memory_dump", memoryDumpReqHandler())
+	mux.Handle("/process", processDataReqHandler())
+	mux.Handle("/user_memory", userMemoryReqHandler())
+	mux.Handle("/memory_dump", memoryDumpReqHandler())
 	// mux.Handle("/full_page", fullPageReqHandler())
 	// mux.Handle("/memory_config", memoryConfigReqHandler())
 	mux.Handle("/free_space", freeSpaceRequestHandler())
@@ -52,6 +53,8 @@ func main() {
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortMemory, mux, shutdownSignal)
 
 	// #endregion
+
+	storage.InitializeUserMemory()
 
 	// #region MENU
 
@@ -198,7 +201,7 @@ func numFromQuery(r *http.Request, key string) int {
 // recibe 1 query: pid
 // devuelve 200:OK si encontró el proceso y lo borra.
 
-func systemMemoryReqHandler() http.HandlerFunc {
+func processDataReqHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		get := MethodRequestInfo{
 			ReqParams: []string{"pid", "pc"},
@@ -214,7 +217,7 @@ func systemMemoryReqHandler() http.HandlerFunc {
 				if err != nil {
 					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
 				}
-				return SimpleResponse{200, body}
+				return SimpleResponse{http.StatusOK, body}
 			},
 		}
 		post := MethodRequestInfo{
@@ -228,7 +231,7 @@ func systemMemoryReqHandler() http.HandlerFunc {
 				if err != nil {
 					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
 				}
-				return SimpleResponse{200, []byte{}}
+				return SimpleResponse{http.StatusOK, []byte{}}
 			},
 		}
 		delete := MethodRequestInfo{
@@ -238,7 +241,7 @@ func systemMemoryReqHandler() http.HandlerFunc {
 				if err != nil {
 					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
 				}
-				return SimpleResponse{200, []byte{}}
+				return SimpleResponse{http.StatusOK, []byte{}}
 			},
 		}
 
@@ -249,6 +252,56 @@ func systemMemoryReqHandler() http.HandlerFunc {
 		}
 
 		genericRequestHandler(w, r, options)
+	}
+}
+
+func userMemoryReqHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		get := MethodRequestInfo{
+			ReqParams: []string{"pid", "address"},
+			Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+				result, err := storage.GetLogicAddress(
+					uint(numFromQuery(r, "pid")),
+					storage.StringToLogicAddress(r.URL.Query().Get("address")),
+				)
+				if err != nil {
+					return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
+				}
+				return SimpleResponse{http.StatusOK, []byte{result}}
+			},
+		}
+		post := MethodRequestInfo{
+			ReqParams: []string{"pid", "address"},
+			Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+				value, _ := io.ReadAll(r.Body)
+				err := storage.WriteToLogicAddress(uint(numFromQuery(r, "pid")), storage.StringToLogicAddress(r.URL.Query().Get("address")), value)
+				if err != nil {
+					return SimpleResponse{http.StatusBadRequest, []byte(err.Error())}
+				}
+				return SimpleResponse{http.StatusOK, []byte{}}
+			},
+		}
+		options := RequestOptions{
+			"GET":  get,
+			"POST": post,
+		}
+		genericRequestHandler(w, r, options)
+	}
+}
+
+func memoryDumpReqHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !r.URL.Query().Has("pid") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		err := storage.Memory_Dump(uint(numFromQuery(r, "pid")))
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 

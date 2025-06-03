@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -220,11 +219,10 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 		},
 	})
 
-	resp, err := http.Post(url,http.MethodPost,http.NoBody)
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("error al serializar instruccion: %w", err)
 	}
-
 
 	return resp, nil
 }
