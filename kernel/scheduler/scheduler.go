@@ -1,14 +1,19 @@
 package scheduler
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"sort"
 	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	processes "ssoo-kernel/processes"
+	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 )
@@ -170,7 +175,7 @@ func STS() {
 			continue
 		} else {
 			globals.WaitingForCPU = false
-			cpu = &kernel_api.GetCPUList(false)[0]
+			cpu = kernel_api.GetCPUList(false)[0]
 		}
 
 		switch config.Values.SchedulerAlgorithm {
@@ -196,8 +201,9 @@ func STS() {
 			}
 
 			go func(p *globals.Process, c *globals.CPUConnection) {
-				SendToExecute(p, c)
+				sendToExecute(p, c)
 			}(process, cpu)
+
 		case "SJF":
 			fmt.Println("SJF")
 			return
@@ -211,26 +217,30 @@ func STS() {
 	}
 }
 
-func SendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
+func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	lastState := process.PCB.GetState()
 	process.PCB.SetState(pcb.EXEC)
 	actualState := process.PCB.GetState()
 	logger.RequiredLog(true, process.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 
-	cpu.Working = true
+	changeAvailableCpu(cpu, true)
 
-	globals.ProcessesInExec = append(globals.ProcessesInExec, globals.CurrentProcess{
-		Cpu:     *cpu,
-		Process: *process,
+	logger.Instance.Debug("cpusAvailable", "available", globals.AvailableCPUs)
+
+	globals.ExecQueueMutex.Lock()
+	globals.ExecQueue = append(globals.ExecQueue, globals.CPUSlot{
+		Cpu:     cpu,
+		Process: process,
 	})
+	globals.ExecQueueMutex.Unlock()
 
 	request := globals.CPURequest{
 		PID: process.PCB.GetPID(),
 		PC:  process.PCB.GetPC(),
 	}
 
-	dispatchResp, err := kernel_api.SendToWork(*cpu, request)
+	dispatchResp, err := sendToWork(*cpu, request)
 
 	if err != nil {
 		logger.Instance.Error("Error al enviar el proceso a la CPU", "error", err)
@@ -240,7 +250,9 @@ func SendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 	switch dispatchResp.Motivo {
 	case "Interrupt":
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue interrumpido por la CPU", dispatchResp.PID))
+
 		QueueToReady(process)
+		changeAvailableCpu(cpu, false)
 		return
 	case "Exit":
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", dispatchResp.PID))
@@ -251,3 +263,61 @@ func SendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 	}
 
 }
+
+func changeAvailableCpu(cpu *globals.CPUConnection, working bool) {
+	globals.CpuListMutex.Lock()
+	defer globals.CpuListMutex.Unlock()
+	for i := range globals.AvailableCPUs {
+		if globals.AvailableCPUs[i].ID == cpu.ID {
+			globals.AvailableCPUs[i].Working = working
+			break
+		}
+	}
+}
+
+func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) (globals.DispatchResponse, error) {
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       cpu.IP,
+		Port:     cpu.Port,
+		Endpoint: "dispatch",
+	})
+
+	jsonRequest, err := json.Marshal(request)
+	if err != nil {
+		logger.Instance.Error("Error marshaling request to JSON", "error", err)
+		return globals.DispatchResponse{}, err
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewReader(jsonRequest))
+	if err != nil {
+		logger.Instance.Error("Error making POST request", "error", err)
+		return globals.DispatchResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusTeapot {
+			logger.Instance.Warn("Server requested shutdown")
+			return globals.DispatchResponse{}, fmt.Errorf("server asked for shutdown")
+		}
+		logger.Instance.Error("Unexpected status code from CPU", "status", resp.StatusCode)
+		return globals.DispatchResponse{}, fmt.Errorf("unexpected response status: %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Instance.Error("Error reading response body", "error", err)
+		return globals.DispatchResponse{}, err
+	}
+
+	var dispatchResp globals.DispatchResponse
+	err = json.Unmarshal(data, &dispatchResp)
+	if err != nil {
+		logger.Instance.Error("Error unmarshaling response", "error", err)
+		return globals.DispatchResponse{}, err
+	}
+
+	return dispatchResp, nil
+}
+
+

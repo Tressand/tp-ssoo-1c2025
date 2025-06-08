@@ -22,28 +22,38 @@ var (
 	ExitQueue      []Process = make([]Process, 0)
 	ExitQueueMutex sync.Mutex
 
-	BlockedQueue      []Process = make([]Process, 0)
+	BlockedQueue      []BlockedProcess = make([]BlockedProcess, 0)
 	BlockedQueueMutex sync.Mutex
+
+	ExecQueue      []CPUSlot = make([]CPUSlot, 0)
+	ExecQueueMutex sync.Mutex
+
 	//
 	AvailableIOs []IOConnection
 	AvIOmu       sync.Mutex
 
-	AvailableCPUs []CPUConnection
-	CpuListMutex  sync.Mutex
+	AvailableCPUs   []CPUConnection = make([]CPUConnection, 0)
+	CpuListMutex    sync.Mutex
 
 	SchedulerStatus string
 	NextPID         uint = 1 // ?
 	PIDMutex        sync.Mutex
-	ProcessWaiting  bool             = false
-	ProcessesInExec []CurrentProcess = make([]CurrentProcess, 0)
-	LTS             []Process        = make([]Process, 0)
+
+	ProcessWaiting  bool      = false
+
+	LTS             []Process = make([]Process, 0)
 	LTSMutex        sync.Mutex
+
 	STS             []Process = make([]Process, 0)
 	STSMutex        sync.Mutex
+
 	MTS             []Process = make([]Process, 0)
 	MTSMutex        sync.Mutex
+
 	LTSEmpty        = make(chan struct{})
 	STSEmpty        = make(chan struct{})
+	MTSEmpty        = make(chan struct{})
+	
 	AvailableCpu    = make(chan struct{}, 1) // Esto me parece que esta de más
 	PCBReceived     = make(chan struct{}, 1)
 	LTSStopped      = make(chan struct{})
@@ -52,6 +62,7 @@ var (
 	WaitingForMemory           = make(chan struct{}, 1)
 	WaitingForCPU         bool = false
 	WaitingInLTS          bool = false
+	WaitingInMTS          bool = false
 	WaitingProcessInReady bool = false
 )
 
@@ -66,9 +77,15 @@ type IORequest struct {
 	Timer int
 }
 
-type CurrentProcess struct {
-	Cpu     CPUConnection
-	Process Process
+type BlockedProcess struct {
+	Process     Process
+	IORequest   IORequest
+	ioAvailable chan struct{}
+}
+
+type CPUSlot struct {
+	Cpu     *CPUConnection
+	Process *Process
 }
 
 type CPUConnection struct {

@@ -39,11 +39,11 @@ func QueueToNew(process globals.Process) {
 	logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se encola en NEW", process.PCB.GetPID()))
 }
 
-func SearchProcessInExec(id string) (*globals.Process, error) {
-	for _, processExec := range globals.ProcessesInExec {
-		if processExec.Cpu.ID == id {
-			fmt.Printf("Proceso de pid %v encontrado", processExec.Process.PCB.GetPID())
-			return &processExec.Process, nil
+func SearchProcessWorking(id string) (*globals.Process, error) {
+	for _, processWorking := range globals.ExecQueue {
+		if processWorking.Cpu.ID == id {
+			fmt.Printf("Proceso de pid %v encontrado", processWorking.Process.PCB.GetPID())
+			return processWorking.Process, nil
 		}
 	}
 

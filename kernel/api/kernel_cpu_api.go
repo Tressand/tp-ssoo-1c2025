@@ -1,74 +1,26 @@
 package kernel_api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"ssoo-kernel/globals"
 	"ssoo-kernel/processes"
 	"ssoo-utils/codeutils"
-	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	"strconv"
 	"time"
 )
 
-func SendToWork(cpu globals.CPUConnection, request globals.CPURequest) (globals.DispatchResponse, error) {
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       cpu.IP,
-		Port:     cpu.Port,
-		Endpoint: "dispatch",
-	})
-
-	jsonRequest, err := json.Marshal(request)
-	if err != nil {
-		logger.Instance.Error("Error marshaling request to JSON", "error", err)
-		return globals.DispatchResponse{}, err
-	}
-
-	resp, err := http.Post(url, "application/json", bytes.NewReader(jsonRequest))
-	if err != nil {
-		logger.Instance.Error("Error making POST request", "error", err)
-		return globals.DispatchResponse{}, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusTeapot {
-			logger.Instance.Warn("Server requested shutdown")
-			return globals.DispatchResponse{}, fmt.Errorf("server asked for shutdown")
-		}
-		logger.Instance.Error("Unexpected status code from CPU", "status", resp.StatusCode)
-		return globals.DispatchResponse{}, fmt.Errorf("unexpected response status: %d", resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Instance.Error("Error reading response body", "error", err)
-		return globals.DispatchResponse{}, err
-	}
-
-	var dispatchResp globals.DispatchResponse
-	err = json.Unmarshal(data, &dispatchResp)
-	if err != nil {
-		logger.Instance.Error("Error unmarshaling response", "error", err)
-		return globals.DispatchResponse{}, err
-	}
-
-	return dispatchResp, nil
-}
-
-func GetCPUList(working bool) []globals.CPUConnection {
+func GetCPUList(working bool) []*globals.CPUConnection {
 	globals.CpuListMutex.Lock()
 	defer globals.CpuListMutex.Unlock()
-	result := make([]globals.CPUConnection, 0)
-	for _, elem := range globals.AvailableCPUs {
-		if elem.Working == working {
-			result = append(result, elem)
+	result := make([]*globals.CPUConnection, 0)
+	for i := range globals.AvailableCPUs {
+		if globals.AvailableCPUs[i].Working == working {
+			result = append(result, &globals.AvailableCPUs[i])
 		}
 	}
 	return result
@@ -138,7 +90,7 @@ func RecieveSyscall() http.HandlerFunc {
 			http.Error(w, "Parámetro 'id' requerido", http.StatusBadRequest)
 			return
 		}
-		proceso, err := processes.SearchProcessInExec(cpuID)
+		proceso, err := processes.SearchProcessWorking(cpuID)
 
 		if err != nil {
 			fmt.Print("No se pudo encontrar la CPU")
@@ -201,8 +153,16 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 
 			if !selectedIO.Disp {
-				proceso.PCB.SetState(4)
-				globals.MTS = append(globals.MTS, *proceso)
+				lastState := proceso.PCB.GetState()
+				proceso.PCB.SetState(pcb.BLOCKED)
+				actualState := proceso.PCB.GetState()
+				logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
+
+				blockedProcess := globals.BlockedProcess{
+					Process:   *proceso,
+					IORequest: globals.IORequest{Pid: proceso.PCB.GetPID(), Timer: timeMs},
+				}
+				globals.BlockedQueue = append(globals.BlockedQueue, blockedProcess)
 
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))

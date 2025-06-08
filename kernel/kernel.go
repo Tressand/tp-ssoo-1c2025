@@ -100,7 +100,7 @@ func main() {
 
 	moduleMenu.Add("Init scheduler", func() {
 		if globals.SchedulerStatus == "STOP" {
-			go scheduler.LTS()
+			go scheduler.LTS() // TODO: No es necesario tirar la go routine aca, puedo lanzarla junto a los otros.
 			globals.LTSStopped <- struct{}{}
 			logger.Instance.Info("Scheduler initialized")
 		}
