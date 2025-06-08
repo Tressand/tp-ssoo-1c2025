@@ -7,13 +7,39 @@ import(
 
 func SearchPageInCache(logicAddr []int)([]byte,bool){
 
-	page := make([]byte,1)
+	for _, entrada := range config.Cache.Entries {
+		if areSlicesEqual(entrada.Page, logicAddr) {
+			entrada.Use = true
+			return entrada.Content,true
+		}else{
+			entrada.Use = false
+		}
+	}
 
-	return page, false
+	return nil, false
 }
 
-func AddEntryCache(page []int){
+func AddEntryCache(page []int, content []byte){
+	if len(config.Cache.Entries) < config.Cache.Capacity {
+		nuevaEntrada := config.CacheEntry{
+			Page:     page,
+			Content:  make([]byte, 1), // Esto deberías cambiarlo según tu caso de uso
+			Use:      false,
+			Modified: false,
+		}
+		config.Cache.Entries = append(config.Cache.Entries, nuevaEntrada)
+	}else{
+		//TODO
+	}
+}
 
+func ModifyCache(logicAddr []int){
+	for _, entrada := range config.Cache.Entries {
+		if areSlicesEqual(entrada.Page, logicAddr) {
+			entrada.Modified = true
+			return
+		}
+	}
 }
 
 func InitCache(){
