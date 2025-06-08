@@ -1,13 +1,13 @@
 package cache
 
 import (
-	"strings"
 	"strconv"
+	"strings"
 )
 
-type MMU struct{
-	levels int
-	pageSize uint32
+type MMU struct {
+	levels      int
+	pageSize    uint32
 	tableEntrys uint32
 }
 
@@ -22,7 +22,7 @@ func StringToLogicAddress(str string) []int {
 	return addr
 }
 
-func traducir(String string)([]int){
+func traducir(String string) []int {
 	addr := StringToLogicAddress(String)
 
 	if len(addr) == 0 {
@@ -32,19 +32,18 @@ func traducir(String string)([]int){
 	delta := addr[len(addr)-1]
 	page := addr[:len(addr)-1]
 
-	frame,condition := findFrame(page)
+	frame, condition := findFrame(page)
 
-	if(!condition){
-		frame,condition = findFrameInMemory(page)
-		if(!condition){
-			frame,_ = findFrameInMemory(page)
+	if !condition {
+		frame, condition = findFrameInMemory(page)
+		if !condition {
+			frame, _ = findFrameInMemory(page)
 		}
 
-		AddEntry(page,frame)
+		AddEntryTLB(page, frame)
 	}
-	
 
-	fisicAddr := make([]int,2)
+	fisicAddr := make([]int, 2)
 	fisicAddr[0] = frame
 	fisicAddr[1] = delta
 

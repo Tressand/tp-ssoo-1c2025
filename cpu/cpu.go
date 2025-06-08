@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"ssoo-cpu/config"
+	"ssoo-cpu/memory"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
@@ -18,7 +19,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"ssoo-cpu/memory"
 )
 
 type Instruction = codeutils.Instruction
@@ -45,6 +45,10 @@ func main() {
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
 	if !configManager.IsCompiledEnv() {
 		config.Values.PortCPU += identificador
+	}
+	if(config.Values.CacheEntries > 0){
+		cache.InitCache()
+		config.CacheEnable = true
 	}
 
 	//crear logger

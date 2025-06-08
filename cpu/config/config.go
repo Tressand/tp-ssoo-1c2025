@@ -75,9 +75,18 @@ type TLB struct {
 	ReplacementAlg string
 }
 
-type Logic_Direction struct{
-	entrys []int
-	scrolling int
+type CACHE struct{
+	Entries []CacheEntry
+	Capacity int
+	ReplacementAlg string
+	Delay int
+}
+
+type CacheEntry struct {
+	Page []int
+	Content []byte
+	Use bool
+	Modified bool
 }
 
 type ResponsePayload = codeutils.Instruction
@@ -101,6 +110,9 @@ var CicloDone chan string = make(chan string)
 var KernelResp KernelResponse
 
 var Tlb TLB
+var Cache CACHE
+
+var CacheEnable bool = false
 
 func SetFilePath(path string) {
 	configFilePath = path

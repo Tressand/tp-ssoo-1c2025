@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-//"ssoo-cpu/config"
-func lookupTlb(page []int) (int, bool){
+// "ssoo-cpu/config"
+func lookupTlb(page []int) (int, bool) {
 
 	for i, entry := range config.Tlb.Entries {
 		if areSlicesEqual(entry.Page, page) {
@@ -19,7 +19,7 @@ func lookupTlb(page []int) (int, bool){
 			return entry.Frame, true
 		}
 	}
-	
+
 	//TLB MISS
 	slog.Info("TLB Miss", "pagina", page)
 	return 0, false
@@ -37,19 +37,18 @@ func areSlicesEqual(a, b []int) bool {
 	return true
 }
 
+func findFrame(page []int) (int, bool) {
 
-func findFrame(page []int) (int,bool){
+	frame, boolean := lookupTlb(page)
 
-	frame,boolean := lookupTlb(page)
-
-	if !boolean{
-		return frame,false
+	if !boolean {
+		return frame, false
 	}
-	
-	return frame,true
+
+	return frame, true
 }
 
-func AddEntry(page []int, frame int) {
+func AddEntryTLB(page []int, frame int) {
 	if config.Tlb.Capacity == 0 {
 		return
 	}
@@ -82,9 +81,9 @@ func AddEntry(page []int, frame int) {
 func InitTLB(capacity int, alg string) {
 	config.Tlb.Capacity = config.Values.TLBEntries
 	config.Tlb.ReplacementAlg = config.Values.TLBReplacement
-	Clear()
+	ClearTLB()
 }
 
-func Clear() {
+func ClearTLB() {
 	config.Tlb.Entries = make([]config.Tlb_entries, 0, config.Tlb.Capacity)
 }
