@@ -21,6 +21,19 @@ type CPUConfig struct {
 	LogLevel         slog.Level `json:"log_level"`
 }
 
+type MemoryConfig struct {
+	PortMemory     int        `json:"port_memory"`
+	MemorySize     int        `json:"memory_size"`
+	PageSize       int        `json:"page_size"`
+	EntriesPerPage int        `json:"entries_per_page"`
+	NumberOfLevels int        `json:"number_of_levels"`
+	MemoryDelay    int        `json:"memory_delay"`
+	SwapfilePath   string     `json:"swapfile_path"`
+	SwapDelay      int        `json:"swap_delay"`
+	DumpPath       string     `json:"dump_path"`
+	LogLevel       slog.Level `json:"log_level"`
+}
+
 type PCBS struct {
 	PID int
 	PC  int
@@ -70,6 +83,7 @@ type Logic_Direction struct{
 type ResponsePayload = codeutils.Instruction
 
 var Values CPUConfig
+var MemoryConf MemoryConfig
 var Pcb PCBS
 var Exec_values = Exec_valuesS{
 	Arg1: -1,

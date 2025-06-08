@@ -38,18 +38,15 @@ func areSlicesEqual(a, b []int) bool {
 }
 
 
-func findFrame(page []int) int{
+func findFrame(page []int) (int,bool){
 
 	frame,boolean := lookupTlb(page)
 
-	if boolean{
-		return frame
+	if !boolean{
+		return frame,false
 	}
-
-	frame = findFrameInMemory(page)
-	AddEntry(page,frame)
 	
-	return frame
+	return frame,true
 }
 
 func AddEntry(page []int, frame int) {

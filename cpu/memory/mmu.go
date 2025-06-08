@@ -32,7 +32,17 @@ func traducir(String string)([]int){
 	delta := addr[len(addr)-1]
 	page := addr[:len(addr)-1]
 
-	frame := findFrame(page)
+	frame,condition := findFrame(page)
+
+	if(!condition){
+		frame,condition = findFrameInMemory(page)
+		if(!condition){
+			frame,_ = findFrameInMemory(page)
+		}
+
+		AddEntry(page,frame)
+	}
+	
 
 	fisicAddr := make([]int,2)
 	fisicAddr[0] = frame
