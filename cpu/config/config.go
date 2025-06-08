@@ -51,8 +51,8 @@ type DispatchResponse struct {
 }
 
 type Tlb_entries struct{
-	Page uint32
-	Frame uint32
+	Page []int
+	Frame int
 	LastUsed int64
 }
 

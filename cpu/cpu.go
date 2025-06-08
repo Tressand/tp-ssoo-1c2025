@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,6 +18,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"ssoo-cpu/memory"
 )
 
 type Instruction = codeutils.Instruction
@@ -58,7 +58,7 @@ func main() {
 	log.Info("Arranca CPU")
 
 	//iniciar tlb
-	//initTLB(config.Values.TLBEntries, config.Values.TLBReplacement)
+	cache.InitTLB(config.Values.TLBEntries, config.Values.TLBReplacement)
 
 	//iniciar server
 	var wg sync.WaitGroup

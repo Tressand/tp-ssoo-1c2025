@@ -1,4 +1,4 @@
-package main
+package cache
 
 import (
 	"log/slog"
@@ -7,11 +7,10 @@ import (
 )
 
 //"ssoo-cpu/config"
-
-func lookupTlb(page uint32) (uint32, bool) {
+func lookupTlb(page []int) (int, bool){
 
 	for i, entry := range config.Tlb.Entries {
-		if entry.Page == page {
+		if areSlicesEqual(entry.Page, page) {
 			//tlb hit
 			if config.Tlb.ReplacementAlg == "LRU" {
 				config.Tlb.Entries[i].LastUsed = time.Now().UnixNano()
@@ -20,12 +19,40 @@ func lookupTlb(page uint32) (uint32, bool) {
 			return entry.Frame, true
 		}
 	}
-	//tlb miss
+	
+	//TLB MISS
 	slog.Info("TLB Miss", "pagina", page)
 	return 0, false
 }
 
-func AddEntry(page, frame uint32) {
+func areSlicesEqual(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+
+func findFrame(page []int) int{
+
+	frame,boolean := lookupTlb(page)
+
+	if boolean{
+		return frame
+	}
+
+	frame = findFrameInMemory(page)
+	AddEntry(page,frame)
+	
+	return frame
+}
+
+func AddEntry(page []int, frame int) {
 	if config.Tlb.Capacity == 0 {
 		return
 	}
@@ -55,7 +82,7 @@ func AddEntry(page, frame uint32) {
 	})
 }
 
-func initTLB(capacity int, alg string) {
+func InitTLB(capacity int, alg string) {
 	config.Tlb.Capacity = capacity
 	config.Tlb.ReplacementAlg = alg
 	Clear()
