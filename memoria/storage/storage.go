@@ -11,6 +11,7 @@ import (
 	"slices"
 	"ssoo-memoria/config"
 	"ssoo-utils/codeutils"
+	"ssoo-utils/logger"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ type process_data struct {
 	metrics   memory_metrics
 }
 
+var systemMemoryMutex sync.Mutex
 var systemMemory []process_data
 
 func (p process_data) String() string {
@@ -51,6 +53,31 @@ func (p process_data) String() string {
 	return msg
 }
 
+func (p process_data) Deallocate() error {
+	err := deallocateMemory(p.pid)
+	if err != nil {
+		return err
+	}
+	for i := range systemMemory {
+		if systemMemory[i].pid == p.pid {
+			systemMemoryMutex.Lock()
+			systemMemory[i] = systemMemory[len(systemMemory)-1]
+			systemMemory = systemMemory[:len(systemMemory)-1]
+			systemMemoryMutex.Unlock()
+		}
+	}
+	m := p.metrics
+	logger.RequiredLog(true, p.pid, "Proceso Destruido - Métricas", map[string]string{
+		"Acc.T.Pag": fmt.Sprint(m.Page_table_accesses),
+		"Inst.Sol.": fmt.Sprint(m.Instructions_requested),
+		"SWAP":      fmt.Sprint(m.Suspensions),
+		"Mem.Prin.": fmt.Sprint(m.Unsuspensions),
+		"Lec.Mem.":  fmt.Sprint(m.Reads),
+		"Esc.Mem.":  fmt.Sprint(m.Writes),
+	})
+	return nil
+}
+
 func GetDataByPID(pid uint) *process_data {
 	for index, process := range systemMemory {
 		if process.pid == pid {
@@ -58,15 +85,6 @@ func GetDataByPID(pid uint) *process_data {
 		}
 	}
 	return nil
-}
-
-func GetIndexByPID(pid uint) int {
-	for index, process := range systemMemory {
-		if process.pid == pid {
-			return index
-		}
-	}
-	return -1
 }
 
 func GetInstruction(pid uint, pc int) (*instruction, error) {
@@ -78,6 +96,11 @@ func GetInstruction(pid uint, pc int) (*instruction, error) {
 		return nil, errors.New("out of scope program counter")
 	}
 	targetProcess.metrics.Instructions_requested++
+
+	logger.RequiredLog(true, pid, "Obtener Instrucción: "+fmt.Sprint(pc), map[string]string{
+		"Instrucción": fmt.Sprintf("%v", targetProcess.code[pc]),
+	})
+
 	return &targetProcess.code[pc], nil
 }
 
@@ -114,22 +137,23 @@ func CreateProcess(newpid uint, codeFile io.Reader, memoryRequirement int) error
 
 	newProcessData.pageBases = reservedPageBases
 
+	systemMemoryMutex.Lock()
 	systemMemory = append(systemMemory, *newProcessData)
+	systemMemoryMutex.Unlock()
+
+	logger.RequiredLog(true, newpid, "Proceso Creado", map[string]string{"Tamaño": fmt.Sprint(memoryRequirement)})
 	return nil
 }
 
 func DeleteProcess(pidToDelete uint) error {
-	index := GetIndexByPID(pidToDelete)
-	if index == -1 {
+	process_data := GetDataByPID(pidToDelete)
+	if process_data == nil {
 		return errors.New("could not find pid to delete")
 	}
-	err := deallocateMemory(pidToDelete)
+	err := process_data.Deallocate()
 	if err != nil {
 		return err
 	}
-
-	systemMemory[index] = systemMemory[len(systemMemory)-1]
-	systemMemory = systemMemory[:len(systemMemory)-1]
 	return nil
 }
 
@@ -331,6 +355,8 @@ func Memory_Dump(pid uint) error {
 		bstr = strings.Repeat(" ", max(0, 6-len(bstr))) + bstr
 		dump_file.WriteString("| " + istr + " | " + bstr + " | " + pageToString(pageBase))
 	}
+
+	logger.RequiredLog(true, pid, "Memory Dump Solicitado", map[string]string{})
 	return nil
 }
 

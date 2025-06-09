@@ -187,30 +187,31 @@ var userMemoryReqHandler = GenericRequest{
 	"GET": MethodRequestInfo{
 		ReqParams: []string{"pid", "base", "delta"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
-			result, err := storage.GetFromMemory(
-				uint(numFromQuery(r, "pid")),
-				numFromQuery(r, "base"),
-				numFromQuery(r, "delta"),
-			)
+			pid, base, delta := uint(numFromQuery(r, "pid")), numFromQuery(r, "base"), numFromQuery(r, "delta")
+			result, err := storage.GetFromMemory(pid, base, delta)
 			if err != nil {
 				return SimpleResponse{http.StatusBadRequest, []byte(err.Error())}
 			}
+			logger.RequiredLog(true, pid, "Lectura", map[string]string{
+				"Dir.Física": fmt.Sprint(base + delta),
+				"Tamaño":     "1",
+			})
 			return SimpleResponse{http.StatusOK, []byte{result}}
 		},
 	},
 	"POST": MethodRequestInfo{
 		ReqParams: []string{"pid", "base", "delta"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			pid, base, delta := uint(numFromQuery(r, "pid")), numFromQuery(r, "base"), numFromQuery(r, "delta")
 			value, _ := io.ReadAll(r.Body)
-			err := storage.WriteToMemory(
-				uint(numFromQuery(r, "pid")),
-				numFromQuery(r, "base"),
-				numFromQuery(r, "delta"),
-				value[0],
-			)
+			err := storage.WriteToMemory(pid, base, delta, value[0])
 			if err != nil {
 				return SimpleResponse{http.StatusBadRequest, []byte(err.Error())}
 			}
+			logger.RequiredLog(true, pid, "Escritura", map[string]string{
+				"Dir.Física": fmt.Sprint(base + delta),
+				"Tamaño":     "1",
+			})
 			return SimpleResponse{http.StatusOK, []byte{}}
 		},
 	},
@@ -253,21 +254,26 @@ var fullPageReqHandler = GenericRequest{
 			if err != nil {
 				return SimpleResponse{http.StatusBadRequest, []byte(err.Error())}
 			}
+			logger.RequiredLog(true, pid, "Lectura", map[string]string{
+				"Dir.Física": fmt.Sprint(base),
+				"Tamaño":     fmt.Sprint(storage.GetConfig().PageSize),
+			})
 			return SimpleResponse{http.StatusOK, page}
 		},
 	},
 	"POST": MethodRequestInfo{
 		ReqParams: []string{"pid", "base"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			pid, base := uint(numFromQuery(r, "pid")), numFromQuery(r, "base")
 			value, _ := io.ReadAll(r.Body)
-			err := storage.WritePage(
-				uint(numFromQuery(r, "pid")),
-				numFromQuery(r, "base"),
-				value,
-			)
+			err := storage.WritePage(pid, base, value)
 			if err != nil {
 				return SimpleResponse{http.StatusBadRequest, []byte(err.Error())}
 			}
+			logger.RequiredLog(true, pid, "Escritura", map[string]string{
+				"Dir.Física": fmt.Sprint(base),
+				"Tamaño":     fmt.Sprint(storage.GetConfig().PageSize),
+			})
 			return SimpleResponse{http.StatusOK, []byte{}}
 		},
 	},
