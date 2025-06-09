@@ -30,6 +30,8 @@ type process_data struct {
 	metrics   memory_metrics
 }
 
+var systemMemory []process_data
+
 func (p process_data) String() string {
 	var msg string
 	msg += "|  PID: " + fmt.Sprint(p.pid) + "\n|\n"
@@ -77,38 +79,6 @@ func GetInstruction(pid uint, pc int) (*instruction, error) {
 	}
 	targetProcess.metrics.Instructions_requested++
 	return &targetProcess.code[pc], nil
-}
-
-var systemMemory []process_data
-
-type BasicProcessData struct {
-	PID  uint
-	Size int
-}
-
-func GetProcesses() []BasicProcessData {
-	var processes []BasicProcessData
-	for _, process := range systemMemory {
-		processes = append(processes, BasicProcessData{
-			PID:  process.pid,
-			Size: len(process.pageBases) * paginationConfig.PageSize,
-		})
-	}
-	return processes
-}
-
-func LogSystemMemory() {
-	if len(systemMemory) == 0 {
-		fmt.Println("No processes loaded.")
-		return
-	}
-	var msg string
-	for _, p := range systemMemory {
-		msg += "------------------------\n"
-		msg += p.String()
-	}
-	msg += "------------------------\n"
-	fmt.Print(msg)
 }
 
 func CreateProcess(newpid uint, codeFile io.Reader, memoryRequirement int) error {
@@ -186,6 +156,8 @@ var paginationConfig PaginationConfig
 
 func GetConfig() PaginationConfig { return paginationConfig }
 
+//#region DATA ARRAY
+
 var memorySize int
 var remainingMemory = 0
 var userMemory []byte
@@ -213,9 +185,14 @@ func WriteToMemory(pid uint, base int, delta int, value byte) error {
 
 	return nil
 }
+
 func GetRemainingMemory() int {
 	return remainingMemory
 }
+
+//#endregion
+
+//#region PAGES
 
 var nPages int
 var pageBases []int
@@ -254,6 +231,10 @@ func WritePage(pid uint, base int, value []byte) error {
 	}
 	return nil
 }
+
+//#endregion
+
+//#region ADDRESSES
 
 func StringToLogicAddress(str string) []int {
 	slice := strings.Split(str, "|")
@@ -300,78 +281,11 @@ func LogicAddressToFrame(pid uint, address []int) (base int, err error) {
 	return
 }
 
-func logicToPhysicalAddress(pid uint, address []int) (base int, delta int, processPageIndex int, err error) {
-	levels := paginationConfig.Levels
-	pageTableSize := paginationConfig.EntriesPerPage
-	pageSize := paginationConfig.PageSize
-	if len(address) != paginationConfig.Levels+1 {
-		err = errors.New(fmt.Sprint("address not matching pagination of ", levels, " levels"))
-		return
-	}
-	delta = address[len(address)-1]
-	address = address[:len(address)-1]
+//#endregion
 
-	process := GetDataByPID(pid)
-	if process == nil {
-		err = errors.New("could't find process with pid")
-		return
-	}
-	processPageBases := process.pageBases
+//#region MEMORY DUMP
 
-	var f_pageTableSize float64 = float64(pageTableSize)
-	var f_levels float64 = float64(levels)
-	for i, num := range address {
-		if num < 0 || num >= pageTableSize {
-			err = errors.New("out of bounds page table access")
-			return
-		}
-		processPageIndex += num * int(math.Pow(f_pageTableSize, f_levels-1-float64(i)))
-	}
-
-	if processPageIndex >= len(processPageBases) {
-		err = errors.New("out of bounds process memory access")
-		return
-	}
-
-	base = processPageBases[processPageIndex]
-
-	fmt.Println("Page:", processPageBases[processPageIndex]/pageSize, "Base: ", base, ". Delta: ", delta)
-
-	return
-}
-
-func GetLogicAddress(pid uint, address []int) (byte, error) {
-	base, delta, _, err := logicToPhysicalAddress(pid, address)
-	if err != nil {
-		return 0, err
-	}
-	return GetFromMemory(pid, base, delta)
-}
-
-func WriteToLogicAddress(pid uint, address []int, value []byte) error {
-	base, delta, index, err := logicToPhysicalAddress(pid, address)
-	if err != nil {
-		return err
-	}
-	processPageBases := GetDataByPID(pid).pageBases
-	remainingSpace := 64*(len(processPageBases)-index) - delta
-	if remainingSpace < len(value) {
-		return errors.New("not enough space to write the value on this process assigned user memory at base")
-	}
-
-	for _, char := range value {
-		WriteToMemory(pid, base, delta, char)
-		delta++
-		if delta >= 64 {
-			delta = 0
-			index++
-			base = processPageBases[index]
-		}
-	}
-	return nil
-}
-
-func PageToByteArray(pageBase int) ([]byte, error) {
+func pageToByteArray(pageBase int) ([]byte, error) {
 	if !slices.Contains(pageBases, pageBase) {
 		return nil, errors.New("page base not valid")
 	}
@@ -380,7 +294,7 @@ func PageToByteArray(pageBase int) ([]byte, error) {
 
 func pageToString(pageBase int) string {
 	var msg string = "["
-	page, err := PageToByteArray(pageBase)
+	page, err := pageToByteArray(pageBase)
 	if err != nil {
 		return "Error reading page. " + err.Error()
 	}
@@ -420,6 +334,9 @@ func Memory_Dump(pid uint) error {
 	return nil
 }
 
+//#endregion
+
+// #region INITIALIZE
 func InitializeUserMemory() {
 	size := config.Values.MemorySize
 	levels := config.Values.NumberOfLevels
@@ -454,7 +371,9 @@ func InitializeUserMemory() {
 	slog.Info("Paginación realizada", "cantidad_de_paginas", nPages)
 }
 
-// #region MALLOC/FREE
+//#endregion
+
+//#region MALLOC/FREE
 
 func allocateMemory(size int) ([]int, error) {
 	if size > remainingMemory {
