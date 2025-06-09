@@ -191,10 +191,27 @@ var remainingMemory = 0
 var userMemory []byte
 var userMemoryMutex sync.Mutex
 
-func writeToMemory(index int, value byte) {
+func GetFromMemory(pid uint, base int, delta int) (byte, error) {
+	if ok, err := HasPage(pid, base); !ok {
+		return 0, err
+	}
+	if base+delta > memorySize || delta >= paginationConfig.PageSize || delta < 0 {
+		return 0, errors.New("out of bounds page memory access")
+	}
+	GetDataByPID(pid).metrics.Reads++
+	return userMemory[base+delta], nil
+}
+
+func WriteToMemory(pid uint, base int, delta int, value byte) error {
+	if ok, err := HasPage(pid, base); !ok {
+		return err
+	}
 	userMemoryMutex.Lock()
-	userMemory[index] = value
+	userMemory[base+delta] = value
 	userMemoryMutex.Unlock()
+	GetDataByPID(pid).metrics.Writes++
+
+	return nil
 }
 func GetRemainingMemory() int {
 	return remainingMemory
@@ -204,11 +221,38 @@ var nPages int
 var pageBases []int
 var reservationBits []bool
 
-func getFromPage(base int, delta int) (byte, error) {
-	if base+delta > memorySize || delta >= paginationConfig.PageSize || delta < 0 {
-		return 0, errors.New("out of bounds page memory access")
+func HasPage(pid uint, base int) (bool, error) {
+	processData := GetDataByPID(pid)
+	if processData == nil {
+		return false, errors.New("couldn't find process with pid")
 	}
-	return userMemory[base+delta], nil
+	if !slices.Contains(processData.pageBases, base) {
+		return false, errors.New("process does not have this page assigned")
+	}
+	return true, nil
+}
+
+func GetPage(pid uint, base int) ([]byte, error) {
+	if ok, err := HasPage(pid, base); !ok {
+		return nil, err
+	}
+	GetDataByPID(pid).metrics.Reads += config.Values.PageSize
+	return userMemory[base : base+paginationConfig.PageSize], nil
+}
+
+func WritePage(pid uint, base int, value []byte) error {
+	if len(value) != paginationConfig.PageSize {
+		return errors.New("write body does not match page size")
+	}
+	if ok, err := HasPage(pid, base); !ok {
+		return err
+	}
+	for delta, char := range value {
+		if err := WriteToMemory(pid, base, delta, char); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func StringToLogicAddress(str string) []int {
@@ -218,6 +262,42 @@ func StringToLogicAddress(str string) []int {
 		addr[i], _ = strconv.Atoi(slice[i])
 	}
 	return addr
+}
+
+func LogicAddressToFrame(pid uint, address []int) (base int, err error) {
+	levels := paginationConfig.Levels
+	pageTableSize := paginationConfig.EntriesPerPage
+	if len(address) != paginationConfig.Levels {
+		err = errors.New(fmt.Sprint("address not matching pagination of ", levels, " levels"))
+		return
+	}
+
+	process := GetDataByPID(pid)
+	if process == nil {
+		err = errors.New("could't find process with pid")
+		return
+	}
+	processPageBases := process.pageBases
+	processPageIndex := 0
+
+	var f_pageTableSize float64 = float64(pageTableSize)
+	var f_levels float64 = float64(levels)
+	for i, num := range address {
+		if num < 0 || num >= pageTableSize {
+			err = errors.New("out of bounds page table access")
+			return
+		}
+		processPageIndex += num * int(math.Pow(f_pageTableSize, f_levels-1-float64(i)))
+		process.metrics.Page_table_accesses++
+	}
+
+	if processPageIndex >= len(processPageBases) {
+		err = errors.New("out of bounds process memory access")
+		return
+	}
+
+	base = processPageBases[processPageIndex]
+	return
 }
 
 func logicToPhysicalAddress(pid uint, address []int) (base int, delta int, processPageIndex int, err error) {
@@ -231,13 +311,12 @@ func logicToPhysicalAddress(pid uint, address []int) (base int, delta int, proce
 	delta = address[len(address)-1]
 	address = address[:len(address)-1]
 
-	var processPageBases []int
 	process := GetDataByPID(pid)
 	if process == nil {
 		err = errors.New("could't find process with pid")
 		return
 	}
-	processPageBases = process.pageBases
+	processPageBases := process.pageBases
 
 	var f_pageTableSize float64 = float64(pageTableSize)
 	var f_levels float64 = float64(levels)
@@ -266,7 +345,7 @@ func GetLogicAddress(pid uint, address []int) (byte, error) {
 	if err != nil {
 		return 0, err
 	}
-	return getFromPage(base, delta)
+	return GetFromMemory(pid, base, delta)
 }
 
 func WriteToLogicAddress(pid uint, address []int, value []byte) error {
@@ -281,7 +360,7 @@ func WriteToLogicAddress(pid uint, address []int, value []byte) error {
 	}
 
 	for _, char := range value {
-		writeToMemory(base+delta, char)
+		WriteToMemory(pid, base, delta, char)
 		delta++
 		if delta >= 64 {
 			delta = 0
