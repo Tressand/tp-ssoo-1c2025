@@ -328,3 +328,7 @@ func WriteCache(logicAddr []int, value []byte){
 		}
 	}
 }
+
+func EndProcess(pid int){
+	//TODO
+}

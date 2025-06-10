@@ -228,7 +228,7 @@ func readMemory(logicAddr []int, size int){
 	base := logicAddr[:len(logicAddr)-1]
 
 	if cache.IsInCache(logicAddr){
-		
+
 		content := cache.ReadCache(base,size)
 		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
 
@@ -293,6 +293,9 @@ func DeleteProcess() {
 	}
 
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
+	
+	cache.EndProcess(config.Pcb.PID)
+
 	config.ExitChan <- "" // aviso que hay que sacar este proceso
 }
 
