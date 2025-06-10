@@ -51,6 +51,9 @@ func main() {
 		cache.InitCache()
 		config.CacheEnable = true
 	}
+	
+	//cargar config de memoria
+	cache.FindMemoryConfig()
 
 	//crear logger
 	err := logger.SetupDefault("cpu", config.Values.LogLevel)
@@ -198,7 +201,7 @@ func exec() {
 	case "DUMP_MEMORY":
 		//vacia la memoria
 		slog.Info("DUMP_MEMORY Instruction not implemented.")
-		//dumpMemory()
+		dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
@@ -212,14 +215,32 @@ func exec() {
 
 func writeMemory(logicAddr []int, value []byte){
 
+	if cache.IsInCache(logicAddr){
+		
+	}
+
 	fisicAddr := cache.Traducir(logicAddr)
 	cache.WriteMemory(fisicAddr,value)
 }
 
 func readMemory(logicAddr []int, size int){
 
-	fisicAddr := cache.Traducir(logicAddr)
-	cache.ReadMemory(fisicAddr,size)
+	base := logicAddr[:len(logicAddr)-1]
+
+	if cache.IsInCache(logicAddr){
+		
+		content := cache.ReadCache(base,size)
+		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
+
+	}else{
+		fisicAddr := cache.Traducir(logicAddr)
+		page,_ := cache.GetPageInMemory(fisicAddr)
+		cache.AddEntryCache(base,page)
+		content := cache.ReadCache(logicAddr,size)
+		
+		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
+	}
+	
 }
 
 // #endregion
@@ -291,6 +312,21 @@ func initProcess() {
 	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
 }
 
+func dumpMemory(){
+	resp, err := sendSyscall("syscall", instruction)
+	if err != nil {
+		slog.Error("Fallo la solicitud para dump memory.", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Kernel respondió con error al dump memory.", "status", resp.StatusCode)
+		return
+	}
+
+	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
+}
 //#endregion
 
 // #region kernel Connection

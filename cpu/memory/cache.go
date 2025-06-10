@@ -1,6 +1,7 @@
 package cache
 
-import(
+import (
+	"log/slog"
 	"ssoo-cpu/config"
 )
 
@@ -219,4 +220,111 @@ func InitCache(){
 func ClearCache(){
 
 	config.Cache.Entries = make([]config.CacheEntry, 0, config.Cache.Capacity)
+}
+
+func ReadCache(logicAddr []int , size int)[]byte{
+
+	delta := logicAddr[len(logicAddr)-1]
+	base := logicAddr[:len(logicAddr)-1]
+	pageSize := config.MemoryConf.PageSize
+
+
+	if delta+size <= pageSize {
+		page, flag := SearchPageInCache(base)
+		if !flag {
+			slog.Error("Error buscando página en caché")
+			return nil
+		}
+		return page[delta : delta+size]
+	}
+
+	bytesRestantes := size
+	resultado := make([]byte,0,size)
+	paginaActual := make([]int, len(base))
+	copy(paginaActual,base)
+
+	offset := delta
+
+	for bytesRestantes > 0{
+
+		page,flag := SearchPageInCache(paginaActual)
+		if !flag{
+			slog.Error("Error buscando la pagina en cache")
+			page,_ =GetPageInMemory(paginaActual)
+			AddEntryCache(paginaActual,page)
+		}
+
+		bytesALeer := pageSize - offset
+
+		if bytesALeer > bytesRestantes {
+			bytesALeer = bytesRestantes
+		}
+
+		resultado = append(resultado, page[offset:offset+bytesALeer]...)
+		bytesRestantes -= bytesALeer
+
+		bytesRestantes -= bytesALeer
+
+		offset = 0
+		paginaActual,flag = NextPage(paginaActual) //obtengo la siguiente pagina de memoria
+	}
+
+	return resultado
+}
+
+func WriteCache(logicAddr []int, value []byte){
+	
+	delta := logicAddr[len(logicAddr)-1]
+	base := logicAddr[:len(logicAddr)-1]
+	pageSize := config.MemoryConf.PageSize
+	size := len(value)
+
+	bytesRestantes := size
+	paginaActual := make([]int,len(base))
+	copy(paginaActual,base)
+
+	offset := delta
+	escrito := 0
+
+	if delta + size <= pageSize {
+		page,flag := SearchPageInCache(paginaActual)
+
+		if flag{
+			slog.Error("Error buscando la página en cache")
+			GetPageInMemory(paginaActual)
+			page, _ = SearchPageInCache(paginaActual)
+		}
+
+		copy(page[offset:], value)
+		return
+	}
+
+	for bytesRestantes > 0{
+
+		page,flag := SearchPageInCache(paginaActual) //busco la pagina
+		if !flag{
+			slog.Error("Error buscando la pagina en cache")
+			GetPageInMemory(paginaActual)
+			page,_ = SearchPageInCache(paginaActual)
+		}
+
+		bytesAEscribir := pageSize - offset
+		if bytesAEscribir > bytesRestantes {
+			bytesAEscribir = bytesRestantes
+		}
+
+		copy(page[offset:offset+bytesAEscribir], value[escrito:escrito+bytesAEscribir])
+
+		bytesRestantes -= bytesAEscribir
+		escrito += bytesAEscribir
+		offset = 0
+
+
+		var ok bool
+		paginaActual, ok = NextPage(paginaActual)
+		if !ok {
+			slog.Error("No se pudo obtener la siguiente página")
+			break
+		}
+	}
 }
