@@ -40,7 +40,6 @@ func AddEntryCache(logicAddr []int, content []byte){
 
 func AddEntryCacheClock(logicAddr []int, content []byte){
 	
-	flag := false
 	position := 0
 
 	for i:= 0; i < len(config.Cache.Entries); i++ {
@@ -78,50 +77,77 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 			config.Cache.Entries[position].Position = true
 		}
 	}
-
-	/*
-	for i:= position; i < len(config.Cache.Entries); i++ {
-		
-		if !config.Cache.Entries[i].Use{
-			
-			fisicAddr := traducirCache(config.Cache.Entries[i].Page)
-			SavePageInMemory(config.Cache.Entries[i].Content,fisicAddr)
-
-
-			config.Cache.Entries[i].Content = content
-			config.Cache.Entries[i].Page = logicAddr
-			config.Cache.Entries[i].Use = true
-			config.Cache.Entries[i].Position = false
-
-			if i == len(config.Cache.Entries)-1{
-				config.Cache.Entries[0].Position = true
-
-			}else{
-				config.Cache.Entries[i+1].Position = true
-
-			}
-
-			flag = true
-		}else{
-			config.Cache.Entries[i].Use = false
-			config.Cache.Entries[i].Position = false
-
-			if i == len(config.Cache.Entries)-1{
-				config.Cache.Entries[0].Position = true
-			}else{
-				config.Cache.Entries[i+1].Position = true
-			}
-			
-		}
-
-		if !flag{
-			i = -1
-		}
-	}*/
 }
 
 func AddEntryCacheClockM(logicAddr []int, content []byte){
 
+	position := 0
+	count := 0
+
+	for i:= 0; i < len(config.Cache.Entries); i++ {
+
+		if config.Cache.Entries[i].Position {
+			
+			position = i
+			break
+		}
+	}
+
+	for {
+		entry := &config.Cache.Entries[position]
+
+		for{ //primer ciclo busca no usado ni modificado
+			entry := &config.Cache.Entries[position]
+			
+			if !entry.Use && !entry.Modified{
+				
+				fisicAddr := traducirCache(entry.Page)
+				SavePageInMemory(entry.Content,fisicAddr)
+
+				entry.Content = content
+				entry.Page = logicAddr
+				entry.Use = true
+				entry.Position = false
+
+				position = (position + 1) % len(config.Cache.Entries)
+				config.Cache.Entries[position].Position = true
+				return
+			}
+
+			if count == len(config.Cache.Entries){
+				break
+			}
+			count ++
+		}
+
+		if !entry.Use{
+			
+			//no esta usado
+
+			if !entry.Modified{
+				
+				//TODO
+
+				break
+			}
+			
+			if entry.Modified{
+
+			}
+		
+			//TODO
+		
+		
+		}else{
+			//fue usado --> cambio bit de uso de 1 a 0 y paso al siguiente
+			entry.Use = false
+			entry.Position = false
+
+			position = (position + 1) % len(config.Cache.Entries)
+			config.Cache.Entries[position].Position = true
+		}
+	}
+	
 }
 
 func ModifyCache(logicAddr []int){
