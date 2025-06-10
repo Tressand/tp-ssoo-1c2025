@@ -49,3 +49,27 @@ func traducir(String string) []int {
 
 	return fisicAddr
 }
+
+func traducirCache(logicAddr []int) []int {
+
+	if len(logicAddr) == 0 {
+		return nil
+	}
+
+	frame, condition := findFrame(logicAddr)
+
+	if !condition {
+		frame, condition = findFrameInMemory(logicAddr)
+		if !condition {
+			frame, _ = findFrameInMemory(logicAddr)
+		}
+
+		AddEntryTLB(logicAddr, frame)
+	}
+
+	fisicAddr := make([]int, 2)
+	fisicAddr[0] = frame
+	fisicAddr[1] = delta
+
+	return fisicAddr
+}

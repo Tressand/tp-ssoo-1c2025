@@ -185,7 +185,7 @@ func getPageInMemory(fisicAddr []int) ([]byte,bool){
 	return page,true
 }
 
-func savePageInMemory(page []byte,fisicAddr []int) bool{
+func SavePageInMemory(page []byte,fisicAddr []int) bool{
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -193,7 +193,7 @@ func savePageInMemory(page []byte,fisicAddr []int) bool{
 		Endpoint: "full_page",
 		Queries: map[string]string{
 			"pid": fmt.Sprint(config.Pcb.PID),
-			"page": fmt.Sprint(fisicAddr[0]),
+			"base": fmt.Sprint(fisicAddr[0]),
 		},
 	})
 

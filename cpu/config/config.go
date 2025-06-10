@@ -87,6 +87,7 @@ type CacheEntry struct {
 	Content []byte
 	Use bool
 	Modified bool
+	Position bool //para saber si me quede aca o en otra posicion
 }
 
 type ResponsePayload = codeutils.Instruction
