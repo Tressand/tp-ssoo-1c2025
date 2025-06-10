@@ -22,8 +22,7 @@ func StringToLogicAddress(str string) []int {
 	return addr
 }
 
-func traducir(String string) []int {
-	addr := StringToLogicAddress(String)
+func Traducir(addr []int) []int {
 
 	if len(addr) == 0 {
 		return nil

@@ -200,6 +200,15 @@ func ModifyCache(logicAddr []int){
 	}
 }
 
+func IsInCache(logicAddr []int) bool{
+	for _, entrada := range config.Cache.Entries {
+		if areSlicesEqual(entrada.Page, logicAddr) {
+			return true
+		}
+	}
+	return false
+}
+
 func InitCache(){
 	config.Cache.ReplacementAlg = config.Values.CacheReplacement
 	config.Cache.Capacity = config.Values.CacheEntries

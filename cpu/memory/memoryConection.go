@@ -86,7 +86,7 @@ func findMemoryConfig() bool{
 }
 
 
-func writeMemory(fisicAddr []int, value []byte) bool{
+func WriteMemory(fisicAddr []int, value []byte) bool{
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -115,7 +115,7 @@ func writeMemory(fisicAddr []int, value []byte) bool{
 	return true
 }
 
-func readInMemory(fisicAddr []int) (byte,bool){
+func ReadMemory(fisicAddr []int, size int) (byte,bool){
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -125,6 +125,7 @@ func readInMemory(fisicAddr []int) (byte,bool){
 			"pid": fmt.Sprint(config.Pcb.PID),
 			"base": fmt.Sprint(fisicAddr[0]),
 			"delta": fmt.Sprint(fisicAddr[1]),
+			"size": fmt.Sprint(size),
 		},
 	})
 

@@ -45,6 +45,8 @@ type Exec_valuesS struct {
 	Arg1 int
 	Arg2 int
 	Str string
+	Addr []int
+	Value []byte
 }
 
 type RequestPayload struct {
@@ -99,6 +101,8 @@ var Exec_values = Exec_valuesS{
 	Arg1: -1,
 	Arg2: -1,
 	Str: "",
+	Addr: []int{0},
+	Value: []byte{0},
 }
 var Instruccion string
 var Identificador int

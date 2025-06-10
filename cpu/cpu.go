@@ -17,6 +17,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -173,13 +174,11 @@ func exec() {
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		slog.Info("WRITE Instruction not implemented.")
-		//writeMemory()
+		writeMemory(config.Exec_values.Addr,config.Exec_values.Value)
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		slog.Info("READ Instruction not implemented.")
-		//readMemory()
+		readMemory(config.Exec_values.Addr,config.Exec_values.Arg1)
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
@@ -209,6 +208,18 @@ func exec() {
 
 	}
 	config.Pcb.PC++
+}
+
+func writeMemory(logicAddr []int, value []byte){
+
+	fisicAddr := cache.Traducir(logicAddr)
+	cache.WriteMemory(fisicAddr,value)
+}
+
+func readMemory(logicAddr []int, size int){
+
+	fisicAddr := cache.Traducir(logicAddr)
+	cache.ReadMemory(fisicAddr,size)
 }
 
 // #endregion
@@ -421,25 +432,35 @@ func asign() {
 		if len(instruction.Args) != 2 {
 			slog.Error("WRITE requiere 2 argumentos")
 		}
-		arg1, err := strconv.Atoi(instruction.Args[0])
-		if err != nil {
-			slog.Error("error convirtiendo Dirección en WRITE ", "error", err)
+		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
+		
+		parts := strings.Split(instruction.Args[1], "|")
+		bytes := make([]byte, len(parts))
+		for i, s := range parts {
+			val, err := strconv.Atoi(s)
+			if err != nil {
+				slog.Error("error al convertir '%s' a byte: %v", s, err)
+				return
+			}
+			if val < 0 || val > 255 {
+				slog.Error("valor fuera de rango para byte: %d", val)
+				return
+			}
+			bytes[i] = byte(val)
 		}
-		config.Exec_values.Arg1 = arg1
-		config.Exec_values.Str = instruction.Args[1]
+		config.Exec_values.Value = bytes
 
 	case codeutils.READ:
 		config.Instruccion = "READ"
 		if len(instruction.Args) != 2 {
 			slog.Error("READ requiere 2 argumentos")
 		}
-		arg1, err1 := strconv.Atoi(instruction.Args[0])
-		arg2, err2 := strconv.Atoi(instruction.Args[1])
-		if err1 != nil || err2 != nil {
+		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
+		arg1, err1 := strconv.Atoi(instruction.Args[1])
+		if err1 != nil {
 			slog.Error("error convirtiendo argumentos en READ")
 		}
-		config.Exec_values.Arg1 = arg1
-		config.Exec_values.Arg2 = arg2
+		config.Exec_values.Arg2 = arg1
 
 	case codeutils.GOTO:
 		config.Instruccion = "GOTO"
