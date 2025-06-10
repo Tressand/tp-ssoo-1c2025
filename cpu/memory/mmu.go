@@ -69,7 +69,6 @@ func traducirCache(logicAddr []int) []int {
 
 	fisicAddr := make([]int, 2)
 	fisicAddr[0] = frame
-	fisicAddr[1] = delta
 
 	return fisicAddr
 }

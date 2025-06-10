@@ -119,25 +119,26 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 			}
 			count ++
 		}
-
+		//no fue usado --> busco uso 0 y modificado 1
 		if !entry.Use{
+			
 			
 			//no esta usado
 
 			if !entry.Modified{
 				
-				//TODO
+				fisicAddr := traducirCache(entry.Page)
+				SavePageInMemory(entry.Content,fisicAddr)
 
-				break
-			}
-			
-			if entry.Modified{
+				entry.Content = content
+				entry.Page = logicAddr
+				entry.Use = true
+				entry.Position = false
 
+				position = (position + 1) % len(config.Cache.Entries)
+				config.Cache.Entries[position].Position = true
+				return
 			}
-		
-			//TODO
-		
-		
 		}else{
 			//fue usado --> cambio bit de uso de 1 a 0 y paso al siguiente
 			entry.Use = false
@@ -146,8 +147,48 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 			position = (position + 1) % len(config.Cache.Entries)
 			config.Cache.Entries[position].Position = true
 		}
+
+		if NoUsedAndNoModifiedCache(){ // si la cache quedo no usado y no modificado no haria nada en este ciclo la verdad ya que busca no usado y modificado
+			break
+		}
+	}
+
+	for{ //Este ciclo buscara en caso de que todos quedaron no usados y no modificados. Sucede solamente si la cache estaba llena de usados pero no modificados al inicio de la funcion
+			entry := &config.Cache.Entries[position]
+			
+			if !entry.Use && !entry.Modified{
+				
+				fisicAddr := traducirCache(entry.Page)
+				SavePageInMemory(entry.Content,fisicAddr)
+
+				entry.Content = content
+				entry.Page = logicAddr
+				entry.Use = true
+				entry.Position = false
+
+				position = (position + 1) % len(config.Cache.Entries)
+				config.Cache.Entries[position].Position = true
+				return
+			}
+
+			if count == len(config.Cache.Entries){
+				break
+			}
+			count ++
 	}
 	
+}
+
+func NoUsedAndNoModifiedCache() bool{
+
+	for i:= 0; i < len(config.Cache.Entries); i++ {
+		
+		if config.Cache.Entries[i].Use && config.Cache.Entries[i].Modified{
+			return false
+		}
+	}
+
+	return true
 }
 
 func ModifyCache(logicAddr []int){
