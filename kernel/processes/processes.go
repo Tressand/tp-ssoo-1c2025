@@ -132,7 +132,7 @@ func InitializeProcessInMemory(pid uint, codePath string, size int) error {
 		Endpoint: "process",
 		Queries: map[string]string{
 			"pid": fmt.Sprint(pid),
-			"req": fmt.Sprint(size),
+			"size": fmt.Sprint(size),
 		},
 	})
 

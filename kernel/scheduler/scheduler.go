@@ -59,7 +59,7 @@ func LTS() {
 
 			logger.Instance.Debug("Se intenta inicializar un proceso en LTS", "pid", process.PCB.GetPID())
 
-			InitProcess(process) // ! Revisar esto!!!!!!!!
+			InitProcess(process)
 			logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", process.PCB.GetPID()))
 
 		case "PMCP":
@@ -100,7 +100,7 @@ func LTS() {
 				continue
 			}
 
-			InitProcess(process) // ! Revisar esto!!!!!!!!
+			InitProcess(process)
 
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
@@ -155,9 +155,7 @@ func QueueToReady(process *globals.Process) {
 }
 
 func STS() {
-	slog.Debug("STS Desbloqueado")
 	for {
-		slog.Debug("STS Desbloqueado")
 		switch config.Values.SchedulerAlgorithm {
 		case "FIFO":
 			var cpu *globals.CPUConnection
@@ -225,8 +223,6 @@ func SJF() {
 	var process *globals.Process
 	var found bool = false
 
-	slog.Debug("No me bloquie en las cpus")
-
 	globals.ReadyQueueMutex.Lock()
 	if len(globals.ReadyQueue) != 0 {
 		minIndex := 0
@@ -241,8 +237,6 @@ func SJF() {
 	}
 	globals.ReadyQueueMutex.Unlock()
 
-	slog.Debug("Me bloqueo antes del !found????")
-
 	if !found {
 		slog.Info("Me estoy bloqueando en STS porque no hay procesos en READY")
 		<-globals.STSEmpty
@@ -250,29 +244,18 @@ func SJF() {
 		return
 	}
 
-	slog.Debug("No me bloquie antes del found!")
-
-	slog.Debug("Intento enviar a ejecutar un proceso....")
-
 	go sendToExecute(process, cpu)
 }
 
 func SRT() {
-	slog.Debug("Entre a SRT")
-
 	globals.CpuListMutex.Lock()
 	cpus := kernel_api.GetCPUList(false)
 	globals.CpuListMutex.Unlock()
 
-	slog.Debug("CPUs disponibles", "cpus", cpus)
-
 	if len(cpus) != 0 {
-		slog.Debug("Estoy en SRT, entrando a SJF...")
 		SJF()
 		return
 	}
-
-	slog.Debug("Utilizando la logica especifica de SRT")
 
 	var process *globals.Process
 	var found bool = false
@@ -290,8 +273,6 @@ func SRT() {
 		globals.ReadyQueue = append(globals.ReadyQueue[:minIndex], globals.ReadyQueue[minIndex+1:]...)
 	}
 	globals.ReadyQueueMutex.Unlock()
-
-	slog.Debug("Me bloquie antes del !found")
 
 	if !found {
 		slog.Info("Me estoy bloqueando en STS porque no hay procesos en READY")
@@ -320,10 +301,7 @@ func SRT() {
 
 	globals.ExecQueueMutex.Unlock()
 
-	slog.Debug("Me bloquie antes forInterrupt")
-
 	if forInterrupt {
-		slog.Debug("No entre a !!")
 		err := interruptCPU(*toInterrupt.Cpu, int(toInterrupt.Process.PCB.GetPID()))
 
 		if err != nil {
@@ -335,6 +313,8 @@ func SRT() {
 
 			return
 		}
+
+		logger.RequiredLog(true, toInterrupt.Process.PCB.GetPID(), "Desalojado por algoritmo SJF/SRT", map[string]string{})
 
 		slog.Info("Desalojo ejecutado correctamente", "pid", toInterrupt.Process.PCB.GetPID())
 
@@ -384,8 +364,6 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	changeAvailableCpu(cpu, true)
 
-	logger.Instance.Debug("cpusAvailable", "available", globals.AvailableCPUs)
-
 	globals.ExecQueueMutex.Lock()
 	globals.ExecQueue = append(globals.ExecQueue, globals.CPUSlot{
 		Cpu:     cpu,
@@ -416,7 +394,8 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		return
 	case "Exit":
 		processes.UpdateBurstEstimation(process)
-		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", dispatchResp.PID))
+
+		logger.RequiredLog(true, process.PCB.GetPID(), "Finaliza el proceso", map[string]string{})
 
 		select {
 		case globals.WaitingNewProcessInReady <- struct{}{}:

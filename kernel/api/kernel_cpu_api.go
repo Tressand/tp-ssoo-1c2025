@@ -132,7 +132,10 @@ func RecieveSyscall() http.HandlerFunc {
 				http.Error(w, "Tiempo invalido", http.StatusBadRequest)
 				return
 			}
-			fmt.Printf("Recibida syscall IO: dispositivo=%s, tiempo=%d\n", device, timeMs)
+
+			logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Solicitó syscall: %s", "IO"), map[string]string{})
+
+			slog.Debug("Recibida syscall IO: dispositivo=%s, tiempo=%d\n", device, timeMs)
 
 			deviceFound := false
 			/* Ahora mismo, si esta ocupado, sigue con la ejecución, pero se bloquea si la envia.*/
@@ -215,10 +218,13 @@ func RecieveSyscall() http.HandlerFunc {
 				http.Error(w, "tamaño invalido", http.StatusBadRequest)
 				return
 			}
+
+			logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Solicitó syscall: %s", "INIT_PROC"), map[string]string{})
+
 			processes.CreateProcess(codePath, size)
 
 		case codeutils.DUMP_MEMORY:
-			slog.Info("Syscall DUMP_MEMORY recibida", "pid", proceso.PCB.GetPID())
+			logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Solicitó syscall: %s", "DUMP_MEMORY"), map[string]string{})
 
 			proceso.PCB.SetState(pcb.BLOCKED)
 
@@ -238,6 +244,8 @@ func RecieveSyscall() http.HandlerFunc {
 			}(proceso)
 
 		case codeutils.EXIT:
+
+			logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Solicitó syscall: %s", "EXIT"), map[string]string{})
 
 			lastState := proceso.PCB.GetState()
 			proceso.PCB.SetState(pcb.EXIT)
