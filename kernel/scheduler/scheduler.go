@@ -59,7 +59,7 @@ func LTS() {
 
 			logger.Instance.Debug("Se intenta inicializar un proceso en LTS", "pid", process.PCB.GetPID())
 
-			InitProcess(process) // ?
+			InitProcess(process) // ! Revisar esto!!!!!!!!
 			logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", process.PCB.GetPID()))
 
 		case "PMCP":
@@ -100,7 +100,7 @@ func LTS() {
 				continue
 			}
 
-			InitProcess(process)
+			InitProcess(process) // ! Revisar esto!!!!!!!!
 
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
@@ -238,9 +238,12 @@ func SJF() {
 			}
 		}
 		process = &globals.ReadyQueue[minIndex]
+		found = true
 		globals.ReadyQueue = append(globals.ReadyQueue[:minIndex], globals.ReadyQueue[minIndex+1:]...)
 	}
 	globals.ReadyQueueMutex.Unlock()
+
+	slog.Debug("Me bloqueo antes del !found????")
 
 	if !found {
 		slog.Info("Me estoy bloqueando en STS porque no hay procesos en READY")
@@ -248,6 +251,10 @@ func SJF() {
 		slog.Info("Me desbloqueo en STS porque hay procesos en READY")
 		return
 	}
+
+	slog.Debug("No me bloquie antes del found!")
+
+	slog.Debug("Intento enviar a ejecutar un proceso....")
 
 	go sendToExecute(process, cpu)
 }
