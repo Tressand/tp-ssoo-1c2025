@@ -90,6 +90,7 @@ type CacheEntry struct {
 	Use bool
 	Modified bool
 	Position bool //para saber si me quede aca o en otra posicion
+	Pid int
 }
 
 type ResponsePayload = codeutils.Instruction
@@ -107,10 +108,11 @@ var Exec_values = Exec_valuesS{
 var Instruccion string
 var Identificador int
 var configFilePath string = "/config/cpu_config.json"
-
-var InterruptChan  chan string = make(chan string)
-var ExitChan  chan string = make(chan string)
-var CicloDone chan string = make(chan string)
+var (
+       InterruptChan = make(chan struct{}, 1) // Buffer para 1 señal
+       ExitChan      = make(chan struct{}, 1)
+       CicloDone     = make(chan string, 1)
+)
 
 var KernelResp KernelResponse
 

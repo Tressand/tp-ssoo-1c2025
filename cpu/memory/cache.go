@@ -222,7 +222,7 @@ func ClearCache(){
 	config.Cache.Entries = make([]config.CacheEntry, 0, config.Cache.Capacity)
 }
 
-func ReadCache(logicAddr []int , size int)[]byte{
+func ReadCache(logicAddr []int , size int)([]byte,bool){
 
 	delta := logicAddr[len(logicAddr)-1]
 	base := logicAddr[:len(logicAddr)-1]
@@ -233,9 +233,9 @@ func ReadCache(logicAddr []int , size int)[]byte{
 		page, flag := SearchPageInCache(base)
 		if !flag {
 			slog.Error("Error buscando página en caché")
-			return nil
+			return nil,false
 		}
-		return page[delta : delta+size]
+		return page[delta : delta+size],true
 	}
 
 	bytesRestantes := size
@@ -266,13 +266,18 @@ func ReadCache(logicAddr []int , size int)[]byte{
 		bytesRestantes -= bytesALeer
 
 		offset = 0
-		paginaActual,flag = NextPage(paginaActual) //obtengo la siguiente pagina de memoria
+		paginaActual,flag = NextPageMMU(paginaActual) //obtengo la siguiente pagina de memoria
+		if !flag {
+			slog.Error(" Error al leer en memoria, no se puede leer ",paginaActual)
+			
+			return nil,false
+		}
 	}
 
-	return resultado
+	return resultado,true
 }
 
-func WriteCache(logicAddr []int, value []byte){
+func WriteCache(logicAddr []int, value []byte) bool{
 	
 	delta := logicAddr[len(logicAddr)-1]
 	base := logicAddr[:len(logicAddr)-1]
@@ -285,7 +290,7 @@ func WriteCache(logicAddr []int, value []byte){
 
 	offset := delta
 	escrito := 0
-
+	
 	if delta + size <= pageSize {
 		page,flag := SearchPageInCache(paginaActual)
 
@@ -296,7 +301,7 @@ func WriteCache(logicAddr []int, value []byte){
 		}
 
 		copy(page[offset:], value)
-		return
+		return true
 	}
 
 	for bytesRestantes > 0{
@@ -320,15 +325,33 @@ func WriteCache(logicAddr []int, value []byte){
 		offset = 0
 
 
-		var ok bool
-		paginaActual, ok = NextPage(paginaActual)
-		if !ok {
+		var flagNP bool
+		paginaActual, flagNP = NextPageMMU(paginaActual)
+		if !flagNP {
 			slog.Error("No se pudo obtener la siguiente página")
-			break
+			return false
 		}
 	}
+	return true
 }
 
 func EndProcess(pid int){
-	//TODO
+	for _, entrada := range config.Cache.Entries {
+		if entrada.Pid == pid{
+
+			fisicAddr,flag := Traducir(entrada.Page)
+			if !flag {
+				slog.Error("Error al traducir la pagina ",entrada.Page," al querer devolver a memoria las paginas. ")
+			} else{
+				SavePageInMemory(entrada.Content,fisicAddr)
+				entrada.Modified = false
+				entrada.Content = nil
+				entrada.Page = nil
+				entrada.Pid = 0
+				entrada.Use = false
+				entrada.Position = false
+			}
+			
+		}
+	}
 }

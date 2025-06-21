@@ -86,7 +86,7 @@ func FindMemoryConfig() bool{
 }
 
 
-func WriteMemory(fisicAddr []int, value []byte) bool{
+func WriteMemoryConection(fisicAddr []int, value []byte) bool{
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -211,37 +211,4 @@ func SavePageInMemory(page []byte,fisicAddr []int) bool{
 	}
 
 	return true
-}
-
-func NextPage(logicAddr []int)([]int,bool){
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "nextPage",
-		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
-			"address": fmt.Sprint(logicAddr),
-		},
-	})
-
-	resp, err := http.Get(url)
-	if err != nil {
-		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
-		return nil, false
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
-		return nil, false
-	}
-
-	var Addr []int
-	if err := json.NewDecoder(resp.Body).Decode(&Addr); err != nil {
-		slog.Error("error al decodificar la respuesta", "error", err)
-		return nil, false
-	}
-
-	return Addr, true
 }

@@ -215,28 +215,60 @@ func exec() {
 
 func writeMemory(logicAddr []int, value []byte){
 
-	if cache.IsInCache(logicAddr){
-		
+	if cache.IsInCache(logicAddr){//si la pagina esta en cache opero direcatamente
+		cache.WriteMemory(logicAddr,value)
+		return
 	}
+	//si no esta en memoria, traduzco la direccion, busco la pagina, y escribo en cache
+	fisicAddr,flag := cache.Traducir(logicAddr)
 
-	fisicAddr := cache.Traducir(logicAddr)
-	cache.WriteMemory(fisicAddr,value)
+	if !flag {
+		slog.Error("Error al traducir la pagina ",logicAddr)
+		config.ExitChan <- struct{}{}
+	}else{
+		cache.GetPageInMemory(fisicAddr)
+		flag :=cache.WriteMemory(logicAddr,value)
+		if !flag{
+			config.ExitChan <- struct{}{}
+		}
+	}
 }
 
 func readMemory(logicAddr []int, size int){
 
 	base := logicAddr[:len(logicAddr)-1]
 
-	if cache.IsInCache(logicAddr){
+	if cache.IsInCache(logicAddr){  //si la pagina esta en cache leo directamente
 
-		content := cache.ReadCache(base,size)
+		content,flag := cache.ReadCache(base,size)
+
+		if !flag {
+			slog.Error("Error al leer la cache en la pagina ", base)
+			config.ExitChan<- struct{}{}
+			return
+		}
+
 		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
 
-	}else{
-		fisicAddr := cache.Traducir(logicAddr)
+	}else{ //sino la busco y la leo
+
+		fisicAddr,flag := cache.Traducir(logicAddr)
+
+		if !flag {
+			slog.Error("Error al traducir la pagina ", base)
+			config.ExitChan<- struct{}{}
+			return
+		}
+
 		page,_ := cache.GetPageInMemory(fisicAddr)
 		cache.AddEntryCache(base,page)
-		content := cache.ReadCache(logicAddr,size)
+		content,flag := cache.ReadCache(logicAddr,size)
+
+		if !flag {
+			slog.Error("Error al leer la cache en la pagina ", base)
+			config.ExitChan<- struct{}{}
+			return
+		}
 		
 		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
 	}
@@ -296,7 +328,7 @@ func DeleteProcess() {
 	
 	cache.EndProcess(config.Pcb.PID)
 
-	config.ExitChan <- "" // aviso que hay que sacar este proceso
+	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
 }
 
 func initProcess() {
@@ -447,7 +479,7 @@ func interrupt() http.HandlerFunc {
 		}
 
 		if pidRecibido == config.Pcb.PID {
-			config.InterruptChan <- "" // Interrupción al proceso
+			config.InterruptChan <- struct{}{} // Interrupción al proceso
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Proceso interrumpido."))
 		} else {
