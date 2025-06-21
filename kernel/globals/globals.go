@@ -40,8 +40,6 @@ var (
 	NextPID         uint = 1 // ?
 	PIDMutex        sync.Mutex
 
-	ProcessWaiting bool = false
-
 	LTS      []Process = make([]Process, 0)
 	LTSMutex sync.Mutex
 
@@ -59,12 +57,13 @@ var (
 	PCBReceived  = make(chan struct{}, 1)
 	LTSStopped   = make(chan struct{})
 
-	RetryProcessCh             = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
-	WaitingForMemory           = make(chan struct{}, 1)
-	WaitingForCPU         bool = false
-	WaitingInLTS          bool = false
-	WaitingInMTS          bool = false
-	WaitingProcessInReady bool = false
+	RetryNew                      = make(chan struct{})
+	RetrySuspReady                = make(chan struct{})
+	WaitingForMemory              = make(chan struct{}, 1)
+	WaitingNewProcessInReady      = make(chan struct{}) // ?
+	WaitingForCPU            bool = false
+	WaitingForRetry          bool = false
+	WaitingInMTS             bool = false
 )
 
 type IOConnection struct {

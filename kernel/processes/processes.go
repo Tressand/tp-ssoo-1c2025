@@ -34,10 +34,12 @@ func QueueToNew(process globals.Process) {
 	globals.NewQueue = append(globals.NewQueue, process)
 	globals.NewQueueMutex.Unlock()
 
-	if globals.WaitingInLTS && globals.SchedulerStatus == "START" {
+	if globals.SchedulerStatus == "START" {
 		select {
 		case globals.LTSEmpty <- struct{}{}:
+			slog.Debug("Se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
 		default:
+			slog.Debug("LTS tenia procesos para planificar, se ignora")
 		}
 	}
 
@@ -87,19 +89,17 @@ func TerminateProcess(process *globals.Process) {
 
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
 
-	globals.SuspReadyQueueMutex.Lock()
-
 	select {
-	case globals.RetryProcessCh <- struct{}{}:
+	case globals.RetrySuspReady <- struct{}{}:
+		slog.Debug("Se intenta inicializar nuevamente un proceso en Susp.Ready")
 	default:
+		select {
+		case globals.RetryNew <- struct{}{}:
+			slog.Debug("Se intenta inicializar nuevamente un proceso en NEW")
+		default:
+			slog.Debug("No hay procesos esperando ser inicializados nuevamente")
+		}
 	}
-
-	select {
-	case globals.LTSEmpty <- struct{}{}:
-	default:
-	}
-
-	globals.SuspReadyQueueMutex.Unlock()
 
 }
 

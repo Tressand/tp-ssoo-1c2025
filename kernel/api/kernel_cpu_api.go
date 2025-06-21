@@ -17,8 +17,6 @@ import (
 )
 
 func GetCPUList(working bool) []*globals.CPUConnection {
-	globals.CpuListMutex.Lock()
-	defer globals.CpuListMutex.Unlock()
 	result := make([]*globals.CPUConnection, 0)
 	for i := range globals.AvailableCPUs {
 		if globals.AvailableCPUs[i].Working == working {
@@ -69,9 +67,12 @@ func ReceiveCPU() http.HandlerFunc {
 			globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
 			globals.CpuListMutex.Unlock()
 
-			if globals.WaitingForCPU {
-				globals.AvailableCpu <- struct{}{}
+			select {
+			case globals.AvailableCpu <- struct{}{}:
+				slog.Debug("Nueva CPU añadida. Se desbloquea AvailableCpu..")
+			default:
 			}
+				
 		} else {
 			slog.Warn("CPU already registered", "id", id)
 			w.WriteHeader(http.StatusConflict)
