@@ -72,7 +72,7 @@ func SliceSelect[T any](slice []T) (index int) {
 	}
 	for {
 		for i, elem := range slice {
-			fmt.Printf("  %d - %v\n", i, elem)
+			fmt.Printf("  %d - %+v\n", i, elem)
 		}
 		fmt.Print("\nSelect index: ")
 		var output string
