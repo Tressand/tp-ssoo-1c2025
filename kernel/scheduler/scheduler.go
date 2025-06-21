@@ -211,17 +211,15 @@ func SJF() {
 
 	globals.CpuListMutex.Lock()
 	cpus := kernel_api.GetCPUList(false)
+	globals.CpuListMutex.Unlock()
 
 	if len(cpus) == 0 {
-		globals.CpuListMutex.Unlock()
-		slog.Debug("Me voy a bloquear como un hdp aca!")
 		<-globals.AvailableCpu
-		slog.Debug("Me desbloquie!")
 		return
 	}
 
-	cpu = cpus[0]
-
+	globals.CpuListMutex.Lock()
+	cpu = kernel_api.GetCPUList(false)[0]
 	globals.CpuListMutex.Unlock()
 
 	var process *globals.Process
@@ -263,11 +261,18 @@ func SRT() {
 	slog.Debug("Entre a SRT")
 
 	globals.CpuListMutex.Lock()
-	if len(kernel_api.GetCPUList(false)) == 0 { // ? Tener una flag de no hay más cpus disponibles
-		globals.CpuListMutex.Unlock()
+	cpus := kernel_api.GetCPUList(false)
+	globals.CpuListMutex.Unlock()
+
+	slog.Debug("CPUs disponibles", "cpus", cpus)
+
+	if len(cpus) != 0 {
+		slog.Debug("Estoy en SRT, entrando a SJF...")
 		SJF()
 		return
 	}
+
+	slog.Debug("Utilizando la logica especifica de SRT")
 
 	var process *globals.Process
 	var found bool = false
@@ -281,9 +286,12 @@ func SRT() {
 			}
 		}
 		process = &globals.ReadyQueue[minIndex]
+		found = true
 		globals.ReadyQueue = append(globals.ReadyQueue[:minIndex], globals.ReadyQueue[minIndex+1:]...)
 	}
 	globals.ReadyQueueMutex.Unlock()
+
+	slog.Debug("Me bloquie antes del !found")
 
 	if !found {
 		slog.Info("Me estoy bloqueando en STS porque no hay procesos en READY")
@@ -296,19 +304,26 @@ func SRT() {
 	var toInterrupt *globals.CPUSlot
 
 	globals.ExecQueueMutex.Lock()
-	minBurst := globals.ExecQueue[0].Process.EstimatedBurst
 
-	for i := range globals.ExecQueue {
-		slot := &globals.ExecQueue[i]
-		if slot.Process.EstimatedBurst > process.EstimatedBurst && slot.Process.EstimatedBurst < minBurst {
-			minBurst = slot.Process.EstimatedBurst
-			toInterrupt = slot
-			forInterrupt = true
+	if len(globals.ExecQueue) != 0 {
+		minBurst := globals.ExecQueue[0].Process.EstimatedBurst
+
+		for i := range globals.ExecQueue {
+			slot := &globals.ExecQueue[i]
+			if slot.Process.EstimatedBurst > process.EstimatedBurst && slot.Process.EstimatedBurst < minBurst {
+				minBurst = slot.Process.EstimatedBurst
+				toInterrupt = slot
+				forInterrupt = true
+			}
 		}
 	}
+
 	globals.ExecQueueMutex.Unlock()
 
+	slog.Debug("Me bloquie antes forInterrupt")
+
 	if forInterrupt {
+		slog.Debug("No entre a !!")
 		err := interruptCPU(*toInterrupt.Cpu, int(toInterrupt.Process.PCB.GetPID()))
 
 		if err != nil {

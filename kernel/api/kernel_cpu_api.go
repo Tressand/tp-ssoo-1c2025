@@ -67,12 +67,21 @@ func ReceiveCPU() http.HandlerFunc {
 			globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
 			globals.CpuListMutex.Unlock()
 
+			// !--
 			select {
 			case globals.AvailableCpu <- struct{}{}:
 				slog.Debug("Nueva CPU añadida. Se desbloquea AvailableCpu..")
 			default:
 			}
-				
+
+			select {
+			case globals.WaitingNewProcessInReady <- struct{}{}: // ?
+				slog.Debug("Replanificando STS")
+			default:
+			}
+
+			// !--
+
 		} else {
 			slog.Warn("CPU already registered", "id", id)
 			w.WriteHeader(http.StatusConflict)

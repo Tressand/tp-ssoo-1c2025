@@ -2,7 +2,7 @@
   "ip_memory": "self",
   "port_memory": 8002,
   "port_kernel": 8001,
-  "scheduler_algorithm": "FIFO",
+  "scheduler_algorithm": "SRT",
   "ready_ingress_algorithm": "PMCP",
   "alpha": 0.5,
   "suspension_time": 4500,
