@@ -3,6 +3,7 @@ package processes
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"ssoo-kernel/config"
@@ -10,6 +11,7 @@ import (
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
+	"time"
 )
 
 func CreateProcess(path string, size int) {
@@ -33,7 +35,10 @@ func QueueToNew(process globals.Process) {
 	globals.NewQueueMutex.Unlock()
 
 	if globals.WaitingInLTS && globals.SchedulerStatus == "START" {
-		globals.LTSEmpty <- struct{}{}
+		select {
+		case globals.LTSEmpty <- struct{}{}:
+		default:
+		}
 	}
 
 	logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se encola en NEW", process.PCB.GetPID()))
@@ -83,12 +88,17 @@ func TerminateProcess(process *globals.Process) {
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
 
 	globals.SuspReadyQueueMutex.Lock()
-	if len(globals.SuspReadyQueue) == 0 && globals.ProcessWaiting {
-		globals.RetryProcessCh <- struct{}{}
-		fmt.Println("No hay procesos en SUSP. READY. Se intenta inicializar el proceso en memoria")
-	} else {
-		fmt.Println("Hay procesos en READY SUSPEND")
+
+	select {
+	case globals.RetryProcessCh <- struct{}{}:
+	default:
 	}
+
+	select {
+	case globals.LTSEmpty <- struct{}{}:
+	default:
+	}
+
 	globals.SuspReadyQueueMutex.Unlock()
 
 }
@@ -99,6 +109,20 @@ func GetNextPID() uint {
 	pid := globals.NextPID
 	globals.NextPID++
 	return pid
+}
+
+func UpdateBurstEstimation(process *globals.Process) {
+
+	realBurst := time.Since(process.IniciarTiempo).Seconds()
+	previousEstimate := process.EstimatedBurst
+
+	newEstimate := config.Values.Alpha*realBurst + (1-config.Values.Alpha)*previousEstimate
+
+	process.LastRealBurst = realBurst
+	process.EstimatedBurst = newEstimate
+
+	slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
+		process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
 }
 
 func InitializeProcessInMemory(pid uint, codePath string, size int) error {

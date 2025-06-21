@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
 	"ssoo-kernel/processes"
 	"ssoo-utils/codeutils"
+	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	"strconv"
@@ -206,6 +208,24 @@ func RecieveSyscall() http.HandlerFunc {
 			processes.CreateProcess(codePath, size)
 
 		case codeutils.DUMP_MEMORY:
+			slog.Info("Syscall DUMP_MEMORY recibida", "pid", proceso.PCB.GetPID())
+
+			proceso.PCB.SetState(pcb.BLOCKED)
+
+			go func(p *globals.Process) {
+				success := HandleDumpMemory(p)
+				if success {
+					slog.Info("Proceso desbloqueado tras syscall DUMP_MEMORY exitosa", "pid", p.PCB.GetPID())
+					p.PCB.SetState(pcb.READY)
+					globals.ReadyQueueMutex.Lock()
+					globals.ReadyQueue = append(globals.ReadyQueue, *p)
+					globals.ReadyQueueMutex.Unlock()
+				} else {
+					slog.Error("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
+					p.PCB.SetState(pcb.EXIT)
+					processes.TerminateProcess(p)
+				}
+			}(proceso)
 
 		case codeutils.EXIT:
 
@@ -224,4 +244,31 @@ func RecieveSyscall() http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Syscall procesada"))
 	}
+}
+
+func HandleDumpMemory(process *globals.Process) bool {
+	pid := process.PCB.GetPID()
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "memory_dump",
+		Queries: map[string]string{
+			"pid": fmt.Sprint(pid),
+		},
+	})
+
+	resp, err := http.Post(url, "application/json", nil)
+	if err != nil {
+		slog.Error("Fallo comunicándose con Memoria para DUMP", "pid", pid, "error", err.Error())
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Memoria devolvió error", "pid", pid, "status", resp.StatusCode)
+		return false
+	}
+
+	slog.Info("DUMP_MEMORY completado", "pid", pid)
+	return true
 }
