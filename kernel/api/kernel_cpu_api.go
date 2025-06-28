@@ -5,96 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
-	processes "ssoo-kernel/processes"
 	queue "ssoo-kernel/queues"
+	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
 	"strconv"
 	"time"
 )
-
-func GetCPUList(working bool) []*globals.CPUConnection {
-	result := make([]*globals.CPUConnection, 0)
-	for i := range globals.AvailableCPUs {
-		if globals.AvailableCPUs[i].Working == working {
-			result = append(result, globals.AvailableCPUs[i])
-		}
-	}
-	return result
-}
-
-func sendToInitializeInMemory(pid uint, codePath string, size int) error {
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "process",
-		Queries: map[string]string{
-			"pid": fmt.Sprint(pid),
-			"req": fmt.Sprint(size),
-		},
-	})
-
-	codeFile, err := os.OpenFile(codePath, os.O_RDONLY, 0666)
-	if err != nil {
-		return fmt.Errorf("error al abrir el archivo de código: %v", err)
-	}
-
-	resp, err := http.Post(url, "text/plain", codeFile)
-	if err != nil {
-		return fmt.Errorf("error al llamar a Memoria: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("memoria rechazó la creación (código %d)", resp.StatusCode)
-	}
-
-	return nil
-}
-
-func TryInititializeProcess(process *globals.Process) bool {
-	err := sendToInitializeInMemory(process.PCB.GetPID(), process.GetPath(), process.Size)
-
-	if err != nil {
-		slog.Info(fmt.Sprintf("El proceso con el pid %d se inicializó en Memoria", process.PCB.GetPID()))
-
-		queue.Enqueue(pcb.READY, process)
-
-		select {
-		case globals.STSEmpty <- struct{}{}:
-			slog.Debug("Desbloqueando STS porque hay procesos en READY")
-		default:
-			select {
-			case globals.WaitingNewProcessInReady <- struct{}{}:
-				slog.Debug("Replanificando STS")
-			default:
-			}
-		}
-		return true
-	}
-	slog.Info(fmt.Sprintf("No se pudo inicializar el proceso con el pid %d en Memoria", process.PCB.GetPID()))
-	return false
-}
-
-func InititializeProcess(process *globals.Process) {
-	for {
-		if !TryInititializeProcess(process) {
-			slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", process.PCB.GetPID())
-
-			if process.PCB.GetState() == pcb.SUSP_READY {
-				<-globals.RetrySuspReady
-			} else {
-				<-globals.RetryNew
-			}
-
-			slog.Info("Reintentando inicializar proceso", "name", process.PCB.GetPID())
-		}
-	}
-}
 
 func ReceiveCPU() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +155,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 				queue.Enqueue(pcb.EXIT, process)
 
-				processes.TerminateProcess(process)
+				process_shared.TerminateProcess(process)
 
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Dispositivo no existe - process terminado"))
@@ -298,7 +218,7 @@ func RecieveSyscall() http.HandlerFunc {
 				http.Error(w, "tamaño invalido", http.StatusBadRequest)
 				return
 			}
-			processes.CreateProcess(codePath, size)
+			process_shared.CreateProcess(codePath, size)
 		case codeutils.DUMP_MEMORY:
 			DUMP_MEMORY(process)
 		case codeutils.EXIT:
@@ -327,7 +247,7 @@ func DUMP_MEMORY(process *globals.Process) { // !!!!!!!!!!!!!!!!!
 		} else {
 			slog.Error("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
 			queue.Enqueue(pcb.EXIT, p)
-			processes.TerminateProcess(p)
+			process_shared.TerminateProcess(p)
 		}
 	}(process)
 }
@@ -336,7 +256,7 @@ func DUMP_MEMORY(process *globals.Process) { // !!!!!!!!!!!!!!!!!
 
 func EXIT(process *globals.Process) {
 	queue.Enqueue(pcb.EXIT, process)
-	processes.TerminateProcess(process)
+	process_shared.TerminateProcess(process)
 }
 
 func HandleDumpMemory(process *globals.Process) bool {

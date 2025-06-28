@@ -12,8 +12,8 @@ import (
 	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
-	process "ssoo-kernel/processes"
 	scheduler "ssoo-kernel/scheduler"
+	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
@@ -60,10 +60,10 @@ func main() {
 			return
 		}
 
-		process.CreateProcess(pathFile, processSize)
+		process_shared.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
-		process.CreateProcess("helloworld", 300)
+		process_shared.CreateProcess("helloworld", 300)
 	}
 
 	// #endregion
@@ -108,7 +108,7 @@ func main() {
 	})
 	moduleMenu.Add("[TEST] Create process", func() {
 		size := 100 + (rand.Intn(900))
-		process.CreateProcess("prueba", size)
+		process_shared.CreateProcess("prueba", size)
 	})
 	mainMenu.Add("Communicate with other module", func() {
 		moduleMenu.Activate()

@@ -9,15 +9,15 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
-	processes "ssoo-kernel/processes"
 	queue "ssoo-kernel/queues"
+	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	"strconv"
+	"time"
 )
 
 func LTS() {
@@ -59,7 +59,7 @@ func LTS() {
 
 			logger.Instance.Debug("Se intenta inicializar un proceso en LTS", "pid", process.PCB.GetPID())
 
-			go api.InititializeProcess(process)
+			go process_shared.InititializeProcess(process)
 			logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d se inicializo en Memoria", process.PCB.GetPID()))
 
 		case "PMCP":
@@ -100,7 +100,7 @@ func LTS() {
 				continue
 			}
 
-			go api.InititializeProcess(process)
+			go process_shared.InititializeProcess(process)
 
 		default:
 			fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
@@ -129,7 +129,7 @@ func FIFO() {
 	var cpu *globals.CPUConnection
 
 	globals.AvCPUmu.Lock()
-	avCPUs := api.GetCPUList(false)
+	avCPUs := process_shared.GetCPUList(false)
 	found := len(avCPUs) != 0
 	globals.AvCPUmu.Unlock()
 
@@ -164,7 +164,7 @@ func SJF() {
 	var cpu *globals.CPUConnection
 
 	globals.AvCPUmu.Lock()
-	cpus := api.GetCPUList(false)
+	cpus := process_shared.GetCPUList(false)
 	globals.AvCPUmu.Unlock()
 
 	if len(cpus) == 0 {
@@ -173,7 +173,7 @@ func SJF() {
 	}
 
 	globals.AvCPUmu.Lock()
-	cpu = api.GetCPUList(false)[0]
+	cpu = process_shared.GetCPUList(false)[0]
 	globals.AvCPUmu.Unlock()
 
 	var process *globals.Process
@@ -213,7 +213,7 @@ func SRT() {
 	slog.Debug("Entre a SRT")
 
 	globals.AvCPUmu.Lock()
-	cpus := api.GetCPUList(false)
+	cpus := process_shared.GetCPUList(false)
 	globals.AvCPUmu.Unlock()
 
 	slog.Debug("CPUs disponibles", "cpus", cpus)
@@ -299,6 +299,20 @@ func SRT() {
 	<-globals.WaitingNewProcessInReady
 }
 
+func UpdateBurstEstimation(process *globals.Process) {
+
+	realBurst := time.Since(process.StartTime).Seconds()
+	previousEstimate := process.EstimatedBurst
+
+	newEstimate := config.Values.Alpha*realBurst + (1-config.Values.Alpha)*previousEstimate
+
+	process.LastRealBurst = realBurst
+	process.EstimatedBurst = newEstimate
+
+	slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
+		process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
+}
+
 func interruptCPU(cpu globals.CPUConnection, pid int) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       cpu.IP,
@@ -356,7 +370,7 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 	case "Interrupt":
 		slog.Info("El proceso con el pid %d fue interrumpido por la CPU %d", resp.PID, cpu.ID)
 
-		processes.UpdateBurstEstimation(process)
+		UpdateBurstEstimation(process)
 
 		queue.Enqueue(pcb.READY, process)
 
@@ -366,7 +380,7 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 		return
 	case "Exit":
-		processes.UpdateBurstEstimation(process)
+		UpdateBurstEstimation(process)
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", resp.PID))
 
 		select {
