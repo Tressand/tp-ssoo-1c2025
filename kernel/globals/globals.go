@@ -8,46 +8,44 @@ import (
 )
 
 var (
-	NewQueue      []Process = make([]Process, 0)
+	NewQueue      []*Process = make([]*Process, 0)
 	NewQueueMutex sync.Mutex
 
-	ReadyQueue      []Process = make([]Process, 0)
+	ReadyQueue      []*Process = make([]*Process, 0)
 	ReadyQueueMutex sync.Mutex
 
-	SuspReadyQueue      []Process = make([]Process, 0)
+	SuspReadyQueue      []*Process = make([]*Process, 0)
 	SuspReadyQueueMutex sync.Mutex
 
-	SuspBlockedQueue      []Process = make([]Process, 0)
+	SuspBlockedQueue      []*Process = make([]*Process, 0)
 	SuspBlockedQueueMutex sync.Mutex
 
-	ExitQueue      []Process = make([]Process, 0)
+	ExitQueue      []*Process = make([]*Process, 0)
 	ExitQueueMutex sync.Mutex
 
-	BlockedQueue      []BlockedProcess = make([]BlockedProcess, 0)
+	BlockedQueue      []*Process = make([]*Process, 0)
 	BlockedQueueMutex sync.Mutex
 
-	ExecQueue      []CPUSlot = make([]CPUSlot, 0)
+	ExecQueue      []*Process = make([]*Process, 0)
 	ExecQueueMutex sync.Mutex
 
 	//
 	AvailableIOs []IOConnection
 	AvIOmu       sync.Mutex
 
-	AvailableCPUs []CPUConnection = make([]CPUConnection, 0)
-	CpuListMutex  sync.Mutex
+	AvailableCPUs []*CPUConnection = make([]*CPUConnection, 0)
+	AvCPUmu       sync.Mutex
+
+	CPUsSlots   []*CPUSlot = make([]*CPUSlot, 0)
+	CPUsSlotsMu sync.Mutex
+
+	MTSQueue   []*WaitingIO = make([]*WaitingIO, 0)
+	MTSQueueMu sync.Mutex
+	//
 
 	SchedulerStatus string
 	NextPID         uint = 1 // ?
 	PIDMutex        sync.Mutex
-
-	LTS      []Process = make([]Process, 0)
-	LTSMutex sync.Mutex
-
-	STS      []Process = make([]Process, 0)
-	STSMutex sync.Mutex
-
-	MTS      []Process = make([]Process, 0)
-	MTSMutex sync.Mutex
 
 	LTSEmpty = make(chan struct{})
 	STSEmpty = make(chan struct{})
@@ -77,15 +75,15 @@ type IORequest struct {
 	Timer int
 }
 
-type BlockedProcess struct {
-	Process     Process
-	IORequest   IORequest
-	ioAvailable chan struct{}
+type WaitingIO struct {
+	Process     *Process
+	IORequest   IORequest // TODO: Pasarlo a memoria dinamica
+	IOAvailable chan struct{}
 }
 
 type CPUSlot struct {
 	Cpu     *CPUConnection
-	Process *Process
+	Process *Process // nil si no hay proceso asignado
 }
 
 type CPUConnection struct {
@@ -110,7 +108,7 @@ type Process struct {
 	PCB            *pcb.PCB
 	Path           string
 	Size           int
-	IniciarTiempo  time.Time // cuando entra a RUNNING
+	StartTime      time.Time // cuando entra a RUNNING
 	LastRealBurst  float64   // en segundos
 	EstimatedBurst float64   // estimación actual
 }

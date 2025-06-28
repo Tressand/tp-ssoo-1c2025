@@ -67,8 +67,11 @@ func main() {
 	}
 
 	// #endregion
-	go scheduler.STS()
+
 	globals.SchedulerStatus = "STOP" // El planificador debe estar frenado por defecto
+
+	go scheduler.LTS()
+	go scheduler.STS()
 
 	// #region CREATE SERVER
 
@@ -100,18 +103,9 @@ func main() {
 
 	moduleMenu.Add("Init scheduler", func() {
 		if globals.SchedulerStatus == "STOP" {
-			go scheduler.LTS() // TODO: No es necesario tirar la go routine aca, puedo lanzarla junto a los otros.
 			globals.LTSStopped <- struct{}{}
-			logger.Instance.Info("Scheduler initialized")
 		}
 	})
-	/*
-		moduleMenu.Add("Run 40 processes", func() {
-			for i := 0; i < 40; i++ {
-				size := 100 + (rand.Intn(900))
-				process.CreateProcess("helloworld", size)
-			}
-		})*/
 	moduleMenu.Add("[TEST] Create process", func() {
 		size := 100 + (rand.Intn(900))
 		process.CreateProcess("prueba", size)

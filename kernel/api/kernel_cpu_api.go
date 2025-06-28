@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
-	"ssoo-kernel/processes"
+	processes "ssoo-kernel/processes"
+	queue "ssoo-kernel/queues"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
-	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	"strconv"
 	"time"
@@ -20,10 +21,79 @@ func GetCPUList(working bool) []*globals.CPUConnection {
 	result := make([]*globals.CPUConnection, 0)
 	for i := range globals.AvailableCPUs {
 		if globals.AvailableCPUs[i].Working == working {
-			result = append(result, &globals.AvailableCPUs[i])
+			result = append(result, globals.AvailableCPUs[i])
 		}
 	}
 	return result
+}
+
+func sendToInitializeInMemory(pid uint, codePath string, size int) error {
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "process",
+		Queries: map[string]string{
+			"pid": fmt.Sprint(pid),
+			"req": fmt.Sprint(size),
+		},
+	})
+
+	codeFile, err := os.OpenFile(codePath, os.O_RDONLY, 0666)
+	if err != nil {
+		return fmt.Errorf("error al abrir el archivo de código: %v", err)
+	}
+
+	resp, err := http.Post(url, "text/plain", codeFile)
+	if err != nil {
+		return fmt.Errorf("error al llamar a Memoria: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("memoria rechazó la creación (código %d)", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func TryInititializeProcess(process *globals.Process) bool {
+	err := sendToInitializeInMemory(process.PCB.GetPID(), process.GetPath(), process.Size)
+
+	if err != nil {
+		slog.Info(fmt.Sprintf("El proceso con el pid %d se inicializó en Memoria", process.PCB.GetPID()))
+
+		queue.Enqueue(pcb.READY, process)
+
+		select {
+		case globals.STSEmpty <- struct{}{}:
+			slog.Debug("Desbloqueando STS porque hay procesos en READY")
+		default:
+			select {
+			case globals.WaitingNewProcessInReady <- struct{}{}:
+				slog.Debug("Replanificando STS")
+			default:
+			}
+		}
+		return true
+	}
+	slog.Info(fmt.Sprintf("No se pudo inicializar el proceso con el pid %d en Memoria", process.PCB.GetPID()))
+	return false
+}
+
+func InititializeProcess(process *globals.Process) {
+	for {
+		if !TryInititializeProcess(process) {
+			slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", process.PCB.GetPID())
+
+			if process.PCB.GetState() == pcb.SUSP_READY {
+				<-globals.RetrySuspReady
+			} else {
+				<-globals.RetryNew
+			}
+
+			slog.Info("Reintentando inicializar proceso", "name", process.PCB.GetPID())
+		}
+	}
 }
 
 func ReceiveCPU() http.HandlerFunc {
@@ -46,13 +116,13 @@ func ReceiveCPU() http.HandlerFunc {
 
 		slog.Info("New CPU connected", "id", id, "ip", ip, "port", port)
 
-		cpu := globals.CPUConnection{
-			ID:   id,
-			IP:   ip,
-			Port: port,
-		}
+		cpu := new(globals.CPUConnection)
+		cpu.ID = id
+		cpu.IP = ip
+		cpu.Port = port
+		cpu.Working = false
 
-		globals.CpuListMutex.Lock()
+		globals.AvCPUmu.Lock()
 		exists := false
 		for _, c := range globals.AvailableCPUs {
 			if c.ID == id {
@@ -60,12 +130,12 @@ func ReceiveCPU() http.HandlerFunc {
 				break
 			}
 		}
-		globals.CpuListMutex.Unlock()
+		globals.AvCPUmu.Unlock()
 
 		if !exists {
-			globals.CpuListMutex.Lock()
+			globals.AvCPUmu.Lock()
 			globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
-			globals.CpuListMutex.Unlock()
+			globals.AvCPUmu.Unlock()
 
 			// !--
 			select {
@@ -96,24 +166,27 @@ func ReceiveCPU() http.HandlerFunc {
 
 func RecieveSyscall() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 1. Obtener el PID del query parameter
 		cpuID := r.URL.Query().Get("id")
+
 		if cpuID == "" {
 			http.Error(w, "Parámetro 'id' requerido", http.StatusBadRequest)
 			return
 		}
-		proceso, err := processes.SearchProcessWorking(cpuID)
+
+		process, err := processes.SearchProcessWorking(cpuID)
 
 		if err != nil {
-			fmt.Print("No se pudo encontrar la CPU")
+			slog.Info(err.Error())
 			return
 		}
 		// 2. Leer la instrucción del body (en lugar de URL-encoded query param)
 		var instruction codeutils.Instruction
+
 		if err := json.NewDecoder(r.Body).Decode(&instruction); err != nil {
 			http.Error(w, "Error al parsear JSON de instrucción: "+err.Error(), http.StatusBadRequest)
 			return
 		}
+
 		defer r.Body.Close()
 
 		// 3. Procesar la syscall con el PID disponible
@@ -149,42 +222,43 @@ func RecieveSyscall() http.HandlerFunc {
 
 			if !deviceFound {
 
-				lastState := proceso.PCB.GetState()
-				proceso.PCB.SetState(pcb.EXIT)
-				actualState := proceso.PCB.GetState()
-				logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
+				queue.Enqueue(pcb.EXIT, process)
 
-				processes.TerminateProcess(proceso)
+				processes.TerminateProcess(process)
+
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("Dispositivo no existe - proceso terminado"))
+				w.Write([]byte("Dispositivo no existe - process terminado"))
 				return
 			}
+
 			if selectedIO == nil {
 				http.Error(w, "IO device no disponible o no encontrado", http.StatusServiceUnavailable)
 				return
 			}
 
 			if !selectedIO.Disp {
-				lastState := proceso.PCB.GetState()
-				proceso.PCB.SetState(pcb.BLOCKED)
-				actualState := proceso.PCB.GetState()
-				logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
 
-				blockedProcess := globals.BlockedProcess{
-					Process:   *proceso,
-					IORequest: globals.IORequest{Pid: proceso.PCB.GetPID(), Timer: timeMs},
-				}
-				globals.BlockedQueue = append(globals.BlockedQueue, blockedProcess)
+				queue.Enqueue(pcb.BLOCKED, process)
+
+				waitIO := new(globals.WaitingIO)
+				waitIO.Process = process
+				waitIO.IORequest = globals.IORequest{Pid: process.PCB.GetPID(), Timer: timeMs}
+				waitIO.IOAvailable = make(chan struct{})
+
+				globals.MTSQueueMu.Lock()
+				globals.MTSQueue = append(globals.MTSQueue, waitIO)
+				globals.MTSQueueMu.Unlock()
 
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
+				return
 			}
 			// Marcar como no disponible y enviar la solicitud
 			selectedIO.Disp = false
 
 			go func(io *globals.IOConnection) {
 
-				globals.SendIORequest(proceso.PCB.GetPID(), timeMs, selectedIO)
+				globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
 
 				// simula el tiempo de señal de io, asi vuelve a ready
 				time.Sleep(time.Duration(timeMs) * time.Millisecond)
@@ -194,9 +268,7 @@ func RecieveSyscall() http.HandlerFunc {
 				io.Disp = true
 				globals.AvIOmu.Unlock()
 
-				// Reactivar proceso
-				proceso.PCB.SetState(1) // READY
-				globals.STS = append(globals.LTS, *proceso)
+				queue.Enqueue(pcb.READY, process)
 			}(selectedIO)
 
 			w.WriteHeader(http.StatusOK)
@@ -216,36 +288,10 @@ func RecieveSyscall() http.HandlerFunc {
 				return
 			}
 			processes.CreateProcess(codePath, size)
-
 		case codeutils.DUMP_MEMORY:
-			slog.Info("Syscall DUMP_MEMORY recibida", "pid", proceso.PCB.GetPID())
-
-			proceso.PCB.SetState(pcb.BLOCKED)
-
-			go func(p *globals.Process) {
-				success := HandleDumpMemory(p)
-				if success {
-					slog.Info("Proceso desbloqueado tras syscall DUMP_MEMORY exitosa", "pid", p.PCB.GetPID())
-					p.PCB.SetState(pcb.READY)
-					globals.ReadyQueueMutex.Lock()
-					globals.ReadyQueue = append(globals.ReadyQueue, *p)
-					globals.ReadyQueueMutex.Unlock()
-				} else {
-					slog.Error("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
-					p.PCB.SetState(pcb.EXIT)
-					processes.TerminateProcess(p)
-				}
-			}(proceso)
-
+			DUMP_MEMORY(process)
 		case codeutils.EXIT:
-
-			lastState := proceso.PCB.GetState()
-			proceso.PCB.SetState(pcb.EXIT)
-			actualState := proceso.PCB.GetState()
-			logger.RequiredLog(true, proceso.PCB.GetPID(), fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()), map[string]string{})
-
-			processes.TerminateProcess(proceso)
-
+			EXIT(process)
 		default:
 			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)
 			return
@@ -254,6 +300,32 @@ func RecieveSyscall() http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Syscall procesada"))
 	}
+}
+
+// !!!!!!!!!!!!!!!!!
+func DUMP_MEMORY(process *globals.Process) { // !!!!!!!!!!!!!!!!!
+	slog.Info("Syscall DUMP_MEMORY recibida", "pid", process.PCB.GetPID())
+
+	process.PCB.SetState(pcb.BLOCKED) // !!!!!!!!!!!!!!!!!
+
+	go func(p *globals.Process) {
+		success := HandleDumpMemory(p)
+		if success {
+			slog.Info("Proceso desbloqueado tras syscall DUMP_MEMORY exitosa", "pid", p.PCB.GetPID())
+			queue.Enqueue(pcb.READY, p)
+		} else {
+			slog.Error("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
+			queue.Enqueue(pcb.EXIT, p)
+			processes.TerminateProcess(p)
+		}
+	}(process)
+}
+
+// !!!!!!!!!!!!!!!!!
+
+func EXIT(process *globals.Process) {
+	queue.Enqueue(pcb.EXIT, process)
+	processes.TerminateProcess(process)
 }
 
 func HandleDumpMemory(process *globals.Process) bool {
