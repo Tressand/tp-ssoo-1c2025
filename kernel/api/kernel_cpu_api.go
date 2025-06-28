@@ -173,12 +173,23 @@ func RecieveSyscall() http.HandlerFunc {
 			return
 		}
 
-		process, err := processes.SearchProcessWorking(cpuID)
+		var process *globals.Process
 
-		if err != nil {
-			slog.Info(err.Error())
+		globals.CPUsSlotsMu.Lock()
+		for _, slot := range globals.CPUsSlots {
+			if slot.Cpu.ID == cpuID {
+				process = slot.Process
+				break
+			}
+		}
+		globals.CPUsSlotsMu.Unlock()
+
+		if process == nil {
+			slog.Error("No se encontró el proceso asociado al CPU", "cpuID", cpuID)
+			http.Error(w, "No se encontró el proceso asociado al CPU", http.StatusBadRequest)
 			return
 		}
+
 		// 2. Leer la instrucción del body (en lugar de URL-encoded query param)
 		var instruction codeutils.Instruction
 
