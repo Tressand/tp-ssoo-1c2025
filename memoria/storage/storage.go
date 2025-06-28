@@ -362,6 +362,208 @@ func Memory_Dump(pid uint) error {
 
 //#endregion
 
+//#region SECTION: SWAP
+
+var swapMutex sync.Mutex
+
+func formatSwapData(data *process_data) (msg string) {
+	msg += fmt.Sprint(data.pid, "|", len(data.pageBases), "\n")
+
+	for _, base := range data.pageBases {
+		bytes, _ := GetPage(data.pid, base)
+		if bytes == nil {
+			return ""
+		}
+		msg += fmt.Sprint(bytes, "\n")
+	}
+
+	msg += "~\n"
+	return
+}
+
+func addToSwap(data *process_data) error {
+	swapFile, err := os.OpenFile(config.Values.SwapfilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return err
+	}
+	defer swapFile.Close()
+
+	_, err = swapFile.WriteString(formatSwapData(data))
+	return err
+}
+
+func numberFromReader(r *bufio.Reader, delim byte) (int, error) {
+	readValue, err := r.ReadString(delim)
+	if err != nil {
+		return 0, err
+	}
+	result, err := strconv.Atoi(readValue[:len(readValue)-1])
+	return result, err
+}
+
+func getFromSwap(data *process_data) (string, error) {
+	var swapFile *os.File
+	var pid uint = data.pid
+
+	swapFile, err := os.OpenFile(config.Values.SwapfilePath, os.O_RDONLY, 0666)
+	if err != nil {
+		return "", err
+	}
+	defer swapFile.Close()
+
+	reader := bufio.NewReader(swapFile)
+
+	for {
+		// Get pid from swap block
+		h_pid, err := numberFromReader(reader, '|')
+		if err != nil {
+			return "", err
+		}
+
+		// Check if block pid is target pid
+		if uint(h_pid) == pid {
+			// Return swap block
+			data, err := reader.ReadString('~')
+			return data, err
+		}
+
+		// Skip until next block
+		h_pagecount, err := numberFromReader(reader, '\n')
+		if err != nil {
+			return "", err
+		}
+		// Discard brackets and endline "[]\n"(3), values and commas (pageSize * 2 - 1) for each page
+		// + discard page separator ~ and last \n (2)
+		_, err = reader.Discard((2+config.Values.PageSize*2)*h_pagecount + 2)
+		if err != nil {
+			return "", err
+		}
+	}
+}
+
+func removeFromSwap(pid uint) error {
+	swapFile, err := os.OpenFile(config.Values.SwapfilePath, os.O_RDONLY, 0666)
+	if err != nil {
+		return err
+	}
+	defer swapFile.Close()
+
+	temp_dir_path := strings.TrimSuffix(config.Values.SwapfilePath, "swapfile.bin")
+	temp_swapFile, err := os.CreateTemp(temp_dir_path, "swapfile_*.tmp")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		os.Remove(temp_swapFile.Name())
+		temp_swapFile.Close()
+	}()
+
+	reader := bufio.NewReader(swapFile)
+
+	var finished bool = false
+	for !finished {
+		h_s_pid, err := reader.ReadString('|')
+		if err != nil {
+			return err
+		}
+		h_pid, err := strconv.Atoi(h_s_pid[:len(h_s_pid)-1])
+		if err != nil {
+			return err
+		}
+
+		s_block, err := reader.ReadString('~')
+		if err != nil {
+			return err
+		}
+		reader.Discard(1)
+
+		if uint(h_pid) == pid {
+			for {
+				line, err := reader.ReadString('\n')
+				temp_swapFile.WriteString(line)
+				if err == io.EOF {
+					finished = true
+					break
+				}
+			}
+
+		} else {
+			temp_swapFile.WriteString(h_s_pid)
+			temp_swapFile.WriteString(s_block + "\n")
+		}
+	}
+
+	os.Rename(temp_swapFile.Name(), swapFile.Name())
+	return nil
+}
+
+func SuspendProcess(pid uint) error {
+	process_data := GetDataByPID(pid)
+	if process_data == nil {
+		return errors.New("could not find process with pid")
+	}
+
+	swapMutex.Lock()
+	err := addToSwap(process_data)
+	swapMutex.Unlock()
+	if err != nil {
+		return err
+	}
+
+	err = deallocateMemory(pid)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+func UnSuspendProcess(pid uint) error {
+	process_data := GetDataByPID(pid)
+	if process_data == nil {
+		return errors.New("could not find process with pid")
+	}
+
+	swapMutex.Lock()
+	swapBlock, err := getFromSwap(process_data)
+	swapMutex.Unlock()
+	if err != nil {
+		return err
+	}
+
+	chunks := strings.Split(swapBlock, "\n")
+	page_count, _ := strconv.Atoi(chunks[0])
+	pageBases, err := allocateMemory(config.Values.PageSize * page_count)
+	if err != nil {
+		return err
+	}
+
+	swapMutex.Lock()
+	err = removeFromSwap(pid)
+	swapMutex.Unlock()
+	if err != nil {
+		return err
+	}
+
+	process_data.pageBases = pageBases
+
+	//drop pagecount and block separator from chunks
+	chunks = chunks[1 : len(chunks)-1]
+
+	var bytes []byte = make([]byte, config.Values.PageSize)
+	for i_chunk, base := range pageBases {
+		s_page := strings.Split(chunks[i_chunk][1:len(chunks)-1], " ")
+		for i_byte, char := range s_page {
+			char_int, _ := strconv.Atoi(char)
+			bytes[i_byte] = byte(char_int)
+		}
+		WritePage(pid, base, bytes)
+	}
+	return nil
+}
+
+//#endregion
+
 // #region INITIALIZE
 func InitializeUserMemory() {
 	size := config.Values.MemorySize
@@ -373,6 +575,8 @@ func InitializeUserMemory() {
 	remainingMemory = size
 	memorySize = size
 	slog.Info("Memoria de Usuario Inicializada", "size", remainingMemory)
+
+	os.Remove(config.Values.SwapfilePath)
 
 	if levels <= 0 {
 		return
@@ -432,6 +636,7 @@ func deallocateMemory(pid uint) error {
 	if process_data == nil {
 		return errors.New("couldn't find process with id")
 	}
+	slog.Info("deallocating memory", "pid", pid, "size", len(process_data.pageBases)*config.Values.PageSize)
 	for _, pageBase := range process_data.pageBases {
 		reservationBits[pageBase/paginationConfig.PageSize] = false
 	}

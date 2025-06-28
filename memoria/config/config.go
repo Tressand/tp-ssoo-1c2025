@@ -33,4 +33,5 @@ func Load() {
 		panic(err)
 	}
 	Values.DumpPath = configManager.GetDefaultExePath() + Values.DumpPath
+	Values.SwapfilePath = configManager.GetDefaultExePath() + Values.SwapfilePath
 }

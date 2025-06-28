@@ -47,6 +47,8 @@ func main() {
 	mux.Handle("/memory_dump", memoryDumpReqHandler.HandlerFunc())
 	mux.Handle("/full_page", fullPageReqHandler.HandlerFunc())
 	mux.Handle("/memory_config", memoryConfigReqHandler.HandlerFunc())
+	mux.Handle("/suspend", suspendProcessRequestHandler.HandlerFunc())
+	mux.Handle("/unsuspend", unsuspendProcessRequestHandler.HandlerFunc())
 	mux.Handle("/free_space", freeSpaceRequestHandler.HandlerFunc())
 	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
@@ -283,6 +285,32 @@ var freeSpaceRequestHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
 			return SimpleResponse{http.StatusOK, []byte(fmt.Sprint(storage.GetRemainingMemory()))}
+		},
+	},
+}
+
+var suspendProcessRequestHandler = GenericRequest{
+	"ANY": MethodRequestInfo{
+		ReqParams: []string{"pid"},
+		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			err := storage.SuspendProcess(uint(numFromQuery(r, "pid")))
+			if err != nil {
+				slog.Error(err.Error())
+			}
+			return SimpleResponse{http.StatusOK, []byte{}}
+		},
+	},
+}
+
+var unsuspendProcessRequestHandler = GenericRequest{
+	"ANY": MethodRequestInfo{
+		ReqParams: []string{"pid"},
+		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			err := storage.UnSuspendProcess(uint(numFromQuery(r, "pid")))
+			if err != nil {
+				slog.Error(err.Error())
+			}
+			return SimpleResponse{http.StatusOK, []byte{}}
 		},
 	},
 }
