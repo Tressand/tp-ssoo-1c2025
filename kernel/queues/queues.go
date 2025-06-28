@@ -1,0 +1,92 @@
+package queues
+
+import (
+	"errors"
+	"fmt"
+	"ssoo-kernel/globals"
+	"ssoo-utils/logger"
+	"ssoo-utils/pcb"
+	"sync"
+)
+
+func getQueueAndMutex(state pcb.STATE) (*[]*globals.Process, *sync.Mutex, error) {
+	switch state {
+	case pcb.NEW:
+		return &globals.NewQueue, &globals.NewQueueMutex, nil
+	case pcb.READY:
+		return &globals.ReadyQueue, &globals.ReadyQueueMutex, nil
+	case pcb.BLOCKED:
+		return &globals.BlockedQueue, &globals.BlockedQueueMutex, nil // Ahora es []*Process
+	case pcb.EXEC:
+		return &globals.ExecQueue, &globals.ExecQueueMutex, nil // Ahora es []*Process
+	case pcb.SUSP_READY:
+		return &globals.SuspReadyQueue, &globals.SuspReadyQueueMutex, nil
+	case pcb.SUSP_BLOCKED:
+		return &globals.SuspBlockedQueue, &globals.SuspBlockedQueueMutex, nil
+	case pcb.EXIT:
+		return &globals.ExitQueue, &globals.ExitQueueMutex, nil
+	default:
+		return nil, nil, errors.New("estado no soportado")
+	}
+}
+
+func Enqueue(state pcb.STATE, process *globals.Process) error {
+	lastState := process.PCB.GetState()
+	process.PCB.SetState(state)
+	actualState := process.PCB.GetState()
+
+	queue, mutex, err := getQueueAndMutex(state)
+	if err != nil {
+		return err
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	*queue = append(*queue, process)
+
+	// Loguear cambio de estado
+	logger.RequiredLog(true, process.PCB.GetPID(),
+		fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
+		map[string]string{})
+
+	return nil
+}
+
+func Dequeue(state pcb.STATE) (*globals.Process, error) {
+	queue, mutex, err := getQueueAndMutex(state)
+	if err != nil {
+		return nil, err
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if len(*queue) == 0 {
+		return nil, fmt.Errorf("La cola para estado %s está vacía", state.String())
+	}
+
+	// Tomo el primer proceso y lo saco de la cola
+	proc := (*queue)[0]
+	*queue = (*queue)[1:]
+
+	return proc, nil
+}
+
+func FindByPID(state pcb.STATE, pid uint) (*globals.Process, error) {
+	queue, mutex, err := getQueueAndMutex(state)
+	if err != nil {
+		return nil, err
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	for _, proc := range *queue {
+		if proc.PCB.GetPID() == pid {
+			return proc, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Proceso con PID %d no encontrado en cola %s", pid, state.String())
+}
