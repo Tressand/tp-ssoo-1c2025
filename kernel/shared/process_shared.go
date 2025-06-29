@@ -73,7 +73,7 @@ func sendToInitializeInMemory(pid uint, codePath string, size int) error {
 func TryInititializeProcess(process *globals.Process) bool {
 	err := sendToInitializeInMemory(process.PCB.GetPID(), process.GetPath(), process.Size)
 
-	if err != nil {
+	if err == nil {
 		slog.Info(fmt.Sprintf("El proceso con el pid %d se inicializó en Memoria", process.PCB.GetPID()))
 
 		queue.Enqueue(pcb.READY, process)
