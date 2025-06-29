@@ -434,6 +434,15 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		cpu.Working = false
 		globals.AvCPUmu.Unlock()
 
+                globals.CPUsSlotsMu.Lock()
+                for _, slot := range globals.CPUsSlots {
+                        if slot.Cpu.ID == cpu.ID {
+                                slot.Process = nil
+                                break
+                        }
+                }
+                globals.CPUsSlotsMu.Unlock()
+
 		select {
 		case globals.CpuBecameIdle <- struct{}{}:
 			slog.Debug("Se desbloquea CpuBecameIdle porque una CPU se volvió inactiva")
