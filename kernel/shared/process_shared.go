@@ -99,7 +99,7 @@ func InititializeProcess(process *globals.Process) {
 		if !TryInititializeProcess(process) {
 			slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "pid", process.PCB.GetPID())
 
-			if process.PCB.GetState() == pcb.SUSP_READY {
+			if process.PCB.GetState() == pcb.SUSP_READY { // ? Sera necesario distinguir entre SUSP_READY y NEW?
 				<-globals.RetrySuspReady
 			} else {
 				<-globals.RetryNew
@@ -111,9 +111,10 @@ func InititializeProcess(process *globals.Process) {
 }
 
 func HandleNewProcess(process *globals.Process) {
-	if !TryInititializeProcess(process) {
-		queue.Enqueue(pcb.NEW, process)
-	}
+
+	//	if !TryInititializeProcess(process) {
+	queue.Enqueue(pcb.NEW, process)
+	//	}
 
 	if globals.SchedulerStatus == "STOP" {
 		return
@@ -123,7 +124,6 @@ func HandleNewProcess(process *globals.Process) {
 	case globals.LTSEmpty <- struct{}{}:
 		slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
 	default:
-		slog.Debug("LTS tenia procesos para planificar, se ignora")
 	}
 }
 

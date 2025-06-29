@@ -59,8 +59,8 @@ func ReceiveCPU() http.HandlerFunc {
 
 			// !--
 			select {
-			case globals.AvailableCpu <- struct{}{}:
-				slog.Debug("Nueva CPU añadida. Se desbloquea AvailableCpu..")
+			case globals.NewCpuConnected <- struct{}{}:
+				slog.Debug("Nueva CPU añadida. Se desbloquea NewCpuConnected..")
 			default:
 			}
 

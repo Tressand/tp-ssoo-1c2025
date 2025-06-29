@@ -51,9 +51,11 @@ var (
 	STSEmpty = make(chan struct{})
 	MTSEmpty = make(chan struct{})
 
-	AvailableCpu = make(chan struct{}, 1) // Esto me parece que esta de más
-	PCBReceived  = make(chan struct{}, 1)
-	LTSStopped   = make(chan struct{})
+	NewCpuConnected = make(chan struct{}, 1)
+	CpuBecameIdle   = make(chan struct{}, 1)
+
+	PCBReceived = make(chan struct{}, 1)
+	LTSStopped  = make(chan struct{})
 
 	RetryNew                      = make(chan struct{})
 	RetrySuspReady                = make(chan struct{})
@@ -94,7 +96,7 @@ type CPUConnection struct {
 }
 
 type DispatchResponse struct {
-	PID    int    `json:"pid"`
+	PID    uint   `json:"pid"`
 	PC     int    `json:"pc"`
 	Motivo string `json:"motivo"`
 }

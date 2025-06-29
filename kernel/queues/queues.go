@@ -90,3 +90,24 @@ func FindByPID(state pcb.STATE, pid uint) (*globals.Process, error) {
 
 	return nil, fmt.Errorf("Proceso con PID %d no encontrado en cola %s", pid, state.String())
 }
+
+func RemoveByPID(state pcb.STATE, pid uint) (*globals.Process, error) {
+	queue, mutex, err := getQueueAndMutex(state)
+	if err != nil {
+		return nil, err
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	for i, proc := range *queue {
+		if proc.PCB.GetPID() == pid {
+			// Lo saco de la cola
+			removed := proc
+			*queue = append((*queue)[:i], (*queue)[i+1:]...)
+			return removed, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Proceso con PID %d no encontrado en cola %s", pid, state.String())
+}
