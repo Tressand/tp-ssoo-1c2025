@@ -74,7 +74,7 @@ func TryInititializeProcess(process *globals.Process) bool {
 	err := sendToInitializeInMemory(process.PCB.GetPID(), process.GetPath(), process.Size)
 
 	if err == nil {
-		slog.Info(fmt.Sprintf("El proceso con el pid %d se inicializó en Memoria", process.PCB.GetPID()))
+		slog.Info("Se inicializo en memoria el proceso", "pid", process.PCB.GetPID(), "path", process.GetPath(), "size", process.Size)
 
 		queue.Enqueue(pcb.READY, process)
 
@@ -82,48 +82,109 @@ func TryInititializeProcess(process *globals.Process) bool {
 		case globals.STSEmpty <- struct{}{}:
 			slog.Debug("Desbloqueando STS porque hay procesos en READY")
 		default:
-			select {
-			case globals.WaitingNewProcessInReady <- struct{}{}:
-				slog.Debug("Replanificando STS")
-			default:
-			}
 		}
+
+		select {
+		case globals.NewProcessInReadySignal <- struct{}{}:
+			slog.Debug("Replanificando STS")
+		default:
+		}
+
 		return true
 	}
-	slog.Info(fmt.Sprintf("No se pudo inicializar el proceso con el pid %d en Memoria", process.PCB.GetPID()))
+
+	slog.Info("No se pudo inicializar el proceso en Memoria", "pid", process.PCB.GetPID(), "error", err.Error())
 	return false
 }
 
 func InititializeProcess(process *globals.Process) {
 	for {
-		if !TryInititializeProcess(process) {
+		initialized := TryInititializeProcess(process)
+
+		globals.WaitingForRetryMu.Lock()
+		if globals.WaitingForRetry && initialized {
+			globals.WaitingForRetry = false
+		}
+		globals.WaitingForRetryMu.Unlock()
+
+		if !initialized {
 			slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "pid", process.PCB.GetPID())
 
-			if process.PCB.GetState() == pcb.SUSP_READY { // ? Sera necesario distinguir entre SUSP_READY y NEW?
-				<-globals.RetrySuspReady
-			} else {
-				<-globals.RetryNew
+			globals.WaitingForRetryMu.Lock()
+			if !globals.WaitingForRetry {
+				globals.WaitingForRetry = true
 			}
+			globals.WaitingForRetryMu.Unlock()
+
+			<-globals.RetryInitialization
 
 			slog.Info("Reintentando inicializar proceso", "name", process.PCB.GetPID())
+
+			continue
+		}
+
+		return
+	}
+}
+
+func isSmallerThanAll(process *globals.Process) bool {
+	globals.NewQueueMutex.Lock()
+	defer globals.NewQueueMutex.Unlock()
+
+	if len(globals.NewQueue) == 0 {
+		slog.Debug("No hay procesos en NEW, se puede inicializar directamente")
+		return true
+	}
+
+	for _, p := range globals.NewQueue {
+		if p.Size < process.Size {
+			return false
 		}
 	}
+	return true
 }
 
 func HandleNewProcess(process *globals.Process) {
 
-	//	if !TryInititializeProcess(process) {
-	queue.Enqueue(pcb.NEW, process)
-	//	}
-
-	if globals.SchedulerStatus == "STOP" {
+	globals.SuspReadyQueueMutex.Lock()
+	if len(globals.SuspReadyQueue) != 0 {
+		queue.Enqueue(pcb.NEW, process)
+		notifyNewProcessInNew()
 		return
 	}
+	globals.SuspReadyQueueMutex.Unlock()
 
+	var initialized bool
+
+	if shouldInitialize(process) {
+		initialized = TryInititializeProcess(process)
+	}
+
+	if !initialized {
+		queue.Enqueue(pcb.NEW, process)
+	}
+
+	notifyNewProcessInNew()
+}
+
+func notifyNewProcessInNew() {
 	select {
 	case globals.LTSEmpty <- struct{}{}:
 		slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
 	default:
+	}
+}
+
+func shouldInitialize(process *globals.Process) bool {
+	switch config.Values.ReadyIngressAlgorithm {
+	case "FIFO":
+		globals.WaitingForRetryMu.Lock()
+		defer globals.WaitingForRetryMu.Unlock()
+		return !globals.WaitingForRetry
+	case "PMCP":
+		return isSmallerThanAll(process)
+	default:
+		return false
 	}
 }
 
@@ -160,15 +221,9 @@ func TerminateProcess(process *globals.Process) {
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
 
 	select {
-	case globals.RetrySuspReady <- struct{}{}:
-		slog.Debug("Se intenta inicializar nuevamente un proceso en Susp.Ready")
+	case globals.RetryInitialization <- struct{}{}:
+		slog.Debug("Se libero memoria y hay procesos esperando para inicializarse. Se envia signal de reintento")
 	default:
-		select {
-		case globals.RetryNew <- struct{}{}:
-			slog.Debug("Se intenta inicializar nuevamente un proceso en NEW")
-		default:
-			slog.Debug("No hay procesos esperando ser inicializados nuevamente")
-		}
 	}
 
 }

@@ -3,6 +3,7 @@ package queues
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"ssoo-kernel/globals"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
@@ -45,7 +46,6 @@ func Enqueue(state pcb.STATE, process *globals.Process) error {
 
 	*queue = append(*queue, process)
 
-	// Loguear cambio de estado
 	logger.RequiredLog(true, process.PCB.GetPID(),
 		fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
 		map[string]string{})
@@ -53,7 +53,7 @@ func Enqueue(state pcb.STATE, process *globals.Process) error {
 	return nil
 }
 
-func Dequeue(state pcb.STATE) (*globals.Process, error) {
+func Search(state pcb.STATE, sortBy SortBy) (*globals.Process, error) {
 	queue, mutex, err := getQueueAndMutex(state)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,67 @@ func Dequeue(state pcb.STATE) (*globals.Process, error) {
 		return nil, fmt.Errorf("La cola para estado %s está vacía", state.String())
 	}
 
-	// Tomo el primer proceso y lo saco de la cola
+	if len(*queue) == 1 {
+		proc := (*queue)[0]
+		return proc, nil
+	}
+
+	switch sortBy {
+	case Size:
+		sort.Slice(*queue, func(i, j int) bool {
+			return (*queue)[i].Size < (*queue)[j].Size
+		})
+	case EstimatedBurst:
+		sort.Slice(*queue, func(i, j int) bool {
+			return (*queue)[i].EstimatedBurst < (*queue)[j].EstimatedBurst
+		})
+	case NoSort:
+	}
+
+	proc := (*queue)[0]
+
+	return proc, nil
+}
+
+type SortBy int
+
+const (
+	Size SortBy = iota
+	EstimatedBurst
+	NoSort
+)
+
+func Dequeue(state pcb.STATE, sortBy SortBy) (*globals.Process, error) {
+	queue, mutex, err := getQueueAndMutex(state)
+	if err != nil {
+		return nil, err
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if len(*queue) == 0 {
+		return nil, fmt.Errorf("La cola para estado %s está vacía", state.String())
+	}
+
+	if len(*queue) == 1 {
+		proc := (*queue)[0]
+		*queue = (*queue)[1:]
+		return proc, nil
+	}
+
+	switch sortBy {
+	case Size:
+		sort.Slice(*queue, func(i, j int) bool {
+			return (*queue)[i].Size < (*queue)[j].Size
+		})
+	case EstimatedBurst:
+		sort.Slice(*queue, func(i, j int) bool {
+			return (*queue)[i].EstimatedBurst < (*queue)[j].EstimatedBurst
+		})
+	case NoSort:
+	}
+
 	proc := (*queue)[0]
 	*queue = (*queue)[1:]
 

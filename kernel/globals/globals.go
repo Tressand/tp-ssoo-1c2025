@@ -51,19 +51,21 @@ var (
 	STSEmpty = make(chan struct{})
 	MTSEmpty = make(chan struct{})
 
-	NewCpuConnected = make(chan struct{}, 1)
-	CpuBecameIdle   = make(chan struct{}, 1)
+	CpuAvailableSignal = make(chan struct{})
 
-	PCBReceived = make(chan struct{}, 1)
 	LTSStopped  = make(chan struct{})
 
-	RetryNew                      = make(chan struct{})
-	RetrySuspReady                = make(chan struct{})
-	WaitingForMemory              = make(chan struct{}, 1)
-	WaitingNewProcessInReady      = make(chan struct{}) // ?
-	WaitingForCPU            bool = false
-	WaitingForRetry          bool = false
-	WaitingInMTS             bool = false
+
+	RetryInitialization = make(chan struct{})
+	
+	RetryNew                     = make(chan struct{})
+	RetrySuspReady               = make(chan struct{})
+	WaitingForMemory             = make(chan struct{}, 1)
+	NewProcessInReadySignal      = make(chan struct{}) // ?
+	WaitingForCPU           bool = false
+	WaitingForRetry         bool = false
+	WaitingForRetryMu       sync.Mutex
+	WaitingInMTS            bool = false
 )
 
 type IOConnection struct {

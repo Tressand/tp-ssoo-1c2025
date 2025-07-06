@@ -57,21 +57,11 @@ func ReceiveCPU() http.HandlerFunc {
 			globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
 			globals.AvCPUmu.Unlock()
 
-			// !--
 			select {
-			case globals.NewCpuConnected <- struct{}{}:
-				slog.Debug("Nueva CPU añadida. Se desbloquea NewCpuConnected..")
+			case globals.CpuAvailableSignal <- struct{}{}:
+				slog.Debug("Nueva CPU añadida. Se desbloquea CpuAvailableSignal..")
 			default:
 			}
-
-			select {
-			case globals.WaitingNewProcessInReady <- struct{}{}: // ?
-				slog.Debug("Replanificando STS")
-			default:
-			}
-
-			// !--
-
 		} else {
 			slog.Warn("CPU already registered", "id", id)
 			w.WriteHeader(http.StatusConflict)
@@ -123,6 +113,8 @@ func RecieveSyscall() http.HandlerFunc {
 		// 3. Procesar la syscall con el PID disponible
 		opcode := codeutils.Opcode(instruction.Opcode)
 
+		slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall: <%s>", process.PCB.GetPID(), codeutils.OpcodeStrings[opcode]))
+
 		switch opcode {
 
 		case codeutils.IO:
@@ -130,13 +122,16 @@ func RecieveSyscall() http.HandlerFunc {
 				http.Error(w, "IO requiere 2 argumentos", http.StatusBadRequest)
 				return
 			}
+
 			device := instruction.Args[0]
 			timeMs, err := strconv.Atoi(instruction.Args[1])
+
 			if err != nil {
 				http.Error(w, "Tiempo invalido", http.StatusBadRequest)
 				return
 			}
-			fmt.Printf("Recibida syscall IO: dispositivo=%s, tiempo=%d\n", device, timeMs)
+
+			slog.Debug("Recibida syscall IO: dispositivo=%s, tiempo=%d\n", device, timeMs)
 
 			deviceFound := false
 			/* Ahora mismo, si esta ocupado, sigue con la ejecución, pero se bloquea si la envia.*/
@@ -152,6 +147,13 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.AvIOmu.Unlock()
 
 			if !deviceFound {
+				process, err = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+
+				if err != nil {
+					slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
+					http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
+					return
+				}
 
 				queue.Enqueue(pcb.EXIT, process)
 
@@ -168,6 +170,13 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 
 			if !selectedIO.Disp {
+				process, err = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+
+				if err != nil {
+					slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
+					http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
+					return
+				}
 
 				queue.Enqueue(pcb.BLOCKED, process)
 
@@ -185,7 +194,7 @@ func RecieveSyscall() http.HandlerFunc {
 				return
 			}
 			// Marcar como no disponible y enviar la solicitud
-			selectedIO.Disp = false
+			selectedIO.Disp = false // TODO: ...
 
 			go func(io *globals.IOConnection) {
 
@@ -222,7 +231,17 @@ func RecieveSyscall() http.HandlerFunc {
 		case codeutils.DUMP_MEMORY:
 			DUMP_MEMORY(process)
 		case codeutils.EXIT:
-			EXIT(process)
+			_, err := queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+
+			if err != nil {
+				slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
+				http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
+				return
+			}
+			slog.Info("Syscall EXIT recibida", "pid", process.PCB.GetPID())
+
+			queue.Enqueue(pcb.EXIT, process)
+			process_shared.TerminateProcess(process)
 		default:
 			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)
 			return
@@ -235,8 +254,6 @@ func RecieveSyscall() http.HandlerFunc {
 
 // !!!!!!!!!!!!!!!!!
 func DUMP_MEMORY(process *globals.Process) { // !!!!!!!!!!!!!!!!!
-	slog.Info("Syscall DUMP_MEMORY recibida", "pid", process.PCB.GetPID())
-
 	process.PCB.SetState(pcb.BLOCKED) // !!!!!!!!!!!!!!!!!
 
 	go func(p *globals.Process) {
@@ -250,13 +267,6 @@ func DUMP_MEMORY(process *globals.Process) { // !!!!!!!!!!!!!!!!!
 			process_shared.TerminateProcess(p)
 		}
 	}(process)
-}
-
-// !!!!!!!!!!!!!!!!!
-
-func EXIT(process *globals.Process) {
-	queue.Enqueue(pcb.EXIT, process)
-	process_shared.TerminateProcess(process)
 }
 
 func HandleDumpMemory(process *globals.Process) bool {

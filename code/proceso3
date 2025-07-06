@@ -1,0 +1,3 @@
+INIT_PROC proceso1 100
+INIT_PROC proceso1 80
+EXIT
