@@ -128,9 +128,6 @@ func InititializeProcess(process *globals.Process) {
 }
 
 func isSmallerThanAll(process *globals.Process) bool {
-	globals.NewQueueMutex.Lock()
-	defer globals.NewQueueMutex.Unlock()
-
 	if len(globals.NewQueue) == 0 {
 		slog.Debug("No hay procesos en NEW, se puede inicializar directamente")
 		return true
@@ -148,17 +145,20 @@ func HandleNewProcess(process *globals.Process) {
 
 	globals.SuspReadyQueueMutex.Lock()
 	if len(globals.SuspReadyQueue) != 0 {
+		globals.SuspReadyQueueMutex.Unlock()
 		queue.Enqueue(pcb.NEW, process)
 		notifyNewProcessInNew()
 		return
 	}
 	globals.SuspReadyQueueMutex.Unlock()
 
-	var initialized bool
+	initialized := false
 
+	globals.NewQueueMutex.Lock()
 	if shouldInitialize(process) {
 		initialized = TryInititializeProcess(process)
 	}
+	globals.NewQueueMutex.Unlock()
 
 	if !initialized {
 		queue.Enqueue(pcb.NEW, process)
@@ -180,7 +180,7 @@ func shouldInitialize(process *globals.Process) bool {
 	case "FIFO":
 		globals.WaitingForRetryMu.Lock()
 		defer globals.WaitingForRetryMu.Unlock()
-		return !globals.WaitingForRetry
+		return !globals.WaitingForRetry && len(globals.NewQueue) == 0
 	case "PMCP":
 		return isSmallerThanAll(process)
 	default:
