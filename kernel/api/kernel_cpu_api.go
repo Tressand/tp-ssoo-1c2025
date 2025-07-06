@@ -252,18 +252,57 @@ func RecieveSyscall() http.HandlerFunc {
 	}
 }
 
-// !!!!!!!!!!!!!!!!!
-func DUMP_MEMORY(process *globals.Process) { // !!!!!!!!!!!!!!!!!
-	process.PCB.SetState(pcb.BLOCKED) // !!!!!!!!!!!!!!!!!
+func DUMP_MEMORY(process *globals.Process) {
+	_, err := queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+
+	if err != nil {
+		slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
+		return
+	}
+
+	err = queue.Enqueue(pcb.BLOCKED, process)
+
+	if err != nil {
+		slog.Error("Error al encolar proceso para DUMP_MEMORY", "pid", process.PCB.GetPID(), "error", err.Error())
+		return
+	}
 
 	go func(p *globals.Process) {
 		success := HandleDumpMemory(p)
+
 		if success {
 			slog.Info("Proceso desbloqueado tras syscall DUMP_MEMORY exitosa", "pid", p.PCB.GetPID())
-			queue.Enqueue(pcb.READY, p)
+
+			_, err := queue.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+
+			if err != nil {
+				slog.Error("Error al remover proceso de la cola", "pid", p.PCB.GetPID(), "error", err.Error())
+				return
+			}
+
+			err = queue.Enqueue(pcb.READY, p)
+
+			if err != nil {
+				slog.Error("Error al encolar proceso en BLOCKED para DUMP_MEMORY", "pid", p.PCB.GetPID(), "error", err.Error())
+				return
+			}
 		} else {
-			slog.Error("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
-			queue.Enqueue(pcb.EXIT, p)
+			slog.Info("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
+
+			_, err := queue.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+
+			if err != nil {
+				slog.Error("Error al remover proceso de la cola", "pid", p.PCB.GetPID(), "error", err.Error())
+				return
+			}
+
+			err = queue.Enqueue(pcb.EXIT, p)
+
+			if err != nil {
+				slog.Error("Error al encolar proceso en EXIT para DUMP_MEMORY", "pid", p.PCB.GetPID(), "error", err.Error())
+				return
+			}
+
 			process_shared.TerminateProcess(p)
 		}
 	}(process)

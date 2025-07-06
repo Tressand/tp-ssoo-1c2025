@@ -422,3 +422,29 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) (globals.
 
 	return dispatchResp, nil
 }
+
+func requestSwap(process *globals.Process) error {
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "suspend",
+		Queries: map[string]string{
+			"pid": strconv.Itoa(int(process.PCB.GetPID())),
+		},
+	})
+
+	resp, err := http.Post(url, "text/plain", nil)
+
+	if err != nil {
+		logger.Instance.Error("Error al enviar solicitud de swap", "pid", process.PCB.GetPID(), "error", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Instance.Error("Swap rechazó la solicitud", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
+		return fmt.Errorf("swap request failed with status code %d", resp.StatusCode)
+	}
+
+	return nil
+}

@@ -3,10 +3,10 @@ package main
 // #region SECTION: IMPORTS
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"os"
 	kernel_api "ssoo-kernel/api"
@@ -19,6 +19,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
+	"sync"
 )
 
 // #endregion
@@ -68,8 +69,11 @@ func main() {
 
 	// #endregion
 
-	globals.SchedulerStatus = "STOP" // El planificador debe estar frenado por defecto
+	var wg sync.WaitGroup
 
+	globals.SchedulerStatus = "STOP"
+
+	wg.Add(2)
 	go scheduler.LTS()
 	go scheduler.STS()
 
@@ -96,20 +100,15 @@ func main() {
 
 	// #endregion
 
+	bufio.NewReader(os.Stdin).ReadString('\n')
+	globals.LTSStopped <- struct{}{}
+	wg.Wait()
+
 	// #region MENU
 
 	mainMenu := menu.Create()
 	moduleMenu := menu.Create()
 
-	moduleMenu.Add("Init scheduler", func() {
-		if globals.SchedulerStatus == "STOP" {
-			globals.LTSStopped <- struct{}{}
-		}
-	})
-	moduleMenu.Add("[TEST] Create process", func() {
-		size := 100 + (rand.Intn(900))
-		process_shared.CreateProcess("prueba", size)
-	})
 	mainMenu.Add("Communicate with other module", func() {
 		moduleMenu.Activate()
 	})
