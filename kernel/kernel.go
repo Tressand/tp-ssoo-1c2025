@@ -100,8 +100,11 @@ func main() {
 
 	// #endregion
 
+	fmt.Println("Presione enter para iniciar el planificador de largo plazo...")
+
 	bufio.NewReader(os.Stdin).ReadString('\n')
 	globals.LTSStopped <- struct{}{}
+
 	wg.Wait()
 
 	// #region MENU
