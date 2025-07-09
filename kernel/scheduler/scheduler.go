@@ -423,7 +423,7 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) (globals.
 	return dispatchResp, nil
 }
 
-func requestSwap(process *globals.Process) error {
+func requestSuspend(process *globals.Process) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
