@@ -47,8 +47,8 @@ func sendToInitializeInMemory(pid uint, codePath string, size int) error {
 		Port:     config.Values.PortMemory,
 		Endpoint: "process",
 		Queries: map[string]string{
-			"pid": fmt.Sprint(pid),
-			"req": fmt.Sprint(size),
+			"pid":  fmt.Sprint(pid),
+			"size": fmt.Sprint(size),
 		},
 	})
 
