@@ -4,3 +4,6 @@
 pending.txt
 *.exe
 !build_all.exe
+*.dmp
+*.bin
+*.tmp

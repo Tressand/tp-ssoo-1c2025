@@ -5,15 +5,15 @@ import (
 	"math"
 )
 
-type MMU struct{
-	levels int
-	pageSize uint32
+type MMU struct {
+	levels      int
+	pageSize    uint32
 	tableEntrys uint32
 }
 
 var mmu MMU
 
-func TraducirDireccion(logicDir uint32) (uint32,bool){
+func TraducirDireccion(logicDir uint32) (uint32, bool) {
 	pageNMB := logicDir / mmu.pageSize
 	scrolling := logicDir % mmu.pageSize
 
@@ -22,11 +22,11 @@ func TraducirDireccion(logicDir uint32) (uint32,bool){
 	slog.Info("Número de página", "valor", pageNMB)
 	slog.Info("Desplazamiento", "valor", scrolling)
 
-	frame,condition := lookupTlb(pageNMB)
+	frame, condition := lookupTlb(pageNMB)
 
-	if condition{
-		return frame + scrolling,true
-	}else{
+	if condition {
+		return frame + scrolling, true
+	} else {
 		var entrada uint32
 		for nivel := 1; nivel <= mmu.levels; nivel++ {
 			exponente := mmu.levels - nivel
@@ -41,11 +41,11 @@ func TraducirDireccion(logicDir uint32) (uint32,bool){
 			slog.Info("Entrada nivel", "nivel", nivel, "entrada", entrada)
 		}
 		//consultar a memoria por entrada y desplazamiento el frame
-		frame := consultarDireccion(entrada,scrolling)
-		return frame + scrolling,true
+		frame := consultarDireccion(entrada, scrolling)
+		return frame + scrolling, true
 	}
-	
-	return 0,false
+
+	return 0, false
 }
 
 func pseudomain() {
@@ -54,9 +54,7 @@ func pseudomain() {
 	TraducirDireccion(direccionLogica)
 }
 
-func consultarDireccion(entrada,scrolling uint32) uint32{
-
-	
+func consultarDireccion(entrada, scrolling uint32) uint32 {
 
 	return 0
 }
