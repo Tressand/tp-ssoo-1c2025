@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"ssoo-cpu/config"
+	"ssoo-cpu/memory"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
@@ -16,6 +17,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -45,6 +47,13 @@ func main() {
 	if !configManager.IsCompiledEnv() {
 		config.Values.PortCPU += identificador
 	}
+	if(config.Values.CacheEntries > 0){
+		cache.InitCache()
+		config.CacheEnable = true
+	}
+	
+	//cargar config de memoria
+	cache.FindMemoryConfig()
 
 	//crear logger
 	err := logger.SetupDefault("cpu", config.Values.LogLevel)
@@ -57,7 +66,7 @@ func main() {
 	log.Info("Arranca CPU")
 
 	//iniciar tlb
-	//initTLB(config.Values.TLBEntries, config.Values.TLBReplacement)
+	cache.InitTLB(config.Values.TLBEntries, config.Values.TLBReplacement)
 
 	//iniciar server
 	var wg sync.WaitGroup
@@ -168,13 +177,11 @@ func exec() {
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		slog.Info("WRITE Instruction not implemented.")
-		//writeMemory()
+		writeMemory(config.Exec_values.Addr,config.Exec_values.Value)
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		slog.Info("READ Instruction not implemented.")
-		//readMemory()
+		readMemory(config.Exec_values.Addr,config.Exec_values.Arg1)
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
@@ -194,7 +201,7 @@ func exec() {
 	case "DUMP_MEMORY":
 		//vacia la memoria
 		slog.Info("DUMP_MEMORY Instruction not implemented.")
-		//dumpMemory()
+		dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
@@ -204,6 +211,68 @@ func exec() {
 
 	}
 	config.Pcb.PC++
+}
+
+func writeMemory(logicAddr []int, value []byte){
+
+	if cache.IsInCache(logicAddr){//si la pagina esta en cache opero direcatamente
+		cache.WriteMemory(logicAddr,value)
+		return
+	}
+	//si no esta en memoria, traduzco la direccion, busco la pagina, y escribo en cache
+	fisicAddr,flag := cache.Traducir(logicAddr)
+
+	if !flag {
+		slog.Error("Error al traducir la pagina ",logicAddr)
+		config.ExitChan <- struct{}{}
+	}else{
+		cache.GetPageInMemory(fisicAddr)
+		flag :=cache.WriteMemory(logicAddr,value)
+		if !flag{
+			config.ExitChan <- struct{}{}
+		}
+	}
+}
+
+func readMemory(logicAddr []int, size int){
+
+	base := logicAddr[:len(logicAddr)-1]
+
+	if cache.IsInCache(logicAddr){  //si la pagina esta en cache leo directamente
+
+		content,flag := cache.ReadCache(base,size)
+
+		if !flag {
+			slog.Error("Error al leer la cache en la pagina ", base)
+			config.ExitChan<- struct{}{}
+			return
+		}
+
+		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
+
+	}else{ //sino la busco y la leo
+
+		fisicAddr,flag := cache.Traducir(logicAddr)
+
+		if !flag {
+			slog.Error("Error al traducir la pagina ", base)
+			config.ExitChan<- struct{}{}
+			return
+		}
+
+		page,_ := cache.GetPageInMemory(fisicAddr)
+		cache.AddEntryCache(base,page)
+		content,flag := cache.ReadCache(logicAddr,size)
+
+		if !flag {
+			slog.Error("Error al leer la cache en la pagina ", base)
+			config.ExitChan<- struct{}{}
+			return
+		}
+		
+		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
+	}
+	
 }
 
 // #endregion
@@ -255,7 +324,10 @@ func DeleteProcess() {
 	}
 
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
-	config.ExitChan <- "" // aviso que hay que sacar este proceso
+	
+	cache.EndProcess(config.Pcb.PID)
+
+	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
 }
 
 func initProcess() {
@@ -274,6 +346,21 @@ func initProcess() {
 	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
 }
 
+func dumpMemory(){
+	resp, err := sendSyscall("syscall", instruction)
+	if err != nil {
+		slog.Error("Fallo la solicitud para dump memory.", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Kernel respondió con error al dump memory.", "status", resp.StatusCode)
+		return
+	}
+
+	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
+}
 //#endregion
 
 // #region kernel Connection
@@ -391,7 +478,7 @@ func interrupt() http.HandlerFunc {
 		}
 
 		if pidRecibido == config.Pcb.PID {
-			config.InterruptChan <- "" // Interrupción al proceso
+			config.InterruptChan <- struct{}{} // Interrupción al proceso
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Proceso interrumpido."))
 		} else {
@@ -415,25 +502,35 @@ func asign() {
 		if len(instruction.Args) != 2 {
 			slog.Error("WRITE requiere 2 argumentos")
 		}
-		arg1, err := strconv.Atoi(instruction.Args[0])
-		if err != nil {
-			slog.Error("error convirtiendo Dirección en WRITE ", "error", err)
+		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
+		
+		parts := strings.Split(instruction.Args[1], "|")
+		bytes := make([]byte, len(parts))
+		for i, s := range parts {
+			val, err := strconv.Atoi(s)
+			if err != nil {
+				slog.Error("error al convertir '%s' a byte: %v", s, err)
+				return
+			}
+			if val < 0 || val > 255 {
+				slog.Error("valor fuera de rango para byte: %d", val)
+				return
+			}
+			bytes[i] = byte(val)
 		}
-		config.Exec_values.Arg1 = arg1
-		config.Exec_values.Str = instruction.Args[1]
+		config.Exec_values.Value = bytes
 
 	case codeutils.READ:
 		config.Instruccion = "READ"
 		if len(instruction.Args) != 2 {
 			slog.Error("READ requiere 2 argumentos")
 		}
-		arg1, err1 := strconv.Atoi(instruction.Args[0])
-		arg2, err2 := strconv.Atoi(instruction.Args[1])
-		if err1 != nil || err2 != nil {
+		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
+		arg1, err1 := strconv.Atoi(instruction.Args[1])
+		if err1 != nil {
 			slog.Error("error convirtiendo argumentos en READ")
 		}
-		config.Exec_values.Arg1 = arg1
-		config.Exec_values.Arg2 = arg2
+		config.Exec_values.Arg2 = arg1
 
 	case codeutils.GOTO:
 		config.Instruccion = "GOTO"

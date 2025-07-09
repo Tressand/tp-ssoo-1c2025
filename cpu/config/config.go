@@ -21,6 +21,19 @@ type CPUConfig struct {
 	LogLevel         slog.Level `json:"log_level"`
 }
 
+type MemoryConfig struct {
+	PortMemory     int        `json:"port_memory"`
+	MemorySize     int        `json:"memory_size"`
+	PageSize       int        `json:"page_size"`
+	EntriesPerPage int        `json:"entries_per_page"`
+	NumberOfLevels int        `json:"number_of_levels"`
+	MemoryDelay    int        `json:"memory_delay"`
+	SwapfilePath   string     `json:"swapfile_path"`
+	SwapDelay      int        `json:"swap_delay"`
+	DumpPath       string     `json:"dump_path"`
+	LogLevel       slog.Level `json:"log_level"`
+}
+
 type PCBS struct {
 	PID int
 	PC  int
@@ -32,6 +45,8 @@ type Exec_valuesS struct {
 	Arg1 int
 	Arg2 int
 	Str string
+	Addr []int
+	Value []byte
 }
 
 type RequestPayload struct {
@@ -51,8 +66,8 @@ type DispatchResponse struct {
 }
 
 type Tlb_entries struct{
-	Page uint32
-	Frame uint32
+	Page []int
+	Frame int
 	LastUsed int64
 }
 
@@ -62,31 +77,49 @@ type TLB struct {
 	ReplacementAlg string
 }
 
-type Logic_Direction struct{
-	entrys []int
-	scrolling int
+type CACHE struct{
+	Entries []CacheEntry
+	Capacity int
+	ReplacementAlg string
+	Delay int
+}
+
+type CacheEntry struct {
+	Page []int
+	Content []byte
+	Use bool
+	Modified bool
+	Position bool //para saber si me quede aca o en otra posicion
+	Pid int
 }
 
 type ResponsePayload = codeutils.Instruction
 
 var Values CPUConfig
+var MemoryConf MemoryConfig
 var Pcb PCBS
 var Exec_values = Exec_valuesS{
 	Arg1: -1,
 	Arg2: -1,
 	Str: "",
+	Addr: []int{0},
+	Value: []byte{0},
 }
 var Instruccion string
 var Identificador int
 var configFilePath string = "/config/cpu_config.json"
-
-var InterruptChan  chan string = make(chan string)
-var ExitChan  chan string = make(chan string)
-var CicloDone chan string = make(chan string)
+var (
+       InterruptChan = make(chan struct{}, 1) // Buffer para 1 señal
+       ExitChan      = make(chan struct{}, 1)
+       CicloDone     = make(chan string, 1)
+)
 
 var KernelResp KernelResponse
 
 var Tlb TLB
+var Cache CACHE
+
+var CacheEnable bool = false
 
 func SetFilePath(path string) {
 	configFilePath = path
