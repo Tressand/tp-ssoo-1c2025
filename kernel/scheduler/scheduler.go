@@ -437,22 +437,17 @@ func forSendToWaiting() []*globals.WaitingIO {
 
 func MTS() {
 	for {
-		forSendToWaiting := forSendToWaiting()
+		waitingList := forSendToWaiting()
 
-		if len(forSendToWaiting) == 0 {
+		if len(waitingList) == 0 {
 			<-globals.MTSEmpty
 			continue
 		}
 
-		globals.WaitingForIOMu.Lock()
-
-		for _, waiting := range forSendToWaiting {
+		for _, waiting := range waitingList {
 			waiting.Waiting = true
 			go sendToWait(waiting)
 		}
-
-		globals.WaitingForIOMu.Unlock()
-
 	}
 }
 
@@ -460,12 +455,9 @@ func sendToWait(waiting *globals.WaitingIO) {
 	select {
 	case waiting.IOSignalAvailable <- struct{}{}:
 		slog.Debug("Se desbloquea el proceso esperando IO", "pid", waiting.Process.PCB.GetPID(), "IOName", waiting.IOName)
-		globals.WaitingForIOMu.Lock()
 		waiting.Waiting = false
-		globals.WaitingForIOMu.Unlock()
 
-		process, err := queue.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
-
+		process, err := removeProcess(waiting)
 		if err != nil {
 			slog.Error("Error al remover el proceso de la cola", "pid", waiting.Process.PCB.GetPID(), "error", err)
 			return
@@ -473,35 +465,43 @@ func sendToWait(waiting *globals.WaitingIO) {
 
 		queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
-		globals.AvIOmu.Lock()
-		for _, io := range globals.AvailableIOs {
-			if io.Name == waiting.IOName {
-				io.Handler <- globals.IORequest{
-					Pid:   waiting.Process.PCB.GetPID(),
-					Timer: waiting.IOTime,
-				}
-			}
-		}
-		globals.AvIOmu.Unlock()
+		dispatchToIOHandler(waiting, process.PCB.GetPID())
 
-	case <-time.After(time.Duration(config.Values.SuspensionTime) * time.Second): // TODO: Checkear esto
+	case <-time.After(time.Duration(config.Values.SuspensionTime) * time.Millisecond):
 		slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", waiting.Process.PCB.GetPID(), "IOName", waiting.IOName)
 
-		process, err := queue.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
-
+		process, err := removeProcess(waiting)
 		if err != nil {
 			slog.Error("Error al remover el proceso de la cola", "pid", waiting.Process.PCB.GetPID(), "error", err)
 			return
 		}
 
 		err = queue.Enqueue(pcb.SUSP_BLOCKED, process)
-
 		if err != nil {
 			slog.Error("Error al re-enqueue el proceso en SUSP_BLOCKED", "pid", process.PCB.GetPID(), "error", err)
 			return
 		}
 
 		requestSuspend(process)
+	}
+}
+
+func removeProcess(waiting *globals.WaitingIO) (*globals.Process, error) {
+	return queue.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
+}
+
+func dispatchToIOHandler(waiting *globals.WaitingIO, pid uint) {
+	globals.AvIOmu.Lock()
+	defer globals.AvIOmu.Unlock()
+
+	for _, io := range globals.AvailableIOs {
+		if io.Name == waiting.IOName {
+			io.Handler <- globals.IORequest{
+				Pid:   uint(pid),
+				Timer: waiting.IOTime,
+			}
+			break
+		}
 	}
 }
 
