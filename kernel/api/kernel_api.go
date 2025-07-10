@@ -13,7 +13,6 @@ import (
 	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
 	"strconv"
-	"time"
 )
 
 func ReceiveCPU() http.HandlerFunc {
@@ -71,6 +70,18 @@ func ReceiveCPU() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("CPU registered successfully"))
+	}
+}
+
+func FreeCPU(process *globals.Process) {
+	globals.CPUsSlotsMu.Lock()
+	defer globals.CPUsSlotsMu.Unlock()
+	for _, slot := range globals.CPUsSlots {
+		if slot.Process == process {
+			slot.Process = nil
+			slot.Cpu.Working = false
+			break
+		}
 	}
 }
 
@@ -137,10 +148,10 @@ func RecieveSyscall() http.HandlerFunc {
 			/* Ahora mismo, si esta ocupado, sigue con la ejecución, pero se bloquea si la envia.*/
 			var selectedIO *globals.IOConnection
 			globals.AvIOmu.Lock()
-			for i, io := range globals.AvailableIOs {
-				if io.Name == device && io.Disp {
+			for _, io := range globals.AvailableIOs {
+				if io.Name == device {
 					deviceFound = true
-					selectedIO = &globals.AvailableIOs[i]
+					selectedIO = io
 					break
 				}
 			}
@@ -154,6 +165,8 @@ func RecieveSyscall() http.HandlerFunc {
 					http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
 					return
 				}
+
+				FreeCPU(process) // Liberar el CPU asociado al proceso
 
 				queue.Enqueue(pcb.EXIT, process)
 
@@ -178,38 +191,41 @@ func RecieveSyscall() http.HandlerFunc {
 					return
 				}
 
+				FreeCPU(process) // Liberar el CPU asociado al proceso
+
 				queue.Enqueue(pcb.BLOCKED, process)
 
 				waitIO := new(globals.WaitingIO)
 				waitIO.Process = process
-				waitIO.IORequest = globals.IORequest{Pid: process.PCB.GetPID(), Timer: timeMs}
-				waitIO.IOAvailable = make(chan struct{})
+				waitIO.IOName = device
+				waitIO.IOTime = timeMs
+				waitIO.IOSignalAvailable = make(chan struct{})
 
-				globals.MTSQueueMu.Lock()
-				globals.MTSQueue = append(globals.MTSQueue, waitIO)
-				globals.MTSQueueMu.Unlock()
+				globals.WaitingForIOMu.Lock()
+				globals.WaitingForIO = append(globals.WaitingForIO, waitIO)
+				globals.WaitingForIOMu.Unlock()
 
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
 				return
 			}
 			// Marcar como no disponible y enviar la solicitud
-			selectedIO.Disp = false // TODO: ...
 
-			go func(io *globals.IOConnection) {
+			selectedIO.Disp = false // !!!
 
-				globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
+			process, err = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
-				// simula el tiempo de señal de io, asi vuelve a ready
-				time.Sleep(time.Duration(timeMs) * time.Millisecond)
+			if err != nil {
+				slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
+				http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
+				return
+			}
 
-				// Liberar dispositivo
-				globals.AvIOmu.Lock()
-				io.Disp = true
-				globals.AvIOmu.Unlock()
+			FreeCPU(process) // Liberar el CPU asociado al proceso
 
-				queue.Enqueue(pcb.READY, process)
-			}(selectedIO)
+			queue.Enqueue(pcb.BLOCKED, process)
+
+			globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
 
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Operación IO iniciada (en background)"))
@@ -239,6 +255,8 @@ func RecieveSyscall() http.HandlerFunc {
 				return
 			}
 			slog.Info("Syscall EXIT recibida", "pid", process.PCB.GetPID())
+
+			FreeCPU(process) // Liberar el CPU asociado al proceso
 
 			queue.Enqueue(pcb.EXIT, process)
 			process_shared.TerminateProcess(process)

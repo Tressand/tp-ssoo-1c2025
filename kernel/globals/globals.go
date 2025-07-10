@@ -30,7 +30,7 @@ var (
 	ExecQueueMutex sync.Mutex
 
 	//
-	AvailableIOs []IOConnection
+	AvailableIOs []*IOConnection = make([]*IOConnection, 0)
 	AvIOmu       sync.Mutex
 
 	AvailableCPUs []*CPUConnection = make([]*CPUConnection, 0)
@@ -39,8 +39,8 @@ var (
 	CPUsSlots   []*CPUSlot = make([]*CPUSlot, 0)
 	CPUsSlotsMu sync.Mutex
 
-	MTSQueue   []*WaitingIO = make([]*WaitingIO, 0)
-	MTSQueueMu sync.Mutex
+	WaitingForIO   []*WaitingIO = make([]*WaitingIO, 0)
+	WaitingForIOMu sync.Mutex
 	//
 
 	SchedulerStatus string
@@ -53,11 +53,10 @@ var (
 
 	CpuAvailableSignal = make(chan struct{})
 
-	LTSStopped  = make(chan struct{})
-
+	LTSStopped = make(chan struct{})
 
 	RetryInitialization = make(chan struct{})
-	
+
 	RetryNew                     = make(chan struct{})
 	RetrySuspReady               = make(chan struct{})
 	WaitingForMemory             = make(chan struct{}, 1)
@@ -80,9 +79,11 @@ type IORequest struct {
 }
 
 type WaitingIO struct {
-	Process     *Process
-	IORequest   IORequest // TODO: Pasarlo a memoria dinamica
-	IOAvailable chan struct{}
+	Process           *Process
+	IOName            string
+	IOTime            int
+	Waiting           bool
+	IOSignalAvailable chan struct{}
 }
 
 type CPUSlot struct {

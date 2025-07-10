@@ -159,5 +159,30 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 	time.Sleep(time.Duration(duration) * time.Millisecond)
 	logger.RequiredLog(true, *pidptr, "Fin de IO", map[string]string{})
 
+	notifyIOFinished(pid)
+
 	return true, nil
+}
+
+func notifyIOFinished(pid int) {
+	slog.Info("Notificando a Kernel que IO ha finalizado...")
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "io-finished",
+		Queries:  map[string]string{"pid": strconv.Itoa(pid)},
+	})
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	if err != nil {
+		slog.Error("Error making POST request", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Error on response", "Status", resp.StatusCode, "error", err)
+		return
+	}
+
+	slog.Info("IO finalizado notificado correctamente")
 }

@@ -12,12 +12,14 @@ import (
 	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
+	"ssoo-kernel/queues"
 	scheduler "ssoo-kernel/scheduler"
 	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
+	"ssoo-utils/pcb"
 	"strconv"
 	"sync"
 )
@@ -91,6 +93,7 @@ func main() {
 	// Pass the globalCloser to handlers that will block.
 	mux.Handle("/cpu-notify", kernel_api.ReceiveCPU())
 	mux.Handle("/io-notify", recieveIO(ctx))
+	mux.Handle("/io-finished", handleIOFinished())
 	mux.Handle("/syscall", kernel_api.RecieveSyscall())
 
 	// Sending anything to this channel will shutdown the server.
@@ -144,13 +147,31 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		name := r.URL.Query().Get("name")
 		slog.Info("IO available", "name", name)
 
+		// Check if there is a process waiting for this IO
+
+		globals.WaitingForIOMu.Lock()
+		for _, waitingIO := range globals.WaitingForIO {
+			if waitingIO.IOName == name {
+				waitingIO.IOSignalAvailable <- struct{}{}
+				slog.Info("Found waiting process for IO", "pid", waitingIO.Process.PCB.GetPID(), "ioName", name)
+				globals.WaitingForIOMu.Unlock()
+
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", "text/plain")
+				w.Write([]byte(fmt.Sprintf("%d|%d", waitingIO.Process.PCB.GetPID(), waitingIO.IOTime)))
+				return
+			}
+		}
+		globals.WaitingForIOMu.Unlock()
+
+		// !!!!!
+
 		// Create handler channel and add this IO to the list of available IOs
 		connHandler := make(chan globals.IORequest)
-		thisConnection := globals.IOConnection{
-			Name:    name,
-			Handler: connHandler,
-			Disp:    true,
-		}
+		thisConnection := new(globals.IOConnection)
+		thisConnection.Name = name
+		thisConnection.Handler = connHandler
+		thisConnection.Disp = true
 
 		// Note: Mutex is to prevent race condition on the availableIOs' list
 		globals.AvIOmu.Lock()
@@ -176,6 +197,50 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		case <-ctx.Done():
 			w.WriteHeader(http.StatusTeapot)
 		}
+	}
+}
+
+func handleIOFinished() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		pid := r.URL.Query().Get("pid")
+
+		if pid == "" {
+			http.Error(w, "PID is required", http.StatusBadRequest)
+			return
+		}
+
+		pidInt, err := strconv.Atoi(pid)
+		if err != nil {
+			http.Error(w, "Invalid PID", http.StatusBadRequest)
+			return
+		}
+
+		pidUint := uint(pidInt)
+
+		process, err := queues.FindByPID(pcb.SUSP_BLOCKED, pidUint)
+
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Process with PID %d not found in SUSP_BLOCKED queue", pidInt), http.StatusNotFound)
+			return
+		}
+
+		process, err = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error removing process with PID %d from queue: %v", pidInt, err), http.StatusInternalServerError)
+			return
+		}
+
+		queues.Enqueue(pcb.SUSP_READY, process)
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(fmt.Sprintf("IO finished for PID %d", pid)))
 	}
 }
 

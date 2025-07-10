@@ -26,8 +26,8 @@ func newProcess(path string, size int) *globals.Process {
 	process.PCB = pcb.Create(getNextPID(), path)
 	process.Path = path
 	process.Size = size
-	process.LastRealBurst = 1
-	process.EstimatedBurst = 1
+	process.LastRealBurst = 1  // TODO: Revisar manejo de rafagas. No se esta utilizando la estimación inicial pasada en la config
+	process.EstimatedBurst = 1 //
 	return process
 }
 

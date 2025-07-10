@@ -294,7 +294,7 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		return
 	}
 
-	// TODO: La comunicación entre Kernel y CPU podria ser asincronica.
+	// TODO: La comunicación entre Kernel y CPU debe ser asincronica.
 	switch resp.Motivo {
 	case "Interrupt":
 		slog.Info("El proceso fue interrumpido por la CPU", "pid", int(resp.PID), "cpu", cpu.ID)
@@ -423,6 +423,88 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) (globals.
 	return dispatchResp, nil
 }
 
+func forSendToWaiting() []*globals.WaitingIO {
+	globals.WaitingForIOMu.Lock()
+	defer globals.WaitingForIOMu.Unlock()
+	list := make([]*globals.WaitingIO, 0)
+	for _, elem := range globals.WaitingForIO {
+		if elem.Waiting == false {
+			list = append(list, elem)
+		}
+	}
+	return list
+}
+
+func MTS() {
+	for {
+		forSendToWaiting := forSendToWaiting()
+
+		if len(forSendToWaiting) == 0 {
+			<-globals.MTSEmpty
+			continue
+		}
+
+		globals.WaitingForIOMu.Lock()
+
+		for _, waiting := range forSendToWaiting {
+			waiting.Waiting = true
+			go sendToWait(waiting)
+		}
+
+		globals.WaitingForIOMu.Unlock()
+
+	}
+}
+
+func sendToWait(waiting *globals.WaitingIO) {
+	select {
+	case waiting.IOSignalAvailable <- struct{}{}:
+		slog.Debug("Se desbloquea el proceso esperando IO", "pid", waiting.Process.PCB.GetPID(), "IOName", waiting.IOName)
+		globals.WaitingForIOMu.Lock()
+		waiting.Waiting = false
+		globals.WaitingForIOMu.Unlock()
+
+		process, err := queue.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
+
+		if err != nil {
+			slog.Error("Error al remover el proceso de la cola", "pid", waiting.Process.PCB.GetPID(), "error", err)
+			return
+		}
+
+		queues.Enqueue(pcb.SUSP_BLOCKED, process)
+
+		globals.AvIOmu.Lock()
+		for _, io := range globals.AvailableIOs {
+			if io.Name == waiting.IOName {
+				io.Handler <- globals.IORequest{
+					Pid:   waiting.Process.PCB.GetPID(),
+					Timer: waiting.IOTime,
+				}
+			}
+		}
+		globals.AvIOmu.Unlock()
+
+	case <-time.After(time.Duration(config.Values.SuspensionTime) * time.Second): // TODO: Checkear esto
+		slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", waiting.Process.PCB.GetPID(), "IOName", waiting.IOName)
+
+		process, err := queue.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
+
+		if err != nil {
+			slog.Error("Error al remover el proceso de la cola", "pid", waiting.Process.PCB.GetPID(), "error", err)
+			return
+		}
+
+		err = queue.Enqueue(pcb.SUSP_BLOCKED, process)
+
+		if err != nil {
+			slog.Error("Error al re-enqueue el proceso en SUSP_BLOCKED", "pid", process.PCB.GetPID(), "error", err)
+			return
+		}
+
+		requestSuspend(process)
+	}
+}
+
 func requestSuspend(process *globals.Process) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -444,6 +526,12 @@ func requestSuspend(process *globals.Process) error {
 	if resp.StatusCode != http.StatusOK {
 		logger.Instance.Error("Swap rechazó la solicitud", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
 		return fmt.Errorf("swap request failed with status code %d", resp.StatusCode)
+	}
+
+	select {
+	case globals.RetryInitialization <- struct{}{}:
+		slog.Debug("Se desbloquea RetryInitialization porque se realizó un swap exitoso")
+	default:
 	}
 
 	return nil
