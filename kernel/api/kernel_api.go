@@ -80,6 +80,13 @@ func FreeCPU(process *globals.Process) {
 		if slot.Process == process {
 			slot.Process = nil
 			slot.Cpu.Working = false
+
+			select {
+			case globals.CpuAvailableSignal <- struct{}{}:
+				slog.Debug("CPU freed. CpuAvailableSignal unlocked..")
+			default:
+			}
+
 			break
 		}
 	}
