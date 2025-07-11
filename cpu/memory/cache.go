@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"fmt"
 	"log/slog"
 	"ssoo-cpu/config"
+	"ssoo-utils/logger"
 )
 
 
@@ -29,6 +31,11 @@ func AddEntryCache(logicAddr []int, content []byte){
 			Modified: false,
 		}
 		config.Cache.Entries = append(config.Cache.Entries, nuevaEntrada)
+
+		logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
+			"Pagina": fmt.Sprint(logicAddr),
+		})
+
 	}else{
 		if config.Cache.ReplacementAlg == "CLOCK"{
 			AddEntryCacheClock(logicAddr,content)
@@ -58,7 +65,7 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 		if !entry.Use{
 
 			fisicAddr := traducirCache(entry.Page)
-			SavePageInMemory(entry.Content,fisicAddr)
+			SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
 			entry.Content = content
 			entry.Page = logicAddr
@@ -67,6 +74,10 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 
 			position = (position + 1) % len(config.Cache.Entries)
 			config.Cache.Entries[position].Position = true
+			
+			logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
+				"Pagina": fmt.Sprint(logicAddr),
+			})
 
 			break
 		} else {
@@ -103,7 +114,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 			if !entry.Use && !entry.Modified{
 				
 				fisicAddr := traducirCache(entry.Page)
-				SavePageInMemory(entry.Content,fisicAddr)
+				SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
 				entry.Content = content
 				entry.Page = logicAddr
@@ -112,6 +123,11 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
+
+				logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
+					"Pagina": fmt.Sprint(logicAddr),
+				})
+
 				return
 			}
 
@@ -123,13 +139,12 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 		//no fue usado --> busco uso 0 y modificado 1
 		if !entry.Use{
 			
-			
 			//no esta usado
 
 			if !entry.Modified{
 				
 				fisicAddr := traducirCache(entry.Page)
-				SavePageInMemory(entry.Content,fisicAddr)
+				SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
 				entry.Content = content
 				entry.Page = logicAddr
@@ -138,6 +153,11 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
+
+				logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
+					"Pagina": fmt.Sprint(logicAddr),
+				})
+
 				return
 			}
 		}else{
@@ -160,7 +180,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 			if !entry.Use && !entry.Modified{
 				
 				fisicAddr := traducirCache(entry.Page)
-				SavePageInMemory(entry.Content,fisicAddr)
+				SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
 				entry.Content = content
 				entry.Page = logicAddr
@@ -169,6 +189,11 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
+
+				logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
+					"Pagina": fmt.Sprint(logicAddr),
+				})
+
 				return
 			}
 
@@ -204,9 +229,19 @@ func ModifyCache(logicAddr []int){
 func IsInCache(logicAddr []int) bool{
 	for _, entrada := range config.Cache.Entries {
 		if areSlicesEqual(entrada.Page, logicAddr) {
+
+			logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Hit",map[string]string{
+				"Pagina": fmt.Sprint(logicAddr),
+			})
+			
 			return true
 		}
 	}
+
+	logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Miss",map[string]string{
+		"Pagina": fmt.Sprint(logicAddr),
+	})
+
 	return false
 }
 
@@ -273,6 +308,10 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 			return nil,false
 		}
 	}
+
+	logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Hit",map[string]string{
+		"Pagina": fmt.Sprint(logicAddr),
+	})
 
 	return resultado,true
 }
@@ -343,7 +382,7 @@ func EndProcess(pid int){
 			if !flag {
 				slog.Error("Error al traducir la pagina ",entrada.Page," al querer devolver a memoria las paginas. ")
 			} else{
-				SavePageInMemory(entrada.Content,fisicAddr)
+				SavePageInMemory(entrada.Content,fisicAddr,entrada.Page)
 				entrada.Modified = false
 				entrada.Content = nil
 				entrada.Page = nil

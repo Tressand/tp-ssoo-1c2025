@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"fmt"
 	"log/slog"
 	"ssoo-cpu/config"
+	"ssoo-utils/logger"
 	"strconv"
 	"strings"
 )
@@ -48,6 +50,11 @@ func Traducir(addr []int) ([]int,bool) {
 	fisicAddr[0] = frame
 	fisicAddr[1] = delta
 
+	logger.RequiredLog(false,uint(config.Pcb.PID),"OBTENER MARCO",map[string]string{
+		"Pagina": fmt.Sprint(addr),
+		"Marco": fmt.Sprint(frame),
+	})
+
 	return fisicAddr,true
 }
 
@@ -90,7 +97,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 			return false
 		}
 
-		page, flag :=GetPageInMemory(fisicAddr) //busco la pagina
+		page, flag := GetPageInMemory(fisicAddr) //busco la pagina
 		
 		if !flag{
 			slog.Error("error al conseguir la pagina de memoria. ")

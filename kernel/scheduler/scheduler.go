@@ -246,7 +246,7 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	err := sendToWork(*cpu, request)
 
-	slog.Debug("La CPU %d termino de trabajar con el proceso con el pid %d", cpu.ID, process.PCB.GetPID())
+	slog.Debug("La CPU termino de trabajar" , "PID", process.PCB.GetPID(), "CPU", cpu.ID)
 
 	if err != nil {
 		slog.Debug(err.Error())

@@ -102,7 +102,7 @@ func main() {
 func ciclo() {
 
 	for {
-		slog.Info("Inicio de ciclo de instrucción", "PID", config.Pcb.PID, "PC", config.Pcb.PC)
+		slog.Info("PID: ", fmt.Sprint(config.Pcb.PID), "- FETCH - Program Counter: ", fmt.Sprint(config.Pcb.PC))
 
 		//obtengo la intruccion (fetch)
 		sendPidPcToMemory()
@@ -113,7 +113,7 @@ func ciclo() {
 		asign()
 
 		//execute
-		exec()
+		status := exec()
 
 		select {
 		case <-config.InterruptChan:
@@ -129,6 +129,10 @@ func ciclo() {
 
 		//pequeña pausa para ver mejor el tema de los logs
 		time.Sleep(1 * time.Second)
+
+		if status == -1 {
+			return
+		}
 	}
 }
 
@@ -155,20 +159,17 @@ func sendPidPcToMemory() {
 		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
 	}
 
-	// Deserializa la respuesta JSON a un objeto Instruction
 	err = json.NewDecoder(resp.Body).Decode(&instruction)
 	fmt.Printf("%v", instruction)
 	if err != nil {
 		slog.Error("error al deserializar la respuesta", "error", err)
 	}
-	// Devuelve la instrucción obtenida
-	//return &instruction, nil
-	//falta ver que se hacen con los datos enviados por memoria en response.
-	//log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
 }
 
 // #region Execute
-func exec() {
+func exec() int{
+
+	status := 0
 	// TODO : Deberiamos mejorar el incremento de PC.
 	switch config.Instruccion {
 	case "NOOP":
@@ -187,51 +188,38 @@ func exec() {
 		config.Pcb.PC = config.Exec_values.Arg1
 		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
 		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
-		return
 
 	//SYSCALLS
 	case "IO":
 		//habilita la IO a traves de kernel
-		sendIO()
+		status = sendIO()
 
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
-		initProcess()
+		status = initProcess()
 
 	case "DUMP_MEMORY":
 		//vacia la memoria
-		slog.Info("DUMP_MEMORY Instruction not implemented.")
-		dumpMemory()
+		slog.Info("PID: ",fmt.Sprint(config.Pcb.PID)," - Ejecutando: DUMP MEMORY")
+		status = dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
-		DeleteProcess()
+		slog.Info("PID: ",fmt.Sprint(config.Pcb.PID)," - Ejecutando: EXIT")
+		status = DeleteProcess()
 
 	default:
 
 	}
-
+	if status == -1{
+		return status
+	}
+	return 0
 }
 
 func writeMemory(logicAddr []int, value []byte) {
 
-	if cache.IsInCache(logicAddr) { //si la pagina esta en cache opero direcatamente
-		cache.WriteMemory(logicAddr, value)
-		return
-	}
-	//si no esta en memoria, traduzco la direccion, busco la pagina, y escribo en cache
-	fisicAddr, flag := cache.Traducir(logicAddr)
-
-	if !flag {
-		slog.Error("Error al traducir la pagina ", logicAddr)
-		config.ExitChan <- struct{}{}
-	} else {
-		cache.GetPageInMemory(fisicAddr)
-		flag := cache.WriteMemory(logicAddr, value)
-		if !flag {
-			config.ExitChan <- struct{}{}
-		}
-	}
+	cache.WriteMemory(logicAddr,value)
 	config.Pcb.PC++
 }
 
@@ -288,7 +276,14 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 		},
 	})
 
-	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	// Serializar la instrucción a JSON
+	jsonData, err := json.Marshal(syscallInst)
+	if err != nil {
+		return nil, fmt.Errorf("error al serializar instrucción: %w", err)
+	}
+
+	// Enviar el POST con el body correcto y el Content-Type
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error al serializar instruccion: %w", err)
 	}
@@ -296,32 +291,33 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 	return resp, nil
 }
 
-func sendIO() {
+func sendIO() int{
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Error en syscall IO", "error", err)
-		return
+		return -1
 	}
 	defer resp.Body.Close()
 	slog.Info("Syscall IO enviada correctamente")
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
-		return
+		slog.Error("Kernel respondió con error la syscall IO.", "status", resp.StatusCode)
+		return -1
 	}
 	config.Pcb.PC++
+	return 0
 }
 
-func DeleteProcess() {
+func DeleteProcess() int{
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para eliminar proceso.", "error", err)
-		return
+		return -1
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
-		return
+		return -1
 	}
 	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
@@ -329,38 +325,43 @@ func DeleteProcess() {
 	cache.EndProcess(config.Pcb.PID)
 
 	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
+	return 0
 }
 
-func initProcess() {
+func initProcess() int{
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para crear el proceso.", "error", err)
-		return
+		return -1
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("Kernel respondió con error al crear el proceso.", "status", resp.StatusCode)
-		return
+		return -1
 	}
 	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
+	
+	return 0
 }
 
-func dumpMemory() {
+func dumpMemory() int{
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para dump memory.", "error", err)
-		return
+		return -1
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("Kernel respondió con error al dump memory.", "status", resp.StatusCode)
-		return
+		return -1
 	}
 	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
+
+	return 0
 }
 
 //#endregion
@@ -470,6 +471,9 @@ func interrupt() http.HandlerFunc {
 		}
 
 		if pidRecibido == config.Pcb.PID {
+
+			slog.Info(" Llega interrupción al puerto Interrupt. ")
+
 			config.InterruptChan <- struct{}{} // Interrupción al proceso
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Proceso interrumpido."))

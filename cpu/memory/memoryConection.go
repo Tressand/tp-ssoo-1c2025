@@ -33,7 +33,7 @@ func findFrameInMemory(logicAddr []int) (int,bool){
 		Endpoint: "frame",
 		Queries: map[string]string{
 			"pid": fmt.Sprint(config.Pcb.PID),
-			"address": fmt.Sprint(str),
+			"address": str,
 		},
 	})
 
@@ -42,7 +42,6 @@ func findFrameInMemory(logicAddr []int) (int,bool){
 		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
 		return 0,false
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -168,7 +167,7 @@ func GetPageInMemory(fisicAddr []int) ([]byte,bool){
 	return page,true
 }
 
-func SavePageInMemory(page []byte,fisicAddr []int) bool{
+func SavePageInMemory(page []byte,fisicAddr []int,logicAddr []int) bool{
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -191,6 +190,10 @@ func SavePageInMemory(page []byte,fisicAddr []int) bool{
 		slog.Warn("La memoria respondió con error", "status", resp.Status)
 		return false
 	}
+	lgcaddr := fromLogicAddrToString(logicAddr[:len(logicAddr)-1])
+	frame := fisicAddr[len(fisicAddr)]
+
+	slog.Info("PID:",string(config.Pcb.PID), "- Memory Update - Página: ",lgcaddr,"- Frame:",frame)
 
 	return true
 }
