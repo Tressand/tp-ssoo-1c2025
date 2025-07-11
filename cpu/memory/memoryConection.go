@@ -10,10 +10,22 @@ import(
 	"ssoo-utils/httputils"
 	"ssoo-cpu/config"
 	"strconv"
-	
+	"strings"
 )
 
+func fromLogicAddrToString(logicAddr []int) string{
+	strs := make([]string, len(logicAddr))
+
+	for i, num := range logicAddr {
+		strs[i] = strconv.Itoa(num)
+	}
+	
+	return strings.Join(strs, "|")
+}
+
 func findFrameInMemory(logicAddr []int) (int,bool){
+
+	str := fromLogicAddrToString(logicAddr)
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -21,7 +33,7 @@ func findFrameInMemory(logicAddr []int) (int,bool){
 		Endpoint: "frame",
 		Queries: map[string]string{
 			"pid": fmt.Sprint(config.Pcb.PID),
-			"address": fmt.Sprint(logicAddr),
+			"address": fmt.Sprint(str),
 		},
 	})
 
@@ -82,36 +94,6 @@ func FindMemoryConfig() bool{
 	slog.Info("Configuración de memoria obtenida", "config", memoryConfig)
 	config.MemoryConf = memoryConfig
 
-	return true
-}
-
-
-func WriteMemoryConection(fisicAddr []int, value []byte) bool{
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "user_memory",
-		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
-			"base": fmt.Sprint(fisicAddr[0]),
-			"delta": fmt.Sprint(fisicAddr[1]),
-		},
-	})
-
-	resp, err := http.Post(url, "application/octet-stream", bytes.NewBuffer(value))
-	if err != nil {
-		slog.Error("error al realizar POST a memoria", "error", err)
-		return false
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("respuesta no exitosa al escribir en memoria", "status", resp.Status)
-		return false
-	}
-
-	slog.Info("Respuesta exitosa al escribir en memoria","fisicAddr: ",fisicAddr,"value: ",value)
 	return true
 }
 

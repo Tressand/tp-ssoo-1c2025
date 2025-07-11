@@ -17,7 +17,6 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -272,7 +271,6 @@ func readMemory(logicAddr []int, size int){
 		
 		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
 	}
-	
 }
 
 // #endregion
@@ -505,20 +503,7 @@ func asign() {
 		}
 		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
 		
-		parts := strings.Split(instruction.Args[1], "|")
-		bytes := make([]byte, len(parts))
-		for i, s := range parts {
-			val, err := strconv.Atoi(s)
-			if err != nil {
-				slog.Error("error al convertir '%s' a byte: %v", s, err)
-				return
-			}
-			if val < 0 || val > 255 {
-				slog.Error("valor fuera de rango para byte: %d", val)
-				return
-			}
-			bytes[i] = byte(val)
-		}
+		bytes := []byte(instruction.Args[1])
 		config.Exec_values.Value = bytes
 
 	case codeutils.READ:

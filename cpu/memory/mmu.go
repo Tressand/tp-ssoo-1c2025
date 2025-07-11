@@ -33,10 +33,10 @@ func Traducir(addr []int) ([]int,bool) {
 	delta := addr[len(addr)-1]
 	page := addr[:len(addr)-1]
 
-	frame, condition := findFrame(page)
+	frame, condition := findFrame(page) //tlb
 
 	if !condition {
-		frame, condition = findFrameInMemory(page)
+		frame, condition = findFrameInMemory(page) //memoria
 		if !condition {
 			frame, _ = findFrameInMemory(page)
 		}
