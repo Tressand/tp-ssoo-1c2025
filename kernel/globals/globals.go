@@ -4,32 +4,67 @@ import (
 	config "ssoo-kernel/config"
 	"ssoo-utils/pcb"
 	"sync"
+	"time"
 )
 
 var (
-	AvailableIOs    []IOConnection
-	AvIOmu          sync.Mutex
-	AvailableCPUs   []CPUConnection
-	CpuListMutex    sync.Mutex
-	SchedulerStatus string
-	NextPID         uint = 0
-	PIDMutex        sync.Mutex
-	ProcessExec     []CurrentProcess = make([]CurrentProcess, 0)
-	LTS             []Process        = make([]Process, 0)
-	LTSMutex        sync.Mutex
-	STS             []Process = make([]Process, 0)
-	STSMutex        sync.Mutex
-	MTS             []Process = make([]Process, 0)
-	MTSMutex        sync.Mutex
-	ReadySusp       []Process = make([]Process, 0) // Temporal
-	LTSEmpty                  = make(chan struct{})
-	STSEmpty                  = make(chan struct{})
-	AvailableCpu              = make(chan struct{}, 1)
-	PCBReceived               = make(chan struct{}, 1)
+	NewQueue      []*Process = make([]*Process, 0)
+	NewQueueMutex sync.Mutex
 
-	RetryProcessCh   = make(chan struct{}) // Esto deberia ser activado luego en Finalización de procesos
-	WaitingForMemory = make(chan struct{}, 1)
-	WaitingForCPU    = make(chan struct{}, 1)
+	ReadyQueue      []*Process = make([]*Process, 0)
+	ReadyQueueMutex sync.Mutex
+
+	SuspReadyQueue      []*Process = make([]*Process, 0)
+	SuspReadyQueueMutex sync.Mutex
+
+	SuspBlockedQueue      []*Process = make([]*Process, 0)
+	SuspBlockedQueueMutex sync.Mutex
+
+	ExitQueue      []*Process = make([]*Process, 0)
+	ExitQueueMutex sync.Mutex
+
+	BlockedQueue      []*Process = make([]*Process, 0)
+	BlockedQueueMutex sync.Mutex
+
+	ExecQueue      []*Process = make([]*Process, 0)
+	ExecQueueMutex sync.Mutex
+
+	//
+	AvailableIOs []*IOConnection = make([]*IOConnection, 0)
+	AvIOmu       sync.Mutex
+
+	AvailableCPUs []*CPUConnection = make([]*CPUConnection, 0)
+	AvCPUmu       sync.Mutex
+
+	CPUsSlots   []*CPUSlot = make([]*CPUSlot, 0)
+	CPUsSlotsMu sync.Mutex
+
+	WaitingForIO   []*WaitingIO = make([]*WaitingIO, 0)
+	WaitingForIOMu sync.Mutex
+	//
+
+	SchedulerStatus string
+	NextPID         uint = 1 // ?
+	PIDMutex        sync.Mutex
+
+	LTSEmpty = make(chan struct{})
+	STSEmpty = make(chan struct{})
+	MTSEmpty = make(chan struct{})
+
+	CpuAvailableSignal = make(chan struct{})
+
+	LTSStopped = make(chan struct{})
+
+	RetryInitialization = make(chan struct{})
+
+	RetryNew                     = make(chan struct{})
+	RetrySuspReady               = make(chan struct{})
+	WaitingForMemory             = make(chan struct{}, 1)
+	NewProcessInReadySignal      = make(chan struct{}) // ?
+	WaitingForCPU           bool = false
+	WaitingForRetry         bool = false
+	WaitingForRetryMu       sync.Mutex
+	WaitingInMTS            bool = false
 )
 
 type IOConnection struct {
@@ -43,9 +78,17 @@ type IORequest struct {
 	Timer int
 }
 
-type CurrentProcess struct {
-	Cpu     CPUConnection
-	Process Process
+type WaitingIO struct {
+	Process           *Process
+	IOName            string
+	IOTime            int
+	Waiting           bool
+	IOSignalAvailable chan struct{}
+}
+
+type CPUSlot struct {
+	Cpu     *CPUConnection
+	Process *Process // nil si no hay proceso asignado
 }
 
 type CPUConnection struct {
@@ -56,7 +99,7 @@ type CPUConnection struct {
 }
 
 type DispatchResponse struct {
-	PID    int    `json:"pid"`
+	PID    uint   `json:"pid"`
 	PC     int    `json:"pc"`
 	Motivo string `json:"motivo"`
 }
@@ -67,9 +110,12 @@ type CPURequest struct {
 }
 
 type Process struct {
-	PCB  *pcb.PCB
-	Path string
-	Size int
+	PCB            *pcb.PCB
+	Path           string
+	Size           int
+	StartTime      time.Time // cuando entra a RUNNING
+	LastRealBurst  float64   // en segundos
+	EstimatedBurst float64   // estimación actual
 }
 
 func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Path }
