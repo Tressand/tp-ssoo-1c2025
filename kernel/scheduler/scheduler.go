@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	"ssoo-kernel/queues"
@@ -259,7 +260,7 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	slog.Debug("Se envia a ejecutar el proceso", "PID", process.PCB.GetPID(), "CPU", cpu.ID)
 
-	resp, err := sendToWork(*cpu, request)
+	err := sendToWork(*cpu, request)
 
 	slog.Debug("La CPU %d termino de trabajar con el proceso con el pid %d", cpu.ID, process.PCB.GetPID())
 
@@ -292,93 +293,35 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 		slog.Error("Error al enviar el proceso a la CPU", "error", err)
 		return
-	}
-
-	// TODO: La comunicación entre Kernel y CPU debe ser asincronica.
-	switch resp.Motivo {
-	case "Interrupt":
-		slog.Info("El proceso fue interrumpido por la CPU", "pid", int(resp.PID), "cpu", cpu.ID)
-
-		UpdateBurstEstimation(process)
-
-		proc, err := queue.RemoveByPID(pcb.EXEC, process.PCB.GetPID())
-		if err != nil {
-			slog.Error("Error al remover el proceso de la cola EXEC", "pid", resp.PID, "error", err)
-			return
-		}
-		err = queue.Enqueue(pcb.READY, proc)
-		if err != nil {
-			slog.Error("Error al re-enqueue el proceso en READY", "pid", proc.PCB.GetPID(), "error", err)
-		}
-
-		globals.AvCPUmu.Lock()
-		cpu.Working = false
-		globals.AvCPUmu.Unlock()
-
-		globals.CPUsSlotsMu.Lock()
-		for _, slot := range globals.CPUsSlots {
-			if slot.Cpu.ID == cpu.ID {
-				slot.Process = nil
-				break
-			}
-		}
-		globals.CPUsSlotsMu.Unlock()
-
-		globals.AvCPUmu.Lock()
-		slog.Debug("Se libero la CPU", "cpu", cpu, "AvailableCPUs", globals.AvailableCPUs)
-		globals.AvCPUmu.Unlock()
-
-		select {
-		case globals.CpuAvailableSignal <- struct{}{}:
-			slog.Debug("Se desbloquea CpuBecameIdle porque una CPU se volvió inactiva")
-		default:
-			slog.Debug("CpuAvailableSignal ya estaba desbloqueada, no se envía señal")
-		}
-
-		return
-	case "Exit":
-		UpdateBurstEstimation(process)
-
-		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", resp.PID))
-
-		_, err := queue.RemoveByPID(pcb.EXEC, resp.PID)
-		if err != nil {
-			slog.Error("Error al remover el proceso de la cola EXEC", "pid", resp.PID, "error", err)
-			return
-		}
-
-		globals.AvCPUmu.Lock()
-		cpu.Working = false
-		globals.AvCPUmu.Unlock()
-
-		globals.CPUsSlotsMu.Lock()
-		for _, slot := range globals.CPUsSlots {
-			if slot.Cpu.ID == cpu.ID {
-				slot.Process = nil
-				break
-			}
-		}
-		globals.CPUsSlotsMu.Unlock()
-
-		globals.AvCPUmu.Lock()
-		slog.Debug("Se libero la CPU", "cpu", cpu, "AvailableCPUs", globals.AvailableCPUs)
-		globals.AvCPUmu.Unlock()
-
-		select {
-		case globals.CpuAvailableSignal <- struct{}{}:
-			slog.Debug("Se desbloquea CpuBecameIdle porque una CPU se volvió inactiva")
-		default:
-		}
-
-		return
-	default:
-		logger.Instance.Error("Motivo desconocido", "Motivo", resp.Motivo)
-		return
+	} else {
+		slog.Info("Proceso enviado a la CPU correctamente", "pid", process.PCB.GetPID(), "cpuID", cpu.ID)
 	}
 
 }
 
-func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) (globals.DispatchResponse, error) {
+func HandleReason(pid uint, pc int, reason string) {
+
+	process, err := queues.RemoveByPID(pcb.EXEC, pid)
+
+	if err != nil {
+		slog.Error("Error al remover proceso de la cola EXEC", "pid", pid, "error", err.Error())
+		return
+	}
+
+	kernel_api.FreeCPU(process)
+	UpdateBurstEstimation(process)
+
+	switch reason {
+	case "Interrupt":
+		slog.Info("Procesando interrupción para el proceso", "pid", pid, "pc", pc)
+		queue.Enqueue(pcb.READY, process)
+	case "Exit":
+		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
+		process_shared.TerminateProcess(process)
+	}
+}
+
+func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       cpu.IP,
 		Port:     cpu.Port,
@@ -388,39 +331,39 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) (globals.
 	jsonRequest, err := json.Marshal(request)
 	if err != nil {
 		logger.Instance.Error("Error marshaling request to JSON", "error", err)
-		return globals.DispatchResponse{}, err
+		return err
 	}
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(jsonRequest))
 	if err != nil {
 		logger.Instance.Error("Error making POST request", "error", err)
-		return globals.DispatchResponse{}, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusTeapot {
 			logger.Instance.Warn("Server requested shutdown")
-			return globals.DispatchResponse{}, fmt.Errorf("server asked for shutdown")
+			return fmt.Errorf("server asked for shutdown")
 		}
 		logger.Instance.Error("Unexpected status code from CPU", "status", resp.StatusCode)
-		return globals.DispatchResponse{}, fmt.Errorf("unexpected response status: %d", resp.StatusCode)
+		return fmt.Errorf("unexpected response status: %d", resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Instance.Error("Error reading response body", "error", err)
-		return globals.DispatchResponse{}, err
+		return err
 	}
 
 	var dispatchResp globals.DispatchResponse
 	err = json.Unmarshal(data, &dispatchResp)
 	if err != nil {
 		logger.Instance.Error("Error unmarshaling response", "error", err)
-		return globals.DispatchResponse{}, err
+		return err
 	}
 
-	return dispatchResp, nil
+	return nil
 }
 
 func forSendToWaiting() []*globals.WaitingIO {

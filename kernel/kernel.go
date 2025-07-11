@@ -94,6 +94,7 @@ func main() {
 	mux.Handle("/cpu-notify", kernel_api.ReceiveCPU())
 	mux.Handle("/io-notify", recieveIO(ctx))
 	mux.Handle("/io-finished", handleIOFinished())
+	mux.Handle("/cpu-results", kernel_api.ReceivePidPcReason())
 	mux.Handle("/syscall", kernel_api.RecieveSyscall())
 
 	// Sending anything to this channel will shutdown the server.
@@ -240,7 +241,7 @@ func handleIOFinished() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(fmt.Sprintf("IO finished for PID %d", pid)))
+		w.Write([]byte(fmt.Sprintf("IO finished for PID %s", pid)))
 	}
 }
 

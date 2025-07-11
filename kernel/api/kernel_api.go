@@ -8,6 +8,7 @@ import (
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
 	queue "ssoo-kernel/queues"
+	scheduler "ssoo-kernel/scheduler"
 	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
@@ -70,6 +71,47 @@ func ReceiveCPU() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("CPU registered successfully"))
+	}
+}
+
+func ReceivePidPcReason() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		query := r.URL.Query()
+
+		pid := query.Get("pid")
+
+		pidInt, err := strconv.Atoi(pid)
+		if err != nil {
+			http.Error(w, "Invalid PID", http.StatusBadRequest)
+			return
+		}
+		pidUint := uint(pidInt)
+
+		pc := query.Get("pc")
+
+		pcInt, err := strconv.Atoi(pc)
+
+		if err != nil {
+			http.Error(w, "Invalid PC", http.StatusBadRequest)
+			return
+		}
+
+		reason := query.Get("reason")
+
+		if reason != "Interrupt" && reason != "Exit" && reason != "" {
+			http.Error(w, "Invalid reason", http.StatusBadRequest)
+			return
+		}
+
+		go scheduler.HandleReason(pidUint, pcInt, reason) // ????
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Reason received successfully"))
 	}
 }
 
