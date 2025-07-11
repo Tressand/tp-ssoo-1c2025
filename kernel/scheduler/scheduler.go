@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -182,20 +181,6 @@ func STS() {
 	}
 }
 
-func UpdateBurstEstimation(process *globals.Process) {
-
-	realBurst := time.Since(process.StartTime).Seconds()
-	previousEstimate := process.EstimatedBurst
-
-	newEstimate := config.Values.Alpha*realBurst + (1-config.Values.Alpha)*previousEstimate
-
-	process.LastRealBurst = realBurst
-	process.EstimatedBurst = newEstimate
-
-	slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
-		process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
-}
-
 func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       cpu.IP,
@@ -325,19 +310,6 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
 		}
 		logger.Instance.Error("Unexpected status code from CPU", "status", resp.StatusCode)
 		return fmt.Errorf("unexpected response status: %d", resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Instance.Error("Error reading response body", "error", err)
-		return err
-	}
-
-	var dispatchResp globals.DispatchResponse
-	err = json.Unmarshal(data, &dispatchResp)
-	if err != nil {
-		logger.Instance.Error("Error unmarshaling response", "error", err)
-		return err
 	}
 
 	return nil

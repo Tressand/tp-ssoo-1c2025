@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -169,7 +170,7 @@ func sendPidPcToMemory() {
 
 // #region Execute
 func exec() {
-
+	// TODO : Deberiamos mejorar el incremento de PC.
 	switch config.Instruccion {
 	case "NOOP":
 		time.Sleep(1 * time.Millisecond)
@@ -210,7 +211,7 @@ func exec() {
 	default:
 
 	}
-	config.Pcb.PC++
+
 }
 
 func writeMemory(logicAddr []int, value []byte) {
@@ -232,6 +233,7 @@ func writeMemory(logicAddr []int, value []byte) {
 			config.ExitChan <- struct{}{}
 		}
 	}
+	config.Pcb.PC++
 }
 
 func readMemory(logicAddr []int, size int) {
@@ -272,7 +274,7 @@ func readMemory(logicAddr []int, size int) {
 
 		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
 	}
-
+	config.Pcb.PC++
 }
 
 // #endregion
@@ -308,6 +310,7 @@ func sendIO() {
 		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
 		return
 	}
+	config.Pcb.PC++
 }
 
 func DeleteProcess() {
@@ -322,7 +325,7 @@ func DeleteProcess() {
 		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
 		return
 	}
-
+	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
 
 	cache.EndProcess(config.Pcb.PID)
@@ -342,7 +345,7 @@ func initProcess() {
 		slog.Error("Kernel respondió con error al crear el proceso.", "status", resp.StatusCode)
 		return
 	}
-
+	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
 }
 
@@ -358,7 +361,7 @@ func dumpMemory() {
 		slog.Error("Kernel respondió con error al dump memory.", "status", resp.StatusCode)
 		return
 	}
-
+	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
 }
 
@@ -487,6 +490,7 @@ func asign() {
 	switch instruction.Opcode {
 	case codeutils.NOOP:
 		config.Instruccion = "NOOP"
+		config.Pcb.PC++
 
 	case codeutils.WRITE:
 		config.Instruccion = "WRITE"
@@ -567,28 +571,26 @@ func asign() {
 	}
 }
 
-func sendResults(pid, pc int, motivo string) {
+func sendResults(pid int, pc int, motivo string) {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "cpu-results",
-		Queries: map[string]string{
-			"pid":    fmt.Sprint(pid),
-			"pc":     fmt.Sprint(pc),
-			"reason": motivo,
-		},
 	})
 
-	resp, err := http.Get(url)
+	payload := config.DispatchResponse{
+		PID:    pid,
+		PC:     pc,
+		Motivo: motivo,
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(jsonData))
 	if err != nil {
-		slog.Error("Fallo al enviar resultado a kernel", "error", err)
+		slog.Error("Error al enviar resultado a Kernel", "error", err)
 		return
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("Kernel respondio error al recibir cpu-results", "status", resp.StatusCode)
-	}
 }
 
 //#endregion

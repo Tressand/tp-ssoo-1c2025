@@ -17,6 +17,7 @@ type KernelConfig struct {
 	SuspensionTime        int        `json:"suspension_time"`
 	LogLevel              slog.Level `json:"log_level"`
 	CodeFolder            string     `json:"code_folder"`
+	InitialEstimate       float64    `json:"initial_estimate"`
 }
 
 var Values KernelConfig

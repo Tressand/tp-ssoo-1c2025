@@ -66,7 +66,7 @@ func main() {
 		process_shared.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
-		process_shared.CreateProcess("proceso3", 300)
+		process_shared.CreateProcess("helloworld", 300)
 	}
 
 	// #endregion
