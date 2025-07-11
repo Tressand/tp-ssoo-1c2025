@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os"
 	"ssoo-cpu/config"
-	"ssoo-cpu/memory"
+	cache "ssoo-cpu/memory"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
@@ -47,11 +47,11 @@ func main() {
 	if !configManager.IsCompiledEnv() {
 		config.Values.PortCPU += identificador
 	}
-	if(config.Values.CacheEntries > 0){
+	if config.Values.CacheEntries > 0 {
 		cache.InitCache()
 		config.CacheEnable = true
 	}
-	
+
 	//cargar config de memoria
 	cache.FindMemoryConfig()
 
@@ -118,11 +118,11 @@ func ciclo() {
 		select {
 		case <-config.InterruptChan:
 			logger.Instance.Info("Interrupción recibida", "PID", config.Pcb.PID)
-			config.CicloDone <- "Interrupt"
+			sendResults(config.Pcb.PID, config.Pcb.PC, "Interrupt")
 			return
 		case <-config.ExitChan:
 			logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
-			config.CicloDone <- "Exit"
+			sendResults(config.Pcb.PID, config.Pcb.PC, "Exit")
 			return
 		default:
 		}
@@ -177,11 +177,11 @@ func exec() {
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		writeMemory(config.Exec_values.Addr,config.Exec_values.Value)
+		writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		readMemory(config.Exec_values.Addr,config.Exec_values.Arg1)
+		readMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
@@ -213,66 +213,66 @@ func exec() {
 	config.Pcb.PC++
 }
 
-func writeMemory(logicAddr []int, value []byte){
+func writeMemory(logicAddr []int, value []byte) {
 
-	if cache.IsInCache(logicAddr){//si la pagina esta en cache opero direcatamente
-		cache.WriteMemory(logicAddr,value)
+	if cache.IsInCache(logicAddr) { //si la pagina esta en cache opero direcatamente
+		cache.WriteMemory(logicAddr, value)
 		return
 	}
 	//si no esta en memoria, traduzco la direccion, busco la pagina, y escribo en cache
-	fisicAddr,flag := cache.Traducir(logicAddr)
+	fisicAddr, flag := cache.Traducir(logicAddr)
 
 	if !flag {
-		slog.Error("Error al traducir la pagina ",logicAddr)
+		slog.Error("Error al traducir la pagina ", logicAddr)
 		config.ExitChan <- struct{}{}
-	}else{
+	} else {
 		cache.GetPageInMemory(fisicAddr)
-		flag :=cache.WriteMemory(logicAddr,value)
-		if !flag{
+		flag := cache.WriteMemory(logicAddr, value)
+		if !flag {
 			config.ExitChan <- struct{}{}
 		}
 	}
 }
 
-func readMemory(logicAddr []int, size int){
+func readMemory(logicAddr []int, size int) {
 
 	base := logicAddr[:len(logicAddr)-1]
 
-	if cache.IsInCache(logicAddr){  //si la pagina esta en cache leo directamente
+	if cache.IsInCache(logicAddr) { //si la pagina esta en cache leo directamente
 
-		content,flag := cache.ReadCache(base,size)
+		content, flag := cache.ReadCache(base, size)
 
 		if !flag {
 			slog.Error("Error al leer la cache en la pagina ", base)
-			config.ExitChan<- struct{}{}
+			config.ExitChan <- struct{}{}
 			return
 		}
 
-		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
+		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
 
-	}else{ //sino la busco y la leo
+	} else { //sino la busco y la leo
 
-		fisicAddr,flag := cache.Traducir(logicAddr)
+		fisicAddr, flag := cache.Traducir(logicAddr)
 
 		if !flag {
 			slog.Error("Error al traducir la pagina ", base)
-			config.ExitChan<- struct{}{}
+			config.ExitChan <- struct{}{}
 			return
 		}
 
-		page,_ := cache.GetPageInMemory(fisicAddr)
-		cache.AddEntryCache(base,page)
-		content,flag := cache.ReadCache(logicAddr,size)
+		page, _ := cache.GetPageInMemory(fisicAddr)
+		cache.AddEntryCache(base, page)
+		content, flag := cache.ReadCache(logicAddr, size)
 
 		if !flag {
 			slog.Error("Error al leer la cache en la pagina ", base)
-			config.ExitChan<- struct{}{}
+			config.ExitChan <- struct{}{}
 			return
 		}
-		
-		slog.Info("Contenido de direccion: ",logicAddr," tamanio: ",size, " ",content)
+
+		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
 	}
-	
+
 }
 
 // #endregion
@@ -324,7 +324,7 @@ func DeleteProcess() {
 	}
 
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
-	
+
 	cache.EndProcess(config.Pcb.PID)
 
 	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
@@ -346,7 +346,7 @@ func initProcess() {
 	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
 }
 
-func dumpMemory(){
+func dumpMemory() {
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para dump memory.", "error", err)
@@ -361,6 +361,7 @@ func dumpMemory(){
 
 	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
 }
+
 //#endregion
 
 // #region kernel Connection
@@ -440,19 +441,9 @@ func receivePIDPC(ctx context.Context) http.HandlerFunc {
 		go ciclo()
 
 		// Esperar que el ciclo termine y devuelva el motivo
-		select {
-		case motivo := <-config.CicloDone:
-			resp := config.DispatchResponse{
-				PID:    req.PID,
-				PC:     req.PC, // o el valor actualizado si cambia durante el ciclo
-				Motivo: motivo,
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Proceso recibido"))
 
-		case <-ctx.Done():
-			http.Error(w, "Contexto cancelado", http.StatusInternalServerError)
-		}
 	}
 }
 
@@ -503,7 +494,7 @@ func asign() {
 			slog.Error("WRITE requiere 2 argumentos")
 		}
 		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
-		
+
 		parts := strings.Split(instruction.Args[1], "|")
 		bytes := make([]byte, len(parts))
 		for i, s := range parts {
@@ -573,6 +564,30 @@ func asign() {
 
 	case codeutils.DUMP_MEMORY:
 		config.Instruccion = "DUMP_MEMORY"
+	}
+}
+
+func sendResults(pid, pc int, motivo string) {
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "cpu-results",
+		Queries: map[string]string{
+			"pid":    fmt.Sprint(pid),
+			"pc":     fmt.Sprint(pc),
+			"reason": motivo,
+		},
+	})
+
+	resp, err := http.Get(url)
+	if err != nil {
+		slog.Error("Fallo al enviar resultado a kernel", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Kernel respondio error al recibir cpu-results", "status", resp.StatusCode)
 	}
 }
 

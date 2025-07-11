@@ -1,0 +1,866 @@
+[33mcommit 113fac5b84f92f21cb50de843eaa04c95ff13c39[m[33m ([m[1;36mHEAD -> [m[1;32mjose[m[33m, [m[1;31morigin/jose[m[33m)[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu Jul 10 22:51:19 2025 -0300
+
+    avance en varios
+
+[33mcommit ea43c843ea83c8d4332aab3f155758ba098e9167[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu Jul 10 14:08:00 2025 -0300
+
+    me falto el select
+
+[33mcommit c869c377bf14e441892871707fdba56ddfb508eb[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu Jul 10 03:47:22 2025 -0300
+
+    progress in various
+
+[33mcommit 18338b81e2af4cdcd35b1537f52207e697eb76f6[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu Jul 10 03:29:37 2025 -0300
+
+    varios
+
+[33mcommit fe68bcd86bb8bca1f29c4a82d7487210f8b220a4[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Tue Jul 8 23:49:36 2025 -0300
+
+    detalle lautista
+
+[33mcommit 03e52135a7116c22022ef9ee6dc9954b18b2e558[m
+Merge: 2e2d626 ba6c2ba
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Tue Jul 8 23:47:28 2025 -0300
+
+    Merge branch 'elias' into jose
+
+[33mcommit 2e2d62653e56188b02dd080a160c20402e44b74e[m
+Merge: f6597c4 cb66b9a
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Tue Jul 8 23:45:20 2025 -0300
+
+    Merge branch 'gero' into jose
+
+[33mcommit f6597c44ab7e45fdae52809dd0e375f986b8ba4f[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Tue Jul 8 23:44:12 2025 -0300
+
+    temp
+
+[33mcommit 28b5e3f888d3a878dbd8fe164fc7935c0fc488a5[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Mon Jul 7 20:58:37 2025 +0000
+
+    varios
+
+[33mcommit c721a883fa9105706293f349af8eab7cccf1d636[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sun Jul 6 14:47:02 2025 -0300
+
+    retoque
+
+[33mcommit 2710557936cd8660eb93358bd66317e0cdba57e2[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sun Jul 6 00:49:21 2025 -0300
+
+    actualizo logica de dump_memory
+
+[33mcommit e141e1f14598ecfbb3356126d2ab887110deee8d[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jul 5 22:46:48 2025 -0300
+
+    arreglos en lts y sts
+
+[33mcommit 4fde4f040a34aa368698086ef6a73c4e7ba414e8[m
+Merge: 4db9434 24766a5
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sun Jun 29 12:08:27 2025 -0300
+
+    merge
+
+[33mcommit 4db9434d8515cdcb434cae232b1de70c13cde3ff[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sun Jun 29 12:07:38 2025 -0300
+
+    error
+
+[33mcommit 24766a568683ac3651b03e7c7907bffa49926b86[m
+Author: José Becerra <102266781+jbecerra0@users.noreply.github.com>
+Date:   Sun Jun 29 04:47:20 2025 -0300
+
+    Update scheduler.go
+
+[33mcommit f8f4ea42c642e533aefc38be38e0c5724520b5a4[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sun Jun 29 03:17:51 2025 -0300
+
+    mejora: actualizar lógica de conexión de CPU y agregar función para eliminar procesos por PID
+
+[33mcommit cb66b9adf154db4a000beb2024c55f59880c7f76[m[33m ([m[1;31morigin/gero[m[33m)[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sat Jun 28 23:54:15 2025 +0000
+
+    Memoria SWAP terminada
+
+[33mcommit 86d58c272d35fa42cd70e7ce1d93bb7ce2c78abd[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jun 28 19:04:03 2025 -0300
+
+    refactor: mover lógica de procesos a un nuevo módulo compartido y actualizar referencias
+
+[33mcommit 0bae4fb254e4cb37c1e077738495e3cf9ca5ce8a[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jun 28 18:33:16 2025 -0300
+
+    mejora: optimizar la búsqueda de procesos asociados a la CPU en RecieveSyscall
+
+[33mcommit df9bafc5053390d245237caa3715243fbdd9ad42[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jun 28 18:16:42 2025 -0300
+
+    feature: cambios a memoria dinamica
+
+[33mcommit 681f43cc1394f1f7825bd62e82f9210cb2f06be0[m[33m ([m[1;31morigin/planificador[m[33m)[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Sat Jun 28 03:17:51 2025 +0000
+
+    abstraccion de queues
+
+[33mcommit dc55a623cecfb115a91db08991cedfdf786f805d[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jun 21 22:18:57 2025 +0000
+
+    retoques
+
+[33mcommit 8748502898e6aacbcb4fd44a8bcdd747e8551fc6[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jun 21 20:43:22 2025 +0000
+
+    arreglo
+
+[33mcommit 4c96e46e06dbdbb4dc19bcdc3838fefae7824940[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jun 21 20:12:43 2025 +0000
+
+    refactor
+
+[33mcommit ba6c2ba577d3a4c75176797e33f221f48c47f314[m[33m ([m[1;31morigin/elias[m[33m)[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sat Jun 21 19:40:10 2025 +0000
+
+    avanzo con cache
+
+[33mcommit 8473b57caa1af2297d4ae926d68e47f287e5bb14[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Jun 21 15:06:28 2025 +0000
+
+    merge
+
+[33mcommit a39f131bb3ab1d02469bc09dc744c344e509f965[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Tue Jun 10 20:11:40 2025 +0000
+
+    progress in delete progress
+
+[33mcommit 3c54215e65648cba001e15884054aab4c0e3af38[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Tue Jun 10 18:33:41 2025 +0000
+
+    end of cache?
+
+[33mcommit be8cb6921f99de178a54d16aee7a6b8671a89812[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Tue Jun 10 17:08:01 2025 +0000
+
+    progress in cpu
+
+[33mcommit 7382bd7808349fc81c9aa19b5fec1757cd116cac[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Tue Jun 10 16:15:18 2025 +0000
+
+    i hope this be the end of te addEntryCache
+
+[33mcommit 4119bf338343b2f6fe208ef489a0161815a1918b[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Tue Jun 10 03:31:11 2025 +0000
+
+    i moved foward in add entry in cache
+
+[33mcommit ea38c41ba8a6f97efbc17b6799974c7d2663fae6[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Tue Jun 10 03:14:04 2025 +0000
+
+    Cache in progress
+
+[33mcommit 3dbd8b022f04f888c1043f590e6a9905a3b8514d[m
+Author: Gero <geroxed@gmail.com>
+Date:   Mon Jun 9 18:04:06 2025 +0000
+
+    agregados todos los logs obligatorios
+
+[33mcommit 41302de4552efbad31263bf3da9df04f24a33667[m
+Author: Gero <geroxed@gmail.com>
+Date:   Mon Jun 9 17:32:47 2025 +0000
+
+    tidy up code
+
+[33mcommit 2b14d5a8464278303414e91a97fa3768d1ad6f33[m
+Author: Gero <geroxed@gmail.com>
+Date:   Mon Jun 9 17:11:26 2025 +0000
+
+    corrección a endpoints post reunion
+
+[33mcommit df03c4dda931cd2ba1615cf10ce996578d4bc9c6[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun Jun 8 23:50:15 2025 +0000
+
+    avance en cache
+
+[33mcommit 6463280d06b86ed58e91954c9391f70f07383126[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun Jun 8 23:38:32 2025 +0000
+
+    init cache
+
+[33mcommit fcb9485e11982de3d1f0079e43f7652f32e46fe9[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun Jun 8 23:12:58 2025 +0000
+
+    little fix
+
+[33mcommit 6e041c16d26e5f8754f0cd2030615f6c095700f4[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun Jun 8 23:09:08 2025 +0000
+
+    avanzo en comunicacion con memoria
+
+[33mcommit e38db2510a3331ab878c03c769c47495a2b77efb[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sun Jun 8 19:44:06 2025 +0000
+
+    Varios
+
+[33mcommit f75718325aa705fbba5dd651548d0f80c2889692[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun Jun 8 04:14:43 2025 +0000
+
+    avanzo con tlb
+
+[33mcommit 29d6e251b6616087771feca8de5d0a0d1d9a7716[m
+Author: Gero <geroxed@gmail.com>
+Date:   Tue Jun 3 15:37:42 2025 +0000
+
+    full page y memory config endpoints
+
+[33mcommit fc7a2425fd90632a64ddbe2dc170e505cb11a9e7[m
+Author: Gero <geroxed@gmail.com>
+Date:   Tue Jun 3 04:43:46 2025 +0000
+
+    memory dump y user memory endpoints
+
+[33mcommit aa1bc31c89a423eaf5255ef9b3b8071a98af0fb5[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Mon Jun 2 17:25:41 2025 +0000
+
+    Varios
+
+[33mcommit 4a255b9fcb7fdd0f7f4a5e26cec6bbe11a412833[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Mon Jun 2 17:01:00 2025 +0000
+
+    Arreglos de LTS
+
+[33mcommit 2645bb6e5e38a3919ccceb3b99a4c401c6cee7ac[m
+Merge: 6d51b62 4c3a874
+Author: Gero <geroxed@gmail.com>
+Date:   Mon Jun 2 16:17:36 2025 +0000
+
+    merge elias into gero
+
+[33mcommit 6d51b628ec2696a1c3a5fb27811277c1b37614aa[m
+Author: Gero <geroxed@gmail.com>
+Date:   Mon Jun 2 16:11:42 2025 +0000
+
+    refactor de handlers
+
+[33mcommit 7edd7309207f2324ff41318b7d95f097f6434d46[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Mon Jun 2 02:14:29 2025 +0000
+
+    feat: Cambio de colas por planificador a colas por estado
+
+[33mcommit 6933a1ee2a1d237be17efba6aee1d30b26d04950[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Jun 1 15:53:35 2025 +0000
+
+    Simplificar paginación
+
+[33mcommit 590dc60572202b02066bbae6d22eecbf7fb3d2f3[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Jun 1 14:59:01 2025 +0000
+
+    Borrar test endpoint
+
+[33mcommit 4c3a8741102b75df0b609d7fdeedaf7827945f2a[m
+Merge: 4feb72c 625ff04
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Tue May 27 18:03:35 2025 +0000
+
+    merge con main
+
+[33mcommit 625ff041bb4c61a3aa985b725697dddde8c80e7c[m[33m ([m[1;33mtag: checkpoint-2[m[33m)[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun May 25 16:34:42 2025 +0000
+
+    check 2 revision final
+
+[33mcommit cdbcbb16d9e5b7cf90c42f1ea0332fbff953e173[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Sat May 24 20:10:41 2025 +0000
+
+    cambios variados
+
+[33mcommit c021fc22a76807a3d2eedeab1ddd259975561a21[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Sat May 24 19:47:56 2025 +0000
+
+    version mas avanzada de syscall io
+
+[33mcommit 62028dd4c628cd7f361378b1148d3cf875b804eb[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Sat May 24 07:01:37 2025 +0000
+
+    adm de io, falta pulir un poquito
+
+[33mcommit e1ae9a533b6c50eca6c19f03c2460af1e725660f[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Sat May 24 05:23:36 2025 +0000
+
+    Implementacion completa STS, Syscall EXIT
+
+[33mcommit 010c859b6530883169df29299bafd71ab90cb8c8[m
+Merge: 3dafd18 743a68a
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Thu May 22 22:48:57 2025 +0000
+
+    merge
+
+[33mcommit 3dafd185c0d7dcffea9df27840df37c51d26fdf0[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Thu May 22 22:41:46 2025 +0000
+
+    avance
+
+[33mcommit 743a68ab9244557ba04ffe9a51c0010ae44c363c[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu May 22 19:44:12 2025 +0000
+
+    Agrego avance
+
+[33mcommit ac8aee7bc3c17763e6b9dca7b7f3ca4dd0d5ab0a[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Wed May 21 20:11:17 2025 +0000
+
+    Envio de syscalls serializado
+
+[33mcommit b247c1f4e63b61b13faa184c988de95f5c74bedd[m
+Merge: 242bb4b 09b6c0a
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Sun May 18 18:01:25 2025 +0000
+
+    Merge commit '09b6c0a9e8c58dac781d0c7e653015d1472c39e9' into planificador
+
+[33mcommit 09b6c0a9e8c58dac781d0c7e653015d1472c39e9[m[33m ([m[1;31morigin/tlb[m[33m)[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sat May 17 22:09:00 2025 +0000
+
+    avance
+
+[33mcommit 4feb72cd26067a67f1bcbcae265d480df3a7bb90[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sat May 17 18:18:33 2025 +0000
+
+    fix
+
+[33mcommit 562fc17c0e217cce9d6e0833acdf3ce22e835383[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sat May 17 18:16:57 2025 +0000
+
+    fix
+
+[33mcommit ea3cb20da56924cd91a4162a75e5cc6adde375d2[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sat May 17 18:12:34 2025 +0000
+
+    tlb
+
+[33mcommit cb8fcbd133b9a338c72c37f8af8321f51dda4182[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sat May 17 18:07:16 2025 +0000
+
+    init tlb
+
+[33mcommit 5cf04c17513a445fde925122f2bb7147e5c33d78[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sat May 17 17:52:20 2025 +0000
+
+    a
+
+[33mcommit 8792b54bfd6cac68e956ee451ae14ae43c390e12[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Fri May 16 23:17:59 2025 +0000
+
+    inicio
+
+[33mcommit 8e50779d8bc4f29963dc8f521c7d1e24b8979ea0[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Fri May 16 21:25:50 2025 +0000
+
+    fix
+
+[33mcommit e1857e37441a5e431317010e7b1d781e7ef071e5[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Fri May 16 18:48:17 2025 +0000
+
+    agrego server dispatch
+
+[33mcommit 242bb4bbe7b8fc02ca9430fdbc211779d86f24b4[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu May 15 00:12:28 2025 +0000
+
+    varios
+
+[33mcommit 27919e8283f1c753fe8a7d79e106c9c37cf55e5f[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu May 15 00:09:27 2025 +0000
+
+    Avance
+
+[33mcommit f445391ac0f63df2342498b79eb12b7046b92334[m
+Author: Gero <geroxed@gmail.com>
+Date:   Mon May 12 16:25:36 2025 +0000
+
+    memoria: implementación básica para check 2
+
+[33mcommit 9c133f73f861189f97a0570bf3f29e660697dd8b[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Mon May 12 03:10:13 2025 +0000
+
+    agrego fix
+
+[33mcommit 2550e25f15a01f3bb04f242dc2ca4ec64d90239d[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Mon May 12 02:51:18 2025 +0000
+
+    agrego fix
+
+[33mcommit 93333b090a9fb4047c4a827c525f90e0a67fb88f[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Mon May 12 02:50:13 2025 +0000
+
+    agrego notifyExitKernel
+
+[33mcommit 188a45fa98ad30213059d1b4b4ba97fa765fcdb1[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Mon May 12 01:10:22 2025 +0000
+
+    avance
+
+[33mcommit fdb4579feac916e831abc547239d412add1573ca[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Mon May 12 00:40:03 2025 +0000
+
+    empiezo interrupt y ciclo
+
+[33mcommit 978f650c18fed7fc63a44303301d799e6abc3e32[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sun May 11 17:12:59 2025 +0000
+
+    detalles
+
+[33mcommit a6866bc59a3fba7756e71f0ca2f2a2ecb0db4c98[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun May 11 16:37:04 2025 +0000
+
+    arreglo las syscalls
+
+[33mcommit 469f4c05019f3243c26d081b7d3bfab3accbad8a[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat May 10 14:13:32 2025 -0300
+
+    Más arreglos
+
+[33mcommit c5db927aa51472be9eb587d5c6bba36ea16a26ac[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat May 10 00:25:00 2025 +0000
+
+    Arreglo
+
+[33mcommit f2d14cdbadba8fb514ebda5f48c4b8c43aa19f11[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Fri May 9 19:04:21 2025 +0000
+
+    arreglo merge
+
+[33mcommit 91cef727bea2ee0afdc912ad706ecd3fd24c352c[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Fri May 9 14:42:53 2025 -0300
+
+    Avances!
+
+[33mcommit 19da7b6da10b77232a5276b52b27d517d6c94b74[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Thu May 8 22:29:22 2025 +0000
+
+    PMCP
+
+[33mcommit a184d5f44e47daf847aab59c0f4f06b24fa4a76c[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Thu May 8 05:46:06 2025 +0000
+
+    detalles
+
+[33mcommit d885a30c446a2567b20971caaea61299ca9351f0[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Thu May 8 01:57:11 2025 +0000
+
+    Avance en planificador de largo plazo
+
+[33mcommit 97bf2b4a045e8184850093440e9e9dd9205542cf[m
+Author: Gero <geroxed@gmail.com>
+Date:   Wed May 7 23:50:05 2025 +0000
+
+    memoria: paginación parte 2. procesos reservan páginas. tablas de páginas multinivel para procesos
+
+[33mcommit 691be85a7e7c2141ea96a2c6618b695101e438bd[m
+Author: Gero <geroxed@gmail.com>
+Date:   Tue May 6 23:10:23 2025 +0000
+
+    memoria: paginación parte 1
+
+[33mcommit a02012aed031092b6e793fcf8ce74853447b63b4[m
+Merge: 9f48eb8 8c3e42d
+Author: Gero <geroxed@gmail.com>
+Date:   Mon May 5 19:32:17 2025 +0000
+
+    merge lautaro into gero. stream codefiles.
+
+[33mcommit 9f48eb80f8a7e0f6462e95732d9ed632b9d2f0ec[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Mon May 5 17:56:07 2025 +0000
+
+    fix
+
+[33mcommit a5b8766c7c7e44b533a72c019f209d2f029d4306[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun May 4 21:22:35 2025 +0000
+
+    init in execute
+
+[33mcommit 4b7476ecc1a479bba026b382eb1dc69e8d74f14d[m
+Author: eliaspuddini1 <epuddini@frba.utn.edu.ar>
+Date:   Sun May 4 20:48:02 2025 +0000
+
+    Fix and Insterpretation of instruction
+
+[33mcommit 8c3e42dbd7e15de8288a8e84b9492bb6ca72aba8[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Sat May 3 01:09:29 2025 +0000
+
+    Codigo adaptado al merge, arreglos en el manejo de las rutas en kernel
+
+[33mcommit 40190bc040ef99f3fb15cee811e51cc424ced4fa[m
+Merge: b459503 dc89190
+Author: Gero <geroxed@gmail.com>
+Date:   Fri May 2 19:17:15 2025 +0000
+
+    merge elias into gero
+
+[33mcommit b459503c3d777fb8ac3a02e0d68b1a7da87c9515[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri May 2 17:33:38 2025 +0000
+
+    Memoria: añado comentario al funcionamiento de la api proceso
+
+[33mcommit 5fe29353730bc700432c6f4b411ce30f1dcff64e[m
+Merge: 827338c 4ee93a8
+Author: Gero <geroxed@gmail.com>
+Date:   Fri May 2 17:15:41 2025 +0000
+
+    Merge branch 'lautaro' into gero
+
+[33mcommit 827338c78cc321644434ac730c480f807a0ab913[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri May 2 17:00:10 2025 +0000
+
+    memoria de sistema y API de procesos
+
+[33mcommit 4ee93a8aa3f52b0fc503714d738aa2b3f61fb210[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Fri May 2 03:32:08 2025 +0000
+
+    modifico cola de new
+
+[33mcommit 01c8404b8378d667db5493dc44fe672f399adfee[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Fri May 2 00:56:08 2025 +0000
+
+    Pedir memoria para proceso
+
+[33mcommit dc8919083120956c41886426f3da91041d0d55bc[m
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Wed Apr 30 21:24:33 2025 -0300
+
+    Send PID y PC
+
+[33mcommit f9da3fca70d1f8d657642dd7ce24e2c5f522a116[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Apr 26 03:56:18 2025 +0000
+
+    Crear PCB y almacenar
+
+[33mcommit 434d585e958802f451ea11d046f2a58e1d63badc[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri Apr 25 21:55:53 2025 +0000
+
+    IO terminado
+
+[33mcommit a46518ee0ed81ca8a5059ba88cdc6d2b2d77ea27[m
+Author: Gero <geroxed@gmail.com>
+Date:   Thu Apr 24 01:28:16 2025 +0000
+
+    Mover codeutils a lib aparte
+
+[33mcommit f03fb5095ea20eb53b159fb1a2cd6f7970eec001[m
+Author: Gero <geroxed@gmail.com>
+Date:   Thu Apr 24 00:06:58 2025 +0000
+
+    Avances en memoria del sistema. Lectura de código. Selector de menú de listas.
+
+[33mcommit 45b4731f903cf1db8ee6d7f1778046f5291e8a26[m
+Merge: c91860a 25bce0a
+Author: Gero <geroxed@gmail.com>
+Date:   Wed Apr 23 15:23:01 2025 +0000
+
+    Merge elias into gero
+
+[33mcommit 25bce0a45b9a923dff1f341b3e2b21350acf724c[m
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Tue Apr 22 20:53:25 2025 -0300
+
+    mini avance
+
+[33mcommit 65d0d8b2340617b0bdd9ab54138547325acfac64[m
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Tue Apr 22 19:45:50 2025 -0300
+
+    Merge con main
+
+[33mcommit 6eaba567e97b0d5dabd960c5ea71632b33f3a54e[m
+Merge: 3233549 ff7419b
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Tue Apr 22 19:44:25 2025 -0300
+
+    Merge branch 'main' into elias
+
+[33mcommit ff7419b4269f92d9ce8a486a1dc3b3cd2c662596[m[33m ([m[1;33mtag: checkpoint-1[m[33m)[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sat Apr 19 20:40:58 2025 +0000
+
+    Check 1 Finalizado
+
+[33mcommit 67a256f216fdbbac761363fe462f5413eb1a6434[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Apr 19 15:36:21 2025 +0000
+
+    Kernel le envia mensaje a CPU
+
+[33mcommit 422e05d8df23db47894fdc0b8ac7150bde6d3b33[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Apr 19 13:20:45 2025 +0000
+
+    Agrego conexión entre Kernel-CPU
+
+[33mcommit fc691a1b0e4f36b69d43bc11ac40c8a204316343[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Apr 19 03:07:27 2025 +0000
+
+    Subo server de CPU
+
+[33mcommit 585f119f35f706bdc16ae4ac0deb4996ba5b3b86[m
+Author: jbecerra0 <bejose34@gmail.com>
+Date:   Sat Apr 19 01:39:49 2025 +0000
+
+    Añado la conexion entre cpu y kernel
+
+[33mcommit b6aa5a9954c78f6c8e5289d4f95985a6a41d641c[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri Apr 18 20:33:35 2025 +0000
+
+    Ajustes varios y formato de logs
+
+[33mcommit 29259ef739bd26f2c7fbf25473c9659cdf1f80c5[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri Apr 18 18:45:08 2025 +0000
+
+    Se agrega nota para el docente 2
+
+[33mcommit 0f2d762eadf212d471f0c1a114a13221c91cb551[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri Apr 18 18:41:30 2025 +0000
+
+    Se agrega nota para el docente
+
+[33mcommit 32930c5bb9d2ce579a3400806039559ba5a6eef8[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri Apr 18 18:35:17 2025 +0000
+
+    build_all.exe util para buildear todo
+
+[33mcommit 3b8d458d034c8760a37eb3fbe65ca543a2a6a62e[m
+Author: Gero <geroxed@gmail.com>
+Date:   Fri Apr 18 18:34:58 2025 +0000
+
+    Ajustes a las configs para buildear
+
+[33mcommit 32335491b1d93e16f0b99b6b0ead94c3689789bf[m
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Fri Apr 18 13:49:22 2025 -0300
+
+    Actualizo Id
+
+[33mcommit 17a007dda5bae0af032a70788ac8320d02c931e7[m
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Fri Apr 18 13:18:04 2025 -0300
+
+    Actualizo identificador
+
+[33mcommit 7e6625267c44e0b1c922b76c50e7c17e5c7af7e6[m
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Fri Apr 18 12:54:26 2025 -0300
+
+    Exec basico
+
+[33mcommit c91860a03727bbb2c6e5fafa56eb0e151c5313f4[m
+Merge: df3e1df d30995a
+Author: Gero <geroxed@gmail.com>
+Date:   Fri Apr 18 15:40:33 2025 +0000
+
+    Merge branch 'lautaro' of github.com:sisoputnfrba/tp-2025-1c-Go-Go-Power-Rangers- into gero
+
+[33mcommit d30995a8eb0d61841adbcda58b74871a9a29cd49[m
+Author: Lautaro <lmiras@frba.utn.edu.ar>
+Date:   Fri Apr 18 15:25:46 2025 +0000
+
+    conexion cpu->memoria
+
+[33mcommit 4c1fab730bcef61e1d419db55b5cc008d6048ed1[m
+Author: EliasPuddini1 <131315510+EliasPuddini1@users.noreply.github.com>
+Date:   Fri Apr 18 11:38:42 2025 -0300
+
+    Inicio exec
+    
+     Hago un acercamiento a la función
+
+[33mcommit df3e1df363611ee62771602e954ab270dfd09dff[m
+Author: Gero <geroxed@gmail.com>
+Date:   Thu Apr 17 03:18:39 2025 +0000
+
+    Primeros pasos en Memoria Principal
+
+[33mcommit a35be70ba253edba3444c15335816e505a7f4c23[m
+Author: Gero <geroxed@gmail.com>
+Date:   Thu Apr 17 00:28:57 2025 +0000
+
+    Estructura básica PCB
+
+[33mcommit dee8fbf86e515a56e74de3bf578e8d2bb7d5c66b[m
+Author: Gero <geroxed@gmail.com>
+Date:   Mon Apr 14 20:19:10 2025 +0000
+
+    Kernel -> Memoria. Urls en configs.
+
+[33mcommit fbc6f47bc12b71c1db3f9c3ca2e170a97deaf5d0[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Apr 13 22:46:29 2025 +0000
+
+    Setup básico de server de Memoria
+
+[33mcommit e1270c444f731b507bb5b8a7873b83afe5535038[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Apr 13 21:57:12 2025 +0000
+
+    Añadir menu a IO
+
+[33mcommit d99d9e1d07255e9ade958ff955761747b2594a18[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Apr 13 21:31:14 2025 +0000
+
+    Usando Scanln en lugar de io.reader
+
+[33mcommit a6b3d5d70354e6ee8825e13661a598081bf4269e[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Apr 13 21:26:36 2025 +0000
+
+    Usando contexto en lugar de canales
+
+[33mcommit 24c976498275687a47c3dc5509700098db389a9b[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Apr 13 21:06:21 2025 +0000
+
+    ordenar y comentar
+
+[33mcommit 4cc2bed08189a747f1265a380e783d5bea3e12ed[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sun Apr 13 18:15:47 2025 +0000
+
+    Kernel <-> IO, IO prácticamente terminada.
+
+[33mcommit b5f860533f59aadb9e5a4d7381dace6495e6c4b6[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sat Apr 12 22:24:09 2025 +0000
+
+    Traducción de logs + más fixes
+
+[33mcommit df0f6c2ed2bd09cc476a97cada6def64165108de[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sat Apr 12 22:15:30 2025 +0000
+
+    Fix logger
+
+[33mcommit 49e8b2fcdc8f12b3e852ee9c46c0cd2447a5a13d[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sat Apr 12 21:55:52 2025 +0000
+
+    Logger, Server y Fixes generales
+
+[33mcommit cf2d2409b03d4fae18227522097fdd1d5364df0d[m
+Author: Gero <geroxed@gmail.com>
+Date:   Sat Apr 12 13:22:33 2025 +0000
+
+    Change config variable name for clarity, add basic logger (log/slog)
+
+[33mcommit 72204ac91824a0a0ec608063718c12660126368c[m
+Author: Gero <geroxed@gmail.com>
+Date:   Thu Apr 10 17:17:09 2025 +0000
+
+    Añadir creador de menús
+
+[33mcommit fc5647a387a49237a88f09a26fa5c9a0ee805c28[m
+Author: Gero <geroxed@gmail.com>
+Date:   Wed Apr 9 16:56:22 2025 +0000
+
+    Ajuste de la ruta al archivo de configuración
+
+[33mcommit 937f249197450dff37e5868c3b0f90bf27220155[m
+Author: Gero <geroxed@gmail.com>
+Date:   Wed Apr 9 00:48:02 2025 +0000
+
+    Ajuste de nombres de módulos, Setup de Configs y parser de structs
+
+[33mcommit 7c1a5e6112ebaca058bea7f36387771ed1d4b5ad[m
+Author: Sistemas Operativos - UTN.BA <inscripciones.utnso@gmail.com>
+Date:   Tue Apr 1 14:44:57 2025 -0300
+
+    Initial commit

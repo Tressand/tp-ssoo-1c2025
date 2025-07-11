@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	"ssoo-kernel/queues"
@@ -269,7 +268,7 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		process, err := queue.RemoveByPID(pcb.EXEC, process.PCB.GetPID())
 
 		if err != nil {
-			slog.Error("Error al remover el proceso de la cola EXEC", "pid", resp.PID, "error", err)
+			slog.Error("Error al remover el proceso de la cola EXEC", "pid", process.PCB.GetPID(), "error", err)
 			return
 		}
 		err = queue.Enqueue(pcb.READY, process)
@@ -297,28 +296,6 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		slog.Info("Proceso enviado a la CPU correctamente", "pid", process.PCB.GetPID(), "cpuID", cpu.ID)
 	}
 
-}
-
-func HandleReason(pid uint, pc int, reason string) {
-
-	process, err := queues.RemoveByPID(pcb.EXEC, pid)
-
-	if err != nil {
-		slog.Error("Error al remover proceso de la cola EXEC", "pid", pid, "error", err.Error())
-		return
-	}
-
-	kernel_api.FreeCPU(process)
-	UpdateBurstEstimation(process)
-
-	switch reason {
-	case "Interrupt":
-		slog.Info("Procesando interrupción para el proceso", "pid", pid, "pc", pc)
-		queue.Enqueue(pcb.READY, process)
-	case "Exit":
-		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
-		process_shared.TerminateProcess(process)
-	}
 }
 
 func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {

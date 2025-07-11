@@ -42,10 +42,10 @@ type PCBS struct {
 }
 
 type Exec_valuesS struct {
-	Arg1 int
-	Arg2 int
-	Str string
-	Addr []int
+	Arg1  int
+	Arg2  int
+	Str   string
+	Addr  []int
 	Value []byte
 }
 
@@ -54,9 +54,9 @@ type RequestPayload struct {
 	PC  int `json:"pc"`
 }
 
-type KernelResponse struct{
+type KernelResponse struct {
 	PID int `json:"pid"`
-	PC int `json:"pc"`
+	PC  int `json:"pc"`
 }
 
 type DispatchResponse struct {
@@ -65,32 +65,32 @@ type DispatchResponse struct {
 	Motivo string `json:"motivo"`
 }
 
-type Tlb_entries struct{
-	Page []int
-	Frame int
+type Tlb_entries struct {
+	Page     []int
+	Frame    int
 	LastUsed int64
 }
 
 type TLB struct {
-	Entries []Tlb_entries
-	Capacity int
+	Entries        []Tlb_entries
+	Capacity       int
 	ReplacementAlg string
 }
 
-type CACHE struct{
-	Entries []CacheEntry
-	Capacity int
+type CACHE struct {
+	Entries        []CacheEntry
+	Capacity       int
 	ReplacementAlg string
-	Delay int
+	Delay          int
 }
 
 type CacheEntry struct {
-	Page []int
-	Content []byte
-	Use bool
+	Page     []int
+	Content  []byte
+	Use      bool
 	Modified bool
 	Position bool //para saber si me quede aca o en otra posicion
-	Pid int
+	Pid      int
 }
 
 type ResponsePayload = codeutils.Instruction
@@ -99,19 +99,18 @@ var Values CPUConfig
 var MemoryConf MemoryConfig
 var Pcb PCBS
 var Exec_values = Exec_valuesS{
-	Arg1: -1,
-	Arg2: -1,
-	Str: "",
-	Addr: []int{0},
+	Arg1:  -1,
+	Arg2:  -1,
+	Str:   "",
+	Addr:  []int{0},
 	Value: []byte{0},
 }
 var Instruccion string
 var Identificador int
 var configFilePath string = "/config/cpu_config.json"
 var (
-       InterruptChan = make(chan struct{}, 1) // Buffer para 1 señal
-       ExitChan      = make(chan struct{}, 1)
-       CicloDone     = make(chan string, 1)
+	InterruptChan = make(chan struct{}, 1) // Buffer para 1 señal
+	ExitChan      = make(chan struct{}, 1)
 )
 
 var KernelResp KernelResponse

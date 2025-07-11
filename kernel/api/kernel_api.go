@@ -7,11 +7,12 @@ import (
 	"net/http"
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
+	"ssoo-kernel/queues"
 	queue "ssoo-kernel/queues"
-	scheduler "ssoo-kernel/scheduler"
 	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
+	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	"strconv"
 )
@@ -74,6 +75,28 @@ func ReceiveCPU() http.HandlerFunc {
 	}
 }
 
+func HandleReason(pid uint, pc int, reason string) {
+
+	process, err := queues.RemoveByPID(pcb.EXEC, pid)
+
+	if err != nil {
+		slog.Error("Error al remover proceso de la cola EXEC", "pid", pid, "error", err.Error())
+		return
+	}
+
+	process_shared.FreeCPU(process)
+	process_shared.UpdateBurstEstimation(process)
+
+	switch reason {
+	case "Interrupt":
+		slog.Info("Procesando interrupción para el proceso", "pid", pid, "pc", pc)
+		queue.Enqueue(pcb.READY, process)
+	case "Exit":
+		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
+		process_shared.TerminateProcess(process)
+	}
+}
+
 func ReceivePidPcReason() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -108,29 +131,10 @@ func ReceivePidPcReason() http.HandlerFunc {
 			return
 		}
 
-		go scheduler.HandleReason(pidUint, pcInt, reason) // ????
+		go HandleReason(pidUint, pcInt, reason) // ????
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Reason received successfully"))
-	}
-}
-
-func FreeCPU(process *globals.Process) {
-	globals.CPUsSlotsMu.Lock()
-	defer globals.CPUsSlotsMu.Unlock()
-	for _, slot := range globals.CPUsSlots {
-		if slot.Process == process {
-			slot.Process = nil
-			slot.Cpu.Working = false
-
-			select {
-			case globals.CpuAvailableSignal <- struct{}{}:
-				slog.Debug("CPU freed. CpuAvailableSignal unlocked..")
-			default:
-			}
-
-			break
-		}
 	}
 }
 
@@ -215,7 +219,7 @@ func RecieveSyscall() http.HandlerFunc {
 					return
 				}
 
-				FreeCPU(process) // Liberar el CPU asociado al proceso
+				process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
 				queue.Enqueue(pcb.EXIT, process)
 
@@ -240,7 +244,7 @@ func RecieveSyscall() http.HandlerFunc {
 					return
 				}
 
-				FreeCPU(process) // Liberar el CPU asociado al proceso
+				process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
 				queue.Enqueue(pcb.BLOCKED, process)
 
@@ -270,7 +274,7 @@ func RecieveSyscall() http.HandlerFunc {
 				return
 			}
 
-			FreeCPU(process) // Liberar el CPU asociado al proceso
+			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
 			queue.Enqueue(pcb.BLOCKED, process)
 
@@ -305,7 +309,7 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 			slog.Info("Syscall EXIT recibida", "pid", process.PCB.GetPID())
 
-			FreeCPU(process) // Liberar el CPU asociado al proceso
+			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
 			queue.Enqueue(pcb.EXIT, process)
 			process_shared.TerminateProcess(process)

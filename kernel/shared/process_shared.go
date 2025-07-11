@@ -11,6 +11,7 @@ import (
 	"ssoo-utils/httputils"
 	logger "ssoo-utils/logger"
 	"ssoo-utils/pcb"
+	"time"
 )
 
 func CreateProcess(path string, size int) {
@@ -19,6 +20,39 @@ func CreateProcess(path string, size int) {
 	slog.Info("Se crea el proceso", "pid", process.PCB.GetPID(), "path", path, "size", size)
 
 	HandleNewProcess(process)
+}
+
+func UpdateBurstEstimation(process *globals.Process) {
+
+	realBurst := time.Since(process.StartTime).Seconds()
+	previousEstimate := process.EstimatedBurst
+
+	newEstimate := config.Values.Alpha*realBurst + (1-config.Values.Alpha)*previousEstimate
+
+	process.LastRealBurst = realBurst
+	process.EstimatedBurst = newEstimate
+
+	slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
+		process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
+}
+
+func FreeCPU(process *globals.Process) {
+	globals.CPUsSlotsMu.Lock()
+	defer globals.CPUsSlotsMu.Unlock()
+	for _, slot := range globals.CPUsSlots {
+		if slot.Process == process {
+			slot.Process = nil
+			slot.Cpu.Working = false
+
+			select {
+			case globals.CpuAvailableSignal <- struct{}{}:
+				slog.Debug("CPU freed. CpuAvailableSignal unlocked..")
+			default:
+			}
+
+			break
+		}
+	}
 }
 
 func newProcess(path string, size int) *globals.Process {
