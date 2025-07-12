@@ -242,19 +242,19 @@ func readMemory(logicAddr []int, size int) int{
 		content, flag := cache.ReadCache(base, size)
 
 		if !flag {
-			slog.Error("Error al leer la cache en la pagina ", base)
+			slog.Error("Error al leer la cache ","Pagina", fmt.Sprint(base))
 			config.ExitChan <- struct{}{}
 			return -1
 		}
 
-		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
+		slog.Info("Contenido de direccion: ", fmt.Sprint(logicAddr), " tamanio: ", size, " ", content)
 
 	} else { //sino la busco y la leo
 
 		fisicAddr, flag := cache.Traducir(logicAddr)
 
 		if !flag {
-			slog.Error("Error al traducir la pagina ", base)
+			slog.Error("Error al traducir la pagina ","Pagina", base)
 			config.ExitChan <- struct{}{}
 			return -1
 		}

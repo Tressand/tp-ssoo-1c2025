@@ -72,9 +72,12 @@ func AddEntryTLB(page []int, frame int) {
 		}
 
 	}
-	// Agregar nueva entrada
+	// Agregar nueva entrada con TLB vacia
+	nuevoPage := make([]int, len(page))
+	copy(nuevoPage, page)
+
 	config.Tlb.Entries = append(config.Tlb.Entries, config.Tlb_entries{
-		Page:     page,
+		Page:     nuevoPage,
 		Frame:    frame,
 		LastUsed: time.Now().UnixNano(),
 	})

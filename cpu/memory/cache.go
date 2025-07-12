@@ -57,8 +57,14 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 		entry := &config.Cache.Entries[position]
 		
 		if entry.Pid == -1{	//cache vacia
-			entry.Content = content
-			entry.Page = logicAddr
+			nuevoContenido := make([]byte, len(content))
+			copy(nuevoContenido, content)
+
+			nuevoPage := make([]int, len(logicAddr))
+			copy(nuevoPage, logicAddr)
+
+			entry.Content = nuevoContenido
+			entry.Page = nuevoPage
 			entry.Use = true
 			entry.Position = false
 			entry.Pid = config.Pcb.PID
@@ -79,8 +85,14 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 
 			SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
-			entry.Content = content
-			entry.Page = logicAddr
+			nuevoContenido := make([]byte, len(content))
+			copy(nuevoContenido, content)
+
+			nuevoPage := make([]int, len(logicAddr))
+			copy(nuevoPage, logicAddr)
+
+			entry.Content = nuevoContenido
+			entry.Page = nuevoPage
 			entry.Use = true
 			entry.Position = false
 			entry.Pid = config.Pcb.PID
@@ -125,8 +137,14 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 			entry := &config.Cache.Entries[position]
 
 				if entry.Pid == -1{	//cache vacia
-					entry.Content = content
-					entry.Page = logicAddr
+					nuevoContenido := make([]byte, len(content))
+					copy(nuevoContenido, content)
+
+					nuevoPage := make([]int, len(logicAddr))
+					copy(nuevoPage, logicAddr)
+
+					entry.Content = nuevoContenido
+					entry.Page = nuevoPage
 					entry.Use = true
 					entry.Position = false
 					entry.Pid = config.Pcb.PID
@@ -146,8 +164,14 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 				fisicAddr := traducirCache(entry.Page)
 				SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
-				entry.Content = content
-				entry.Page = logicAddr
+				nuevoContenido := make([]byte, len(content))
+				copy(nuevoContenido, content)
+
+				nuevoPage := make([]int, len(logicAddr))
+				copy(nuevoPage, logicAddr)
+
+				entry.Content = nuevoContenido
+				entry.Page = nuevoPage
 				entry.Use = true
 				entry.Position = false
 				entry.Pid = config.Pcb.PID
@@ -177,8 +201,14 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 				fisicAddr := traducirCache(entry.Page)
 				SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
-				entry.Content = content
-				entry.Page = logicAddr
+				nuevoContenido := make([]byte, len(content))
+				copy(nuevoContenido, content)
+
+				nuevoPage := make([]int, len(logicAddr))
+				copy(nuevoPage, logicAddr)
+
+				entry.Content = nuevoContenido
+				entry.Page = nuevoPage
 				entry.Use = true
 				entry.Position = false
 				entry.Pid = config.Pcb.PID
@@ -353,7 +383,7 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 		nextPage,frames,flag := NextPageMMU(paginaActual) //obtengo la siguiente pagina de memoria
 		paginaActual = nextPage
 		if !flag {
-			slog.Error(" Error al leer en memoria, no se puede leer ",paginaActual)
+			slog.Error(" Error al leer en memoria, no se puede leer ","Pagina",fmt.Sprint(paginaActual))
 			
 			return nil,false
 		}
@@ -517,6 +547,8 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			"Valor": string(value[escrito:]),
 		})
 
+		slog.Info("Cache:","Contenido:",fmt.Sprint(config.Cache))
+
 		slog.Info("despues del copy","Content:",string(page))
 
 		bytesRestantes -= bytesAEscribir
@@ -556,7 +588,7 @@ func EndProcess(pid int){
 
 			fisicAddr,flag := Traducir(entrada.Page)
 			if !flag {
-				slog.Error("Error al traducir la pagina ",entrada.Page," al querer devolver a memoria las paginas. ")
+				slog.Error("Error al traducir al querer devolver a memoria las paginas.","Pagina",fmt.Sprint(entrada.Page))
 			} else{
 				SavePageInMemory(entrada.Content,fisicAddr,entrada.Page)
 				entrada.Modified = false
