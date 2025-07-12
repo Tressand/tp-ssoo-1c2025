@@ -19,7 +19,7 @@ func CreateProcess(path string, size int) {
 
 	slog.Info("Se crea el proceso", "pid", process.PCB.GetPID(), "path", path, "size", size)
 
-	HandleNewProcess(process)
+	go HandleNewProcess(process) // ????
 }
 
 func UpdateBurstEstimation(process *globals.Process) {
@@ -36,25 +36,6 @@ func UpdateBurstEstimation(process *globals.Process) {
 		process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
 }
 
-func FreeCPU(process *globals.Process) {
-	globals.CPUsSlotsMu.Lock()
-	defer globals.CPUsSlotsMu.Unlock()
-	for _, slot := range globals.CPUsSlots {
-		if slot.Process == process {
-			slot.Process = nil
-			slot.Cpu.Working = false
-
-			select {
-			case globals.CpuAvailableSignal <- struct{}{}:
-				slog.Debug("CPU freed. CpuAvailableSignal unlocked..")
-			default:
-			}
-
-			break
-		}
-	}
-}
-
 func newProcess(path string, size int) *globals.Process {
 	process := new(globals.Process)
 	process.PCB = pcb.Create(getNextPID(), path)
@@ -64,16 +45,6 @@ func newProcess(path string, size int) *globals.Process {
 	process.EstimatedBurst = float64(config.Values.InitialEstimate) / 1000.0
 
 	return process
-}
-
-func GetCPUList(working bool) []*globals.CPUConnection {
-	result := make([]*globals.CPUConnection, 0)
-	for i := range globals.AvailableCPUs {
-		if globals.AvailableCPUs[i].Working == working {
-			result = append(result, globals.AvailableCPUs[i])
-		}
-	}
-	return result
 }
 
 func sendToInitializeInMemory(pid uint, codePath string, size int) error {
@@ -132,34 +103,34 @@ func TryInititializeProcess(process *globals.Process) bool {
 	return false
 }
 
-func InititializeProcess(process *globals.Process) {
-	for {
-		initialized := TryInititializeProcess(process)
+func InititializeProcess(process *globals.Process) bool {
+	initialized := TryInititializeProcess(process)
 
-		globals.WaitingForRetryMu.Lock()
-		if globals.WaitingForRetry && initialized {
-			globals.WaitingForRetry = false
-		}
-		globals.WaitingForRetryMu.Unlock()
-
-		if !initialized {
-			slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "pid", process.PCB.GetPID())
-
-			globals.WaitingForRetryMu.Lock()
-			if !globals.WaitingForRetry {
-				globals.WaitingForRetry = true
-			}
-			globals.WaitingForRetryMu.Unlock()
-
-			<-globals.RetryInitialization
-
-			slog.Info("Reintentando inicializar proceso", "name", process.PCB.GetPID())
-
-			continue
-		}
-
-		return
+	if globals.IsAnyProcessPendingInit() || initialized {
+		return initialized
 	}
+
+	for {
+		slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "pid", process.PCB.GetPID())
+		<-globals.RetryInitialization // TODO: buffer
+
+		initialized = TryInititializeProcess(process)
+
+		if initialized {
+			globals.WaitingForRetryMu.Lock()
+			globals.WaitingForRetry = true
+			globals.WaitingForRetryMu.Unlock()
+			break
+		}
+	}
+
+	select {
+	case globals.BlockedForMemory <- struct{}{}:
+		slog.Debug("Se desbloquea LTS que estaba bloqueado porque habia un proceso esperando para inicializarse")
+	default:
+	}
+
+	return true
 }
 
 func isSmallerThanAll(process *globals.Process) bool {
@@ -176,30 +147,30 @@ func isSmallerThanAll(process *globals.Process) bool {
 	return true
 }
 
-func HandleNewProcess(process *globals.Process) {
-
+func SuspReadyIsEmpty() bool {
 	globals.SuspReadyQueueMutex.Lock()
-	if len(globals.SuspReadyQueue) != 0 {
-		globals.SuspReadyQueueMutex.Unlock()
-		queue.Enqueue(pcb.NEW, process)
-		notifyNewProcessInNew()
-		return
-	}
-	globals.SuspReadyQueueMutex.Unlock()
+	defer globals.SuspReadyQueueMutex.Unlock()
+	return len(globals.SuspReadyQueue) == 0
+}
 
+func NewIsEmpty() bool {
+	globals.NewQueueMutex.Lock()
+	defer globals.NewQueueMutex.Unlock()
+	return len(globals.NewQueue) == 0
+}
+
+func HandleNewProcess(process *globals.Process) {
 	initialized := false
 
-	globals.NewQueueMutex.Lock()
-	if shouldInitialize(process) {
-		initialized = TryInititializeProcess(process)
+	if shouldTryInitialize(process) && SuspReadyIsEmpty() {
+		initialized = InititializeProcess(process)
 	}
-	globals.NewQueueMutex.Unlock()
 
 	if !initialized {
 		queue.Enqueue(pcb.NEW, process)
+		notifyNewProcessInNew()
 	}
 
-	notifyNewProcessInNew()
 }
 
 func notifyNewProcessInNew() {
@@ -210,15 +181,14 @@ func notifyNewProcessInNew() {
 	}
 }
 
-func shouldInitialize(process *globals.Process) bool {
+func shouldTryInitialize(process *globals.Process) bool {
 	switch config.Values.ReadyIngressAlgorithm {
 	case "FIFO":
-		globals.WaitingForRetryMu.Lock()
-		defer globals.WaitingForRetryMu.Unlock()
-		return !globals.WaitingForRetry && len(globals.NewQueue) == 0
+		return !globals.IsAnyProcessPendingInit() && NewIsEmpty()
 	case "PMCP":
 		return isSmallerThanAll(process)
 	default:
+		slog.Error("Algoritmo de ingreso a READY no soportado", "algoritmo", config.Values.ReadyIngressAlgorithm)
 		return false
 	}
 }
@@ -257,10 +227,9 @@ func TerminateProcess(process *globals.Process) {
 
 	select {
 	case globals.RetryInitialization <- struct{}{}:
-		slog.Debug("Se libero memoria y hay procesos esperando para inicializarse. Se envia signal de reintento")
+		slog.Debug("Se libera memoria y hay procesos esperando para inicializarse. Se envia signal de reintento")
 	default:
 	}
-
 }
 
 func getNextPID() uint {

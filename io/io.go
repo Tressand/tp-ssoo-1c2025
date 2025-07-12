@@ -103,6 +103,7 @@ func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *
 	for {
 		select {
 		case <-ctx.Done():
+			notifyIODisconnected(name)
 			return
 		default:
 			retry, err := notifyKernel(name, &assignedPID)
@@ -124,11 +125,16 @@ func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *
 func notifyKernel(name string, pidptr *uint) (bool, error) {
 	log := slog.With("name", name)
 	log.Info("Notificando a Kernel...")
+
+	ip := httputils.GetOutboundIP()
+
+	port := strconv.Itoa(config.Values.PortKernel)
+
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-notify",
-		Queries:  map[string]string{"name": name, "pid": fmt.Sprint(*pidptr)},
+		Queries:  map[string]string{"ip": ip, "port": port, "name": name, "pid": fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
@@ -185,4 +191,32 @@ func notifyIOFinished(pid int) {
 	}
 
 	slog.Info("IO finalizado notificado correctamente")
+}
+
+func notifyIODisconnected(name string) {
+	slog.Info("Notificando a Kernel que IO ha sido desconectado...")
+
+	ip := httputils.GetOutboundIP()
+
+	port := strconv.Itoa(config.Values.PortKernel)
+
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "io-disconnected",
+		Queries:  map[string]string{"ip": ip, port: port, "name": name},
+	})
+	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	if err != nil {
+		slog.Error("Error making POST request", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Error on response", "Status", resp.StatusCode, "error", err)
+		return
+	}
+
+	slog.Info("Finalización de IO notificado correctamente")
 }
