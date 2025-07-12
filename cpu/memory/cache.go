@@ -344,12 +344,28 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 		bytesRestantes -= bytesALeer
 
 		offset = 0
-		paginaActual,flag = NextPageMMU(paginaActual) //obtengo la siguiente pagina de memoria
+		nextPage,frames,flag := NextPageMMU(paginaActual) //obtengo la siguiente pagina de memoria
+		paginaActual = nextPage
 		if !flag {
 			slog.Error(" Error al leer en memoria, no se puede leer ",paginaActual)
 			
 			return nil,false
 		}
+
+		if (!IsInCache(paginaActual)){
+
+			
+
+			page,flag := GetPageInMemory(frames)
+			
+			if !flag{
+				slog.Error("No se pudo obtener la siguiente página")
+				return nil,false
+			}
+			
+			AddEntryCache(paginaActual,page)
+		}
+
 	}
 
 	logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Hit",map[string]string{
@@ -389,18 +405,21 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			slog.Int("PageSize",pageSize),
 		)
 
+		slog.Info("Antes del copy", "len(page)", string(page))
+
 		copy(page[delta:], value)
 		
 
 		frame,_ :=findFrame(base)
 		fisicAddr := []int{frame,delta}
 
-		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
+		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir less",map[string]string{
 			"Direccion Fisica": fmt.Sprint(fisicAddr),
-			"Valor": fmt.Sprint(value),
+			"Valor": string(value),
 		})
 
-		slog.Info("Cache Content","Content:",fmt.Sprint(page))
+		slog.Info("despues del copy","Content:",string(page))
+
 		
 		return true
 	}
@@ -414,30 +433,44 @@ func WriteCache(logicAddr []int, value []byte) bool{
 		slog.Int("len(page)", len(page)),
 		slog.Int("PageSize",pageSize),
 	)
-	slog.Info("Antes del copy", "len(page)", len(page), "offset", offset)
+	slog.Info("Antes del copy", "len(page)", string(page))
 
 	copy(page[offset:], value[:bytesPrimeraPagina])
 	
-	slog.Info("Cache Content","Content:",fmt.Sprint(page))
+	slog.Info("despues del copy","Content:",string(page))
 
 	frame,_ :=findFrame(base)
 	fisicAddr := []int{frame,delta}
 
 	logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
 		"Direccion Fisica": fmt.Sprint(fisicAddr),
-		"Valor": fmt.Sprint(value),
+		"Valor": string(value),
 	})
 
 	// Actualizo cuántos bytes quedan por escribir
 	bytesRestantes -= bytesPrimeraPagina
 	escrito += bytesPrimeraPagina
 
-	paginaActual, flagNP := NextPageMMU(paginaActual)
+	paginaActual, frames, flagNP := NextPageMMU(paginaActual)
 	if !flagNP {
 		slog.Error("No se pudo obtener la siguiente página")
 		return false
 	}
 	
+	if (!IsInCache(paginaActual)){
+
+		
+
+		page,flag := GetPageInMemory(frames)
+		
+		if !flag{
+			slog.Error("No se pudo obtener la siguiente página")
+			return false
+		}
+		
+		AddEntryCache(paginaActual,page)
+	}
+
 
 	for bytesRestantes > 0{
 
@@ -463,24 +496,46 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			slog.Int("escrito", escrito),
 		)
 
+		slog.Info("antes del copy","Content:",fmt.Sprint(page))
+
 		copy(page[:], value[escrito:escrito+bytesAEscribir])
+
+		slog.Info("despues del copy","Content:",fmt.Sprint(page))
 
 		frame,_ :=findFrame(paginaActual)
 		fisicAddr := []int{frame,0}
 
 		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
 			"Direccion Fisica": fmt.Sprint(fisicAddr),
-			"Valor": fmt.Sprint(value),
+			"Valor": string(value),
 		})
 
 		bytesRestantes -= bytesAEscribir
 		escrito += bytesAEscribir
 
 		var flagNP bool
-		paginaActual, flagNP = NextPageMMU(paginaActual)
+		nextPage,frames, flagNP := NextPageMMU(paginaActual)
+		paginaActual = nextPage
 		if !flagNP {
 			slog.Error("No se pudo obtener la siguiente página")
 			return false
+		}
+
+		if (!IsInCache(paginaActual)){
+
+
+			page,flag := GetPageInMemory(frames)
+			
+			if !flag{
+				slog.Error("No se pudo obtener la siguiente página")
+				return false
+			}
+			
+			AddEntryCache(paginaActual,page)
+		}
+
+		if bytesRestantes <= 0 {
+			return true
 		}
 	}
 	return true

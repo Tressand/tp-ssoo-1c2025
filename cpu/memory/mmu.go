@@ -111,16 +111,20 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 	return true
 }
 
-func NextPageMMU(logicAddr []int)([]int,bool){ //me da una base y yo busco la dirección logica y la fisica
+func NextPageMMU(logicAddr []int)([]int,[]int,bool){ //me da una base y yo busco la dirección logica y la fisica //0|0|0
 
 	carry := 1
-	tamPag := config.MemoryConf.PageSize
+	tamPag := config.MemoryConf.EntriesPerPage
 
 	for i := len(logicAddr) - 1; i >= 0; i-- {
+
 		logicAddr[i] += carry
-		if logicAddr[i] >= tamPag {
+		
+		if logicAddr[i] == tamPag {
+
 			logicAddr[i] = 0
 			carry = 1
+		
 		} else {
 			carry = 0
 			break
@@ -128,17 +132,20 @@ func NextPageMMU(logicAddr []int)([]int,bool){ //me da una base y yo busco la di
 	}
 	if carry == 1 {
 		// Si hay desborde total, no debe existir la siguiente direccion
-		return nil,false
+		return nil,nil,false
 	}
 
 	logicAddr = append(logicAddr, 0)
 
-	_,flag := Traducir(logicAddr)
+	slog.Info("NextPage","NextPage",fmt.Sprint(logicAddr))
+
+
+	frame,flag := Traducir(logicAddr)
 
 	if !flag{
 		slog.Error("No existe la pagina ",logicAddr)
-		return nil, false
+		return nil,nil, false
 	}
 
-	return logicAddr,true
+	return logicAddr,frame,true
 }
