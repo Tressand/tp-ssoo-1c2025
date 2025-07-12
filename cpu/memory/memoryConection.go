@@ -1,29 +1,29 @@
 package cache
 
-import(
+import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
-	"encoding/json"
 	"log/slog"
 	"net/http"
-	"ssoo-utils/httputils"
 	"ssoo-cpu/config"
+	"ssoo-utils/httputils"
 	"strconv"
 	"strings"
 )
 
-func fromLogicAddrToString(logicAddr []int) string{
+func fromLogicAddrToString(logicAddr []int) string {
 	strs := make([]string, len(logicAddr))
 
 	for i, num := range logicAddr {
 		strs[i] = strconv.Itoa(num)
 	}
-	
+
 	return strings.Join(strs, "|")
 }
 
-func findFrameInMemory(logicAddr []int) (int,bool){
+func findFrameInMemory(logicAddr []int) (int, bool) {
 
 	str := fromLogicAddrToString(logicAddr)
 
@@ -32,7 +32,7 @@ func findFrameInMemory(logicAddr []int) (int,bool){
 		Port:     config.Values.PortMemory,
 		Endpoint: "frame",
 		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
+			"pid":     fmt.Sprint(config.Pcb.PID),
 			"address": str,
 		},
 	})
@@ -40,31 +40,31 @@ func findFrameInMemory(logicAddr []int) (int,bool){
 	resp, err := http.Get(url)
 	if err != nil {
 		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
-		return 0,false
+		return 0, false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
-		return 0,false
+		return 0, false
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		slog.Error("error al leer el cuerpo de la respuesta", "error", err)
-		return 0,false
+		return 0, false
 	}
 
 	frame, err := strconv.Atoi(string(bodyBytes))
 	if err != nil {
 		slog.Error("error al convertir la respuesta a int", "respuesta", string(bodyBytes), "error", err)
-		return 0,false
+		return 0, false
 	}
 
-	return frame,true
+	return frame, true
 }
 
-func FindMemoryConfig() bool{
+func FindMemoryConfig() bool {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
@@ -72,7 +72,7 @@ func FindMemoryConfig() bool{
 	})
 
 	resp, err := http.Get(url)
-	if err!=nil{
+	if err != nil {
 		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
 		return false
 	}
@@ -96,14 +96,14 @@ func FindMemoryConfig() bool{
 	return true
 }
 
-func GetPageInMemory(fisicAddr []int) ([]byte,bool){
+func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
 		Endpoint: "full_page",
 		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
+			"pid":  fmt.Sprint(config.Pcb.PID),
 			"base": fmt.Sprint(fisicAddr[0]),
 		},
 	})
@@ -122,50 +122,74 @@ func GetPageInMemory(fisicAddr []int) ([]byte,bool){
 	}
 
 	page, err := io.ReadAll(resp.Body)
-	if err != nil{
-		slog.Error("error al leer la respuesta. ","error",err)
+	if err != nil {
+		slog.Error("error al leer la respuesta. ", "error", err)
 		return nil, false
 	}
 
-	slog.Info("Cache Content","Content:",fmt.Sprint(page))
+	slog.Info("Cache Content", "Content:", fmt.Sprint(page))
 
-	return page,true
+	return page, true
 }
 
-func SavePageInMemory(page []byte,fisicAddr []int,logicAddr []int) bool{
-	
-	frame:= 0
-	if len(fisicAddr) == 0 || fisicAddr==nil {
-		slog.Error("SavePageInMemory: fisicAddr está vacío, no se puede guardar la página.")
-	}else{
-		frame = fisicAddr[0]
+func SavePageInMemory(page []byte, addr []int, pid int) error {
+	addr_str := fmt.Sprint(addr[0])
+	i := 1
+	for range len(addr) - 1 {
+		addr_str += "|" + fmt.Sprint(addr[i])
+		i++
 	}
+
+	frame_url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "frame",
+		Queries: map[string]string{
+			"pid":     fmt.Sprint(config.Pcb.PID),
+			"address": addr_str,
+		},
+	})
+
+	frame_resp, err := http.Get(frame_url)
+	if err != nil {
+		return err
+	}
+	defer frame_resp.Body.Close()
+
+	if frame_resp.StatusCode != http.StatusOK {
+		b_err, _ := io.ReadAll(frame_resp.Body)
+		slog.Error("La memoria respondió con error", "status", frame_resp.Status, "err", string(b_err))
+		return err
+	}
+
+	fmt.Println(addr_str)
+	frame_str, _ := io.ReadAll(frame_resp.Body)
+	fmt.Println(frame_str)
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
 		Endpoint: "full_page",
 		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
-			"base": fmt.Sprint(frame),
+			"pid":  fmt.Sprint(config.Pcb.PID),
+			"base": string(frame_str),
 		},
 	})
 
 	resp, err := http.Post(url, "application/octet-stream", bytes.NewReader(page))
 	if err != nil {
 		slog.Error("Error al hacer POST a memoria", "err", err)
-		return false
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Warn("La memoria respondió con error", "status", resp.Status)
-		return false
+		b_err, _ := io.ReadAll(resp.Body)
+		slog.Error("La memoria respondió con error", "status", resp.Status, "err", string(b_err))
+		return err
 	}
-	lgcaddr := fromLogicAddrToString(logicAddr[:len(logicAddr)-1])
-	
 
-	slog.Info("PID:",string(config.Pcb.PID), "- Memory Update - Página: ",lgcaddr,"- Frame:",frame)
+	slog.Info("PID:", string(config.Pcb.PID), "- Memory Update - Página: ", addr, "- Frame:", string(frame_str))
 
-	return true
+	return nil
 }
