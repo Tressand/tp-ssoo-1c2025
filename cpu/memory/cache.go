@@ -403,13 +403,12 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 		if bytesALeer > bytesRestantes {
 			bytesALeer = bytesRestantes
 		}
+		chunk := make([]byte, bytesALeer)
+		copy(chunk, page[:bytesALeer])
+		resultado = append(resultado, chunk...)
 
-		resultado = append(resultado, page[offset:offset+bytesALeer]...)
 		bytesRestantes -= bytesALeer
 
-		bytesRestantes -= bytesALeer
-
-		offset = 0
 		nextPage,frames,flag := NextPageMMU(paginaActual) //obtengo la siguiente pagina de memoria
 		paginaActual = nextPage
 		if !flag {
@@ -419,8 +418,6 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 		}
 
 		if (!IsInCache(paginaActual)){
-
-			
 
 			page,flag := GetPageInMemory(frames)
 			
