@@ -261,8 +261,7 @@ func RecieveSyscall() http.HandlerFunc {
 				globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
 				globals.MTSQueueMu.Unlock()
 
-				globals.MTSEmpty <- struct{}{}
-				// ????
+				unlockMTS()
 
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
@@ -295,7 +294,7 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
 			globals.MTSQueueMu.Unlock()
 
-			globals.MTSEmpty <- struct{}{}
+			unlockMTS()
 
 			// ????
 
@@ -341,6 +340,14 @@ func RecieveSyscall() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Syscall procesada"))
+	}
+}
+
+func unlockMTS() {
+	select {
+	case globals.MTSEmpty <- struct{}{}:
+		slog.Debug("Se desbloquea MTSEmpty")
+	default:
 	}
 }
 

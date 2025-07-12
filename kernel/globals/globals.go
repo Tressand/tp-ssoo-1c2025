@@ -82,11 +82,12 @@ type IORequest struct {
 	Timer int
 }
 
-type StateInMTS int
+type CpuState int
 
 const (
-	Requested StateInMTS = iota
-	Waiting
+	Available CpuState = iota
+	Occupied
+	Any
 )
 
 type BlockedByIO struct {
@@ -105,10 +106,10 @@ type CPUSlot struct {
 }
 
 type CPUConnection struct {
-	ID      string
-	IP      string
-	Port    int
-	Working bool
+	ID    string
+	IP    string
+	Port  int
+	State CpuState
 }
 
 type DispatchResponse struct {
@@ -132,6 +133,12 @@ type Process struct {
 }
 
 func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Path }
+
+func IsAnyProcessPendingInit() bool {
+	WaitingForRetryMu.Lock()
+	defer WaitingForRetryMu.Unlock()
+	return WaitingForRetry
+}
 
 func SendIORequest(pid uint, timer int, io *IOConnection) {
 	io.Handler <- IORequest{Pid: pid, Timer: timer}

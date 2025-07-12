@@ -3,6 +3,7 @@ package queues
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"ssoo-kernel/globals"
 	"ssoo-utils/logger"
@@ -29,6 +30,19 @@ func getQueueAndMutex(state pcb.STATE) (*[]*globals.Process, *sync.Mutex, error)
 	default:
 		return nil, nil, errors.New("estado no soportado")
 	}
+}
+
+func IsEmpty(state pcb.STATE) bool {
+	queue, mutex, err := getQueueAndMutex(state)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al obtener la cola para el estado %s: %s", state.String(), err.Error()))
+		return true
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	return len(*queue) == 0
 }
 
 func Enqueue(state pcb.STATE, process *globals.Process) error {

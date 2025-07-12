@@ -372,7 +372,6 @@ func handleIODisconnected() http.HandlerFunc {
 			if io.Name == name && io.IP == ip && io.Port == portInt {
 				ioConnection = io
 				globals.AvailableIOs = append(globals.AvailableIOs[:index], globals.AvailableIOs[index+1:]...)
-				// TODO: Revisar sí necesito hacer un free del canal
 			}
 		}
 		globals.AvIOmu.Unlock()
