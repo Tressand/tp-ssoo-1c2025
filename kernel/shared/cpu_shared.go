@@ -6,15 +6,12 @@ import (
 )
 
 func ListCPUsIsEmpty(state globals.CpuState) bool {
-	globals.AvCPUmu.Lock()
-	defer globals.AvCPUmu.Unlock()
-	list := make([]*globals.CPUConnection, 0)
 	for _, cpu := range globals.AvailableCPUs {
 		if cpu.State == state || state == globals.Any {
-			list = append(list, cpu)
+			return false
 		}
 	}
-	return len(list) == 0
+	return true
 }
 
 func FreeCPU(process *globals.Process) {
@@ -37,11 +34,8 @@ func FreeCPU(process *globals.Process) {
 }
 
 func GetCPU(state globals.CpuState) *globals.CPUConnection {
-	globals.AvCPUmu.Lock()
-	defer globals.AvCPUmu.Unlock()
 	for _, cpu := range globals.AvailableCPUs {
 		if cpu.State == state || state == globals.Any {
-			slog.Debug("Se encontró una CPU disponible", "cpuID", cpu.ID, "state", cpu.State)
 			return cpu
 		}
 	}
