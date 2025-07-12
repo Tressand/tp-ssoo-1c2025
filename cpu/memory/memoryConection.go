@@ -164,7 +164,7 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 	}
 
 	logger.RequiredLog(false,uint(config.Pcb.PID),"Memory Update",map[string]string{
-		"Pagina": fmt.Sprint(addr),
+		"Pagina": fmt.Sprint(addr[:len(addr)-1]),
 		"Frame": fmt.Sprint(frame_str[0]),
 	})
 

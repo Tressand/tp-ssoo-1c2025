@@ -172,12 +172,15 @@ func sendPidPcToMemory() {
 // #region Execute
 func exec() int{
 
+	logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+		"Instruccion": config.Instruccion,
+	})
+
 	status := 0
 	// TODO : Deberiamos mejorar el incremento de PC.
 	switch config.Instruccion {
 	case "NOOP":
 		time.Sleep(1 * time.Millisecond)
-		slog.Info("se espero 1 milisegundo por instruccion NOOP.")
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
@@ -189,8 +192,6 @@ func exec() int{
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
-		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
-		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
 		
 	//SYSCALLS
 	case "IO":
@@ -202,13 +203,11 @@ func exec() int{
 		status = initProcess()
 
 	case "DUMP_MEMORY":
-		//vacia la memoria
-		slog.Info("PID: ",fmt.Sprint(config.Pcb.PID)," - Ejecutando: DUMP MEMORY")
+		//comprueba la memoria
 		status = dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
-		slog.Info("PID: ",fmt.Sprint(config.Pcb.PID)," - Ejecutando: EXIT")
 		status = DeleteProcess()
 
 	default:

@@ -93,7 +93,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 		fisicAddr,flag := Traducir(logicAddr) //traduzco la direccion
 		
 		if !flag {
-			slog.Error("Error al traducir la dirección logica, ",logicAddr)
+			slog.Error("Error"," al traducir la dirección logica, ",fmt.Sprint(logicAddr))
 			return false
 		}
 
@@ -178,6 +178,7 @@ func ReadMemory(logicAddr []int, size int) int{
 	logger.RequiredLog(false,uint(config.Pcb.PID),"LEER",map[string]string{
 		"Direccion Fisica": fmt.Sprint(fisicAddr),
 		"Valor": string(content),
+		"Size": fmt.Sprint(len(content)),
 	})
 	
 	return 0

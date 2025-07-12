@@ -52,7 +52,7 @@ func AddEntryCacheClock(logicAddr []int, content []byte) {
 	for {
 		entry := &config.Cache.Entries[position]
 
-		if entry.Pid == -1 { //cache vacia
+		if entry.Pid == -1 { //entrada de cache vacia
 			nuevoContenido := make([]byte, len(content))
 			copy(nuevoContenido, content)
 
@@ -63,6 +63,7 @@ func AddEntryCacheClock(logicAddr []int, content []byte) {
 			entry.Page = nuevoPage
 			entry.Use = true
 			entry.Position = false
+			entry.Modified = false
 			entry.Pid = config.Pcb.PID
 
 			position = (position + 1) % len(config.Cache.Entries)
@@ -88,6 +89,7 @@ func AddEntryCacheClock(logicAddr []int, content []byte) {
 			entry.Page = nuevoPage
 			entry.Use = true
 			entry.Position = false
+			entry.Modified = false
 			entry.Pid = config.Pcb.PID
 
 			position = (position + 1) % len(config.Cache.Entries)
@@ -97,7 +99,7 @@ func AddEntryCacheClock(logicAddr []int, content []byte) {
 				"Pagina": fmt.Sprint(logicAddr),
 			})
 
-			break
+			return
 		} else {
 
 			entry.Use = false
@@ -139,6 +141,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 				entry.Content = nuevoContenido
 				entry.Page = nuevoPage
 				entry.Use = true
+				entry.Modified = false
 				entry.Position = false
 				entry.Pid = config.Pcb.PID
 
@@ -164,6 +167,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 				entry.Content = nuevoContenido
 				entry.Page = nuevoPage
 				entry.Use = true
+				entry.Modified = false
 				entry.Position = false
 				entry.Pid = config.Pcb.PID
 
@@ -198,6 +202,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 				entry.Content = nuevoContenido
 				entry.Page = nuevoPage
 				entry.Use = true
+				entry.Modified = false
 				entry.Position = false
 				entry.Pid = config.Pcb.PID
 
@@ -267,18 +272,18 @@ func NoUsedAndNoModifiedCache() bool {
 }
 
 func ModifyCache(logicAddr []int) {
-	for _, entrada := range config.Cache.Entries {
-		if areSlicesEqual(entrada.Page, logicAddr) {
-			entrada.Modified = true
+	for i := range config.Cache.Entries {
+		if areSlicesEqual(config.Cache.Entries[i].Page, logicAddr) {
+			config.Cache.Entries[i].Modified = true
 			return
 		}
 	}
 }
 
 func UseCache(logicAddr []int) {
-	for _, entrada := range config.Cache.Entries {
-		if areSlicesEqual(entrada.Page, logicAddr) {
-			entrada.Use = true
+	for i := range config.Cache.Entries {
+		if areSlicesEqual(config.Cache.Entries[i].Page, logicAddr) {
+			config.Cache.Entries[i].Use = true
 			return
 		}
 	}
@@ -305,6 +310,7 @@ func InitCache() {
 		Entries:  make([]config.CacheEntry, config.Values.CacheEntries),
 		Capacity: config.Values.CacheEntries,
 		Delay:    config.Values.CacheDelay,
+		ReplacementAlg: config.Values.CacheReplacement,
 	}
 
 	for i := 0; i < config.Values.CacheEntries; i++ {
@@ -407,6 +413,10 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 
 		bytesRestantes -= bytesALeer
 
+		if bytesRestantes <= 0 {
+			return resultado,true
+		}
+
 		nextPage,frames,flag := NextPageMMU(paginaActual) //obtengo la siguiente pagina de memoria
 		paginaActual = nextPage
 		if !flag {
@@ -457,13 +467,6 @@ func WriteCache(logicAddr []int, value []byte) bool {
 	escrito := 0
 
 	if bytesRestantes <= pageSize-delta {
-
-		slog.Info("Debug copy",
-			slog.Int("offset", delta),
-			slog.Int("bytesAEscribir", bytesRestantes),
-			slog.Int("len(page)", len(page)),
-			slog.Int("PageSize", pageSize),
-		)
 
 		copy(page[delta:], value)
 
@@ -555,6 +558,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 			return true
 		}
 
+
 		var flagNP bool
 		nextPage, frames, flagNP := NextPageMMU(paginaActual)
 		paginaActual = nextPage
@@ -579,6 +583,9 @@ func WriteCache(logicAddr []int, value []byte) bool {
 }
 
 func EndProcess(pid int) {
+
+	slog.Info("Salvando datos. ","PID",fmt.Sprint(pid))
+	slog.Info("Cache Status.","Cache", fmt.Sprint(config.Cache))
 
 	nuevasEntradas := make([]config.CacheEntry, 0, len(config.Cache.Entries))
 
