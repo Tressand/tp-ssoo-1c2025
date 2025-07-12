@@ -441,11 +441,8 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			slog.Int("PageSize",pageSize),
 		)
 
-		slog.Info("Antes del copy", "Content:", string(page))
-
 		copy(page[delta:], value)
 		
-
 		frame,_ :=findFrame(base)
 		fisicAddr := []int{frame,delta}
 
@@ -453,23 +450,11 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			"Direccion Fisica": fmt.Sprint(fisicAddr),
 			"Valor": string(value),
 		})
-
-		slog.Info("despues del copy","Content:",string(page))
-
 		
 		return true
 	}
 
 	bytesPrimeraPagina := pageSize - offset
-
-
-	slog.Info("Debug copy",
-		slog.Int("offset", offset),
-		slog.Int("bytesAEscribir", bytesPrimeraPagina),
-		slog.Int("len(page)", len(page)),
-		slog.Int("PageSize",pageSize),
-	)
-	slog.Info("Antes del copy", "len(page)", string(page))
 
 	copy(page[offset:], value[:bytesPrimeraPagina])
 
@@ -480,8 +465,6 @@ func WriteCache(logicAddr []int, value []byte) bool{
 		"Direccion Fisica": fmt.Sprint(fisicAddr),
 		"Valor": string(value[escrito:]),
 	})
-
-	slog.Info("despues del copy","Content:",string(page))
 
 	// Actualizo cuántos bytes quedan por escribir
 	bytesRestantes -= bytesPrimeraPagina
@@ -494,8 +477,6 @@ func WriteCache(logicAddr []int, value []byte) bool{
 	}
 	
 	if (!IsInCache(paginaActual)){
-
-		
 
 		page,flag := GetPageInMemory(frames)
 		
@@ -526,14 +507,6 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			bytesAEscribir = bytesRestantes
 		}
 
-		slog.Info("Debug copy",
-			slog.Int("bytesAEscribir", bytesAEscribir),
-			slog.Int("len(page)", len(page)),
-			slog.Int("escrito", escrito),
-		)
-
-		slog.Info("antes del copy","Content:",string(page))
-
 		copy(page[:], value[escrito:escrito+bytesAEscribir])
 
 		paginaActual = append(paginaActual, 0)
@@ -546,10 +519,6 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			"Direccion Fisica": fmt.Sprint(frame),
 			"Valor": string(value[escrito:]),
 		})
-
-		slog.Info("Cache:","Contenido:",fmt.Sprint(config.Cache))
-
-		slog.Info("despues del copy","Content:",string(page))
 
 		bytesRestantes -= bytesAEscribir
 		escrito += bytesAEscribir
