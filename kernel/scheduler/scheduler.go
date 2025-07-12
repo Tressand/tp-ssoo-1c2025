@@ -38,6 +38,14 @@ func LTS() {
 	}
 
 	for {
+		globals.WaitingForRetryMu.Lock()
+		if globals.WaitingForRetry {
+			globals.WaitingForRetryMu.Unlock()
+			<-globals.BlockedForMemory
+			continue
+		}
+		globals.WaitingForRetryMu.Unlock()
+
 		var process *globals.Process
 		var err error
 		var found bool = false

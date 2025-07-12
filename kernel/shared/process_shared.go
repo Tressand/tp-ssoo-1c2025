@@ -19,7 +19,7 @@ func CreateProcess(path string, size int) {
 
 	slog.Info("Se crea el proceso", "pid", process.PCB.GetPID(), "path", path, "size", size)
 
-	HandleNewProcess(process)
+	go HandleNewProcess(process) // ????
 }
 
 func UpdateBurstEstimation(process *globals.Process) {
@@ -132,7 +132,7 @@ func TryInititializeProcess(process *globals.Process) bool {
 	return false
 }
 
-func InititializeProcess(process *globals.Process) {
+func InititializeProcess(process *globals.Process) bool {
 	for {
 		initialized := TryInititializeProcess(process)
 
@@ -158,7 +158,13 @@ func InititializeProcess(process *globals.Process) {
 			continue
 		}
 
-		return
+		select {
+		case globals.BlockedForMemory <- struct{}{}:
+			slog.Debug("Se desbloquea LTS que estaba bloqueado porque habia un proceso esperando para inicializarse")
+		default:
+		}
+
+		return true
 	}
 }
 
@@ -190,16 +196,26 @@ func HandleNewProcess(process *globals.Process) {
 	initialized := false
 
 	globals.NewQueueMutex.Lock()
-	if shouldInitialize(process) {
-		initialized = TryInititializeProcess(process)
+	if shouldInitialize(process) { // TODO: Revisar
+		globals.WaitingForRetryMu.Lock()
+		waitingForRetry := globals.WaitingForRetry
+		globals.WaitingForRetryMu.Unlock()
+
+		if config.Values.ReadyIngressAlgorithm == "PMCP" && waitingForRetry {
+			initialized = TryInititializeProcess(process)
+		} else {
+			initialized = InititializeProcess(process)
+		}
 	}
 	globals.NewQueueMutex.Unlock()
 
+	// El primero que no puede ser inicializado por falta de memoria, se agrega a NEW en vez de bloquearse. Y obvio cambiar el flag.
+
 	if !initialized {
 		queue.Enqueue(pcb.NEW, process)
+		notifyNewProcessInNew()
 	}
 
-	notifyNewProcessInNew()
 }
 
 func notifyNewProcessInNew() {
@@ -215,7 +231,7 @@ func shouldInitialize(process *globals.Process) bool {
 	case "FIFO":
 		globals.WaitingForRetryMu.Lock()
 		defer globals.WaitingForRetryMu.Unlock()
-		return !globals.WaitingForRetry && len(globals.NewQueue) == 0
+		return !globals.WaitingForRetry && len(globals.NewQueue) == 0 // ????
 	case "PMCP":
 		return isSmallerThanAll(process)
 	default:

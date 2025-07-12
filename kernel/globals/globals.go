@@ -47,6 +47,8 @@ var (
 	NextPID         uint = 1 // ?
 	PIDMutex        sync.Mutex
 
+	BlockedForMemory = make(chan struct{})
+
 	LTSEmpty = make(chan struct{})
 	STSEmpty = make(chan struct{})
 	MTSEmpty = make(chan struct{})
