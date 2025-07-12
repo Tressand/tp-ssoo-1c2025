@@ -200,6 +200,7 @@ func RecieveSyscall() http.HandlerFunc {
 			deviceFound := false
 			/* Ahora mismo, si esta ocupado, sigue con la ejecución, pero se bloquea si la envia.*/
 			var selectedIO *globals.IOConnection
+
 			globals.AvIOmu.Lock()
 			for _, io := range globals.AvailableIOs {
 				if io.Name == device {
@@ -236,6 +237,7 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 
 			if !selectedIO.Disp {
+				// ????
 				process, err = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 				if err != nil {
@@ -248,24 +250,27 @@ func RecieveSyscall() http.HandlerFunc {
 
 				queue.Enqueue(pcb.BLOCKED, process)
 
-				waitIO := new(globals.WaitingIO)
-				waitIO.Process = process
-				waitIO.IOName = device
-				waitIO.IOTime = timeMs
-				waitIO.IOSignalAvailable = make(chan struct{})
+				blockedByIO := new(globals.BlockedByIO)
+				blockedByIO.Process = process
+				blockedByIO.IOConnection = selectedIO
+				blockedByIO.IOName = device
+				blockedByIO.IOTime = timeMs
+				blockedByIO.TimerStarted = false
 
-				globals.WaitingForIOMu.Lock()
-				globals.WaitingForIO = append(globals.WaitingForIO, waitIO)
-				globals.WaitingForIOMu.Unlock()
+				globals.MTSQueueMu.Lock()
+				globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
+				globals.MTSQueueMu.Unlock()
+
+				// ????
 
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
 				return
 			}
-			// Marcar como no disponible y enviar la solicitud
 
-			selectedIO.Disp = false // !!!
+			selectedIO.Disp = false
 
+			// ????
 			process, err = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 			if err != nil {
@@ -277,6 +282,19 @@ func RecieveSyscall() http.HandlerFunc {
 			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
 			queue.Enqueue(pcb.BLOCKED, process)
+
+			blockedByIO := new(globals.BlockedByIO)
+			blockedByIO.Process = process
+			blockedByIO.IOConnection = selectedIO
+			blockedByIO.IOName = device
+			blockedByIO.IOTime = timeMs
+			blockedByIO.TimerStarted = false
+
+			globals.MTSQueueMu.Lock()
+			globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
+			globals.MTSQueueMu.Unlock()
+
+			// ????
 
 			globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
 

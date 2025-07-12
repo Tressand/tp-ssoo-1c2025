@@ -39,8 +39,8 @@ var (
 	CPUsSlots   []*CPUSlot = make([]*CPUSlot, 0)
 	CPUsSlotsMu sync.Mutex
 
-	WaitingForIO   []*WaitingIO = make([]*WaitingIO, 0)
-	WaitingForIOMu sync.Mutex
+	MTSQueue   []*BlockedByIO = make([]*BlockedByIO, 0)
+	MTSQueueMu sync.Mutex
 	//
 
 	SchedulerStatus string
@@ -69,6 +69,8 @@ var (
 
 type IOConnection struct {
 	Name    string
+	IP      string
+	Port    int
 	Handler chan IORequest
 	Disp    bool
 }
@@ -78,12 +80,21 @@ type IORequest struct {
 	Timer int
 }
 
-type WaitingIO struct {
-	Process           *Process
-	IOName            string
-	IOTime            int
-	Waiting           bool
-	IOSignalAvailable chan struct{}
+type StateInMTS int
+
+const (
+	Requested StateInMTS = iota
+	Waiting
+)
+
+type BlockedByIO struct {
+	Process      *Process
+	IOConnection *IOConnection
+	// ----
+	IOName string
+	IOTime int
+	// ----
+	TimerStarted bool
 }
 
 type CPUSlot struct {
