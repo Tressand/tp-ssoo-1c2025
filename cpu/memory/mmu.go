@@ -146,3 +146,47 @@ func sum(val []int, mod int) {
         }
     }
 }
+
+func ReadMemory(logicAddr []int, size int) int{
+
+	base := logicAddr[:len(logicAddr)-1]
+	fisicAddr, flag := Traducir(logicAddr)
+	if !flag {
+		slog.Error("Error al traducir la pagina ","Pagina", base)
+		config.ExitChan <- struct{}{}
+		return -1
+	}
+
+	if IsInCache(base) { //si la pagina esta en cache leo directamente
+
+		content, flag := ReadCache(logicAddr, size)
+
+		if !flag {
+			slog.Error("Error al leer la cache ","Pagina", fmt.Sprint(base))
+			config.ExitChan <- struct{}{}
+			return -1
+		}
+
+		logger.RequiredLog(false,uint(config.Pcb.PID),"LEER",map[string]string{
+			"Direccion Fisica": fmt.Sprint(fisicAddr),
+			"Valor": fmt.Sprint(content),
+		})
+
+		slog.Info("Contenido de direccion: ", fmt.Sprint(logicAddr), " tamanio: ", size, " ", content)
+
+	} else { //sino la busco y la leo
+
+		page, _ := GetPageInMemory(fisicAddr)
+		AddEntryCache(base, page)
+		content, flag := ReadCache(logicAddr, size)
+
+		if !flag {
+			slog.Error("Error al leer la cache en la pagina ", base)
+			config.ExitChan <- struct{}{}
+			return -1
+		}
+
+		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
+	}
+	return 0
+}

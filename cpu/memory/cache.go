@@ -338,13 +338,14 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 	pageSize := config.MemoryConf.PageSize
 
 	slog.Info("read Cache","size",size,"delta",delta,"pagesize",pageSize)
+	
+	page, flag := SearchPageInCache(base)
+	if !flag {
+		slog.Error("Error buscando página en caché")
+		return nil,false
+	}
 
-	if delta+size < pageSize {
-		page, flag := SearchPageInCache(base)
-		if !flag {
-			slog.Error("Error buscando página en caché")
-			return nil,false
-		}
+	if size <= pageSize - delta {
 		return page[delta : delta+size],true
 	}
 

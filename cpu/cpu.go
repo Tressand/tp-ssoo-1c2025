@@ -185,7 +185,7 @@ func exec() int{
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		status = readMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
+		status = ReadMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
@@ -233,45 +233,9 @@ func writeMemory(logicAddr []int, value []byte) int{
 	return 0
 }
 
-func readMemory(logicAddr []int, size int) int{
-
-	base := logicAddr[:len(logicAddr)-1]
-
-	if cache.IsInCache(logicAddr) { //si la pagina esta en cache leo directamente
-
-		content, flag := cache.ReadCache(base, size)
-
-		if !flag {
-			slog.Error("Error al leer la cache ","Pagina", fmt.Sprint(base))
-			config.ExitChan <- struct{}{}
-			return -1
-		}
-
-		slog.Info("Contenido de direccion: ", fmt.Sprint(logicAddr), " tamanio: ", size, " ", content)
-
-	} else { //sino la busco y la leo
-
-		fisicAddr, flag := cache.Traducir(logicAddr)
-
-		if !flag {
-			slog.Error("Error al traducir la pagina ","Pagina", base)
-			config.ExitChan <- struct{}{}
-			return -1
-		}
-
-		page, _ := cache.GetPageInMemory(fisicAddr)
-		cache.AddEntryCache(base, page)
-		content, flag := cache.ReadCache(logicAddr, size)
-
-		if !flag {
-			slog.Error("Error al leer la cache en la pagina ", base)
-			config.ExitChan <- struct{}{}
-			return -1
-		}
-
-		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
-	}
-	return 0
+func ReadMemory(logicAddr []int,size int) int{
+	
+	return cache.ReadMemory(logicAddr,size)
 }
 
 // #endregion
