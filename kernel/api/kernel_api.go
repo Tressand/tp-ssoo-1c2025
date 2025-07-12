@@ -261,6 +261,7 @@ func RecieveSyscall() http.HandlerFunc {
 				globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
 				globals.MTSQueueMu.Unlock()
 
+				globals.MTSEmpty <- struct{}{}
 				// ????
 
 				w.WriteHeader(http.StatusOK)
@@ -293,6 +294,8 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.MTSQueueMu.Lock()
 			globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
 			globals.MTSQueueMu.Unlock()
+
+			globals.MTSEmpty <- struct{}{}
 
 			// ????
 
