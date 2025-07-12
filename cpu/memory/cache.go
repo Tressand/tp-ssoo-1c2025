@@ -355,6 +355,35 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 	copy(paginaActual,base)
 
 	offset := delta
+	bytesALeer := pageSize - delta
+
+	chunk := make([]byte, bytesALeer)
+	copy(chunk, page[offset:offset+bytesALeer])
+	resultado = append(resultado, chunk...)
+
+	bytesRestantes -= pageSize - delta
+
+	slog.Info("Resultado,","Contenido: ",fmt.Sprint(resultado))
+
+	newPage,frames,flag := NextPageMMU(paginaActual)
+	paginaActual = newPage
+	if !flag{
+		return nil,false
+	}
+
+	if (!IsInCache(paginaActual)){
+
+		page,flag := GetPageInMemory(frames)
+		
+		if !flag{
+			slog.Error("No se pudo obtener la siguiente página")
+			return nil,false
+		}
+		
+		AddEntryCache(paginaActual,page)
+	}
+
+	//termina primer lectura, empieza las demas
 
 	for bytesRestantes > 0{
 
@@ -369,7 +398,7 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 			AddEntryCache(paginaActual,page)
 		}
 
-		bytesALeer := pageSize - offset
+		bytesALeer := pageSize
 
 		if bytesALeer > bytesRestantes {
 			bytesALeer = bytesRestantes

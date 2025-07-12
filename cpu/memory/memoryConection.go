@@ -133,7 +133,7 @@ func GetPageInMemory(fisicAddr []int) ([]byte,bool){
 }
 
 func SavePageInMemory(page []byte,fisicAddr []int,logicAddr []int) bool{
-
+	
 	frame:= 0
 	if len(fisicAddr) == 0 || fisicAddr==nil {
 		slog.Error("SavePageInMemory: fisicAddr está vacío, no se puede guardar la página.")
@@ -166,8 +166,6 @@ func SavePageInMemory(page []byte,fisicAddr []int,logicAddr []int) bool{
 	
 
 	slog.Info("PID:",string(config.Pcb.PID), "- Memory Update - Página: ",lgcaddr,"- Frame:",frame)
-
-
 
 	return true
 }
