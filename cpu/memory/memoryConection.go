@@ -128,7 +128,12 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 		return nil, false
 	}
 
-	slog.Info("Cache Content", "Content:", fmt.Sprint(page))
+	logicAddr,_ :=findLogigAddress(fisicAddr)
+
+	logger.RequiredLog(false,uint(config.Pcb.PID),"OBTENER MARCO",map[string]string{
+		"Pagina": fmt.Sprint(logicAddr),
+		"Marco": fmt.Sprint(fisicAddr[0]),
+	})
 
 	return page, true
 }
@@ -138,7 +143,6 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 	addr = append(addr, 0)
 
 	frame_str, _ := Traducir(addr)
-	fmt.Println(frame_str)
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,

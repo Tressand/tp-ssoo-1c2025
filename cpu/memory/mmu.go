@@ -50,11 +50,6 @@ func Traducir(addr []int) ([]int,bool) {
 	fisicAddr[0] = frame
 	fisicAddr[1] = delta
 
-	logger.RequiredLog(false,uint(config.Pcb.PID),"OBTENER MARCO",map[string]string{
-		"Pagina": fmt.Sprint(page),
-		"Marco": fmt.Sprint(frame),
-	})
-
 	return fisicAddr,true
 }
 

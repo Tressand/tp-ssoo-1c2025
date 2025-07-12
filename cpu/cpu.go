@@ -117,11 +117,9 @@ func ciclo() {
 
 		select {
 		case <-config.InterruptChan:
-			logger.Instance.Info("Interrupción recibida", "PID", config.Pcb.PID)
 			sendResults(config.Pcb.PID, config.Pcb.PC, "Interrupt")
 			return
 		case <-config.ExitChan:
-			logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
 			sendResults(config.Pcb.PID, config.Pcb.PC, "Exit")
 			return
 		default:
@@ -172,42 +170,74 @@ func sendPidPcToMemory() {
 // #region Execute
 func exec() int{
 
-	logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
-		"Instruccion": config.Instruccion,
-	})
-
 	status := 0
 	// TODO : Deberiamos mejorar el incremento de PC.
 	switch config.Instruccion {
 	case "NOOP":
-		time.Sleep(1 * time.Millisecond)
+		
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion,
+		})
+		time.Sleep(time.Duration(config.Exec_values.Arg1) * time.Millisecond)
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
+
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Value),
+		})
+
 		status = writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
+
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		})
 		status = ReadMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
 
 	case "GOTO":
+
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Arg1),
+		})
+
 		config.Pcb.PC = config.Exec_values.Arg1
 		
 	//SYSCALLS
 	case "IO":
 		//habilita la IO a traves de kernel
+
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Arg1),
+		})
+
 		status = sendIO()
 
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
+
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion + "-"+ config.Exec_values.Str + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		})
+
 		status = initProcess()
 
 	case "DUMP_MEMORY":
 		//comprueba la memoria
+
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion,
+		})
 		status = dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
+
+		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+			"Ejecutando": config.Instruccion,
+		})
 		status = DeleteProcess()
 
 	default:
@@ -271,7 +301,6 @@ func sendIO() int{
 		return -1
 	}
 	defer resp.Body.Close()
-	slog.Info("Syscall IO enviada correctamente")
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("Kernel respondió con error la syscall IO.", "status", resp.StatusCode)
 		return -1
@@ -294,7 +323,6 @@ func DeleteProcess() int{
 		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
 		return -1
 	}
-	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
 
 	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
 	return 0
@@ -312,7 +340,6 @@ func initProcess() int{
 		slog.Error("Kernel respondió con error al crear el proceso.", "status", resp.StatusCode)
 		return -1
 	}
-	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
 	return 0
 }
 
@@ -328,7 +355,6 @@ func dumpMemory() int{
 		slog.Error("Kernel respondió con error al dump memory.", "status", resp.StatusCode)
 		return -1
 	}
-	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
 
 	return 0
 }
@@ -441,7 +467,7 @@ func interrupt() http.HandlerFunc {
 
 		if pidRecibido == config.Pcb.PID {
 
-			slog.Info(" Llega interrupción al puerto Interrupt. ")
+			logger.RequiredLog(true,uint(config.Pcb.PID),"Llega interrupción al puerto Interrupt",nil)
 
 			config.InterruptChan <- struct{}{} // Interrupción al proceso
 			w.WriteHeader(http.StatusOK)
@@ -461,7 +487,6 @@ func asign() {
 	switch instruction.Opcode {
 	case codeutils.NOOP:
 		config.Instruccion = "NOOP"
-		
 
 	case codeutils.WRITE:
 		config.Instruccion = "WRITE"

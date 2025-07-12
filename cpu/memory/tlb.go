@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"log/slog"
 	"ssoo-cpu/config"
 	"time"
 	"ssoo-utils/logger"
@@ -17,13 +16,17 @@ func lookupTlb(page []int) (int, bool) {
 			if config.Tlb.ReplacementAlg == "LRU" {
 				config.Tlb.Entries[i].LastUsed = time.Now().UnixNano()
 			}
-			slog.Info("TLB HIT", "pagina", page, "marco", entry.Frame)
+			logger.RequiredLog(false,uint(config.Pcb.PID),"TLB HIT",map[string]string{
+				"Pagina": fmt.Sprint(page),
+			})
 			return entry.Frame, true
 		}
 	}
 
 	//TLB MISS
-	slog.Info("TLB Miss", "pagina", page)
+	logger.RequiredLog(false,uint(config.Pcb.PID),"TLB MISS",map[string]string{
+		"Pagina": fmt.Sprint(page),
+	})
 	return 0, false
 }
 
@@ -96,4 +99,15 @@ func InitTLB(capacity int, alg string) {
 
 func ClearTLB() {
 	config.Tlb.Entries = make([]config.Tlb_entries, 0, config.Tlb.Capacity)
+}
+
+func findLogigAddress(frame []int) ([]int,bool){
+	for i := range config.Tlb.Entries {
+		if config.Tlb.Entries[i].Frame == frame[0] {
+			
+			return config.Tlb.Entries[i].Page, true
+		}
+	}
+
+	return nil,false
 }

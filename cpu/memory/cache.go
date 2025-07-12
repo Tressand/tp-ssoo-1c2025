@@ -337,8 +337,6 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 	delta := logicAddr[len(logicAddr)-1]
 	base := logicAddr[:len(logicAddr)-1]
 	pageSize := config.MemoryConf.PageSize
-
-	slog.Info("read Cache","size",size,"delta",delta,"pagesize",pageSize)
 	
 	page, flag := SearchPageInCache(base)
 	if !flag {
@@ -391,7 +389,7 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 
 		page, flag := SearchPageInCache(paginaActual)
 		if !flag {
-			page, flag = GetPageInMemory(paginaActual)
+			page, flag = GetPageInMemory(frames)
 
 			if !flag {
 				slog.Error("Error buscando la pagina en cache")
@@ -453,8 +451,15 @@ func WriteCache(logicAddr []int, value []byte) bool {
 	page, found := SearchPageInCache(base)
 
 	if !found {
-		slog.Error("Error buscando la página en cache")
-		GetPageInMemory(base)
+
+		frame,flag:= Traducir(logicAddr)
+
+		if !flag {
+			slog.Error("Error buscando la página en cache")
+			return false
+		}
+		
+		GetPageInMemory(frame)
 		page, _ = SearchPageInCache(base)
 	}
 
@@ -523,7 +528,14 @@ func WriteCache(logicAddr []int, value []byte) bool {
 		page, flag := SearchPageInCache(paginaActual) //busco la pagina
 		if !flag {
 
-			GetPageInMemory(paginaActual)
+			frame,flag:= Traducir(logicAddr)
+
+			if !flag {
+				slog.Error("Error buscando la página en cache")
+				return false
+			}
+
+			GetPageInMemory(frame)
 			page, flag = SearchPageInCache(paginaActual)
 			if !flag {
 				slog.Error("Error en escribir", " No se encontro la pagina: ", fmt.Sprint(paginaActual))
@@ -583,9 +595,6 @@ func WriteCache(logicAddr []int, value []byte) bool {
 }
 
 func EndProcess(pid int) {
-
-	slog.Info("Salvando datos. ","PID",fmt.Sprint(pid))
-	slog.Info("Cache Status.","Cache", fmt.Sprint(config.Cache))
 
 	nuevasEntradas := make([]config.CacheEntry, 0, len(config.Cache.Entries))
 
