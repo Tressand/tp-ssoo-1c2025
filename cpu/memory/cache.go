@@ -61,6 +61,7 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 			entry.Page = logicAddr
 			entry.Use = true
 			entry.Position = false
+			entry.Pid = config.Pcb.PID
 
 			position = (position + 1) % len(config.Cache.Entries)
 			config.Cache.Entries[position].Position = true
@@ -82,6 +83,7 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 			entry.Page = logicAddr
 			entry.Use = true
 			entry.Position = false
+			entry.Pid = config.Pcb.PID
 
 			position = (position + 1) % len(config.Cache.Entries)
 			config.Cache.Entries[position].Position = true
@@ -127,6 +129,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 					entry.Page = logicAddr
 					entry.Use = true
 					entry.Position = false
+					entry.Pid = config.Pcb.PID
 
 					position = (position + 1) % len(config.Cache.Entries)
 					config.Cache.Entries[position].Position = true
@@ -147,6 +150,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 				entry.Page = logicAddr
 				entry.Use = true
 				entry.Position = false
+				entry.Pid = config.Pcb.PID
 
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
@@ -177,6 +181,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 				entry.Page = logicAddr
 				entry.Use = true
 				entry.Position = false
+				entry.Pid = config.Pcb.PID
 
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
@@ -213,6 +218,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 				entry.Page = logicAddr
 				entry.Use = true
 				entry.Position = false
+				entry.Pid = config.Pcb.PID
 
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
@@ -405,7 +411,7 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			slog.Int("PageSize",pageSize),
 		)
 
-		slog.Info("Antes del copy", "len(page)", string(page))
+		slog.Info("Antes del copy", "Content:", string(page))
 
 		copy(page[delta:], value)
 		
@@ -413,7 +419,7 @@ func WriteCache(logicAddr []int, value []byte) bool{
 		frame,_ :=findFrame(base)
 		fisicAddr := []int{frame,delta}
 
-		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir less",map[string]string{
+		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
 			"Direccion Fisica": fmt.Sprint(fisicAddr),
 			"Valor": string(value),
 		})
@@ -436,16 +442,16 @@ func WriteCache(logicAddr []int, value []byte) bool{
 	slog.Info("Antes del copy", "len(page)", string(page))
 
 	copy(page[offset:], value[:bytesPrimeraPagina])
-	
-	slog.Info("despues del copy","Content:",string(page))
 
 	frame,_ :=findFrame(base)
 	fisicAddr := []int{frame,delta}
 
 	logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
 		"Direccion Fisica": fmt.Sprint(fisicAddr),
-		"Valor": string(value),
+		"Valor": string(value[escrito:]),
 	})
+
+	slog.Info("despues del copy","Content:",string(page))
 
 	// Actualizo cuántos bytes quedan por escribir
 	bytesRestantes -= bytesPrimeraPagina
@@ -496,22 +502,29 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			slog.Int("escrito", escrito),
 		)
 
-		slog.Info("antes del copy","Content:",fmt.Sprint(page))
+		slog.Info("antes del copy","Content:",string(page))
 
 		copy(page[:], value[escrito:escrito+bytesAEscribir])
 
-		slog.Info("despues del copy","Content:",fmt.Sprint(page))
+		paginaActual = append(paginaActual, 0)
 
-		frame,_ :=findFrame(paginaActual)
-		fisicAddr := []int{frame,0}
+		frame,_ :=Traducir(paginaActual)
+
+		paginaActual = paginaActual[:len(paginaActual)-1]
 
 		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
-			"Direccion Fisica": fmt.Sprint(fisicAddr),
-			"Valor": string(value),
+			"Direccion Fisica": fmt.Sprint(frame),
+			"Valor": string(value[escrito:]),
 		})
+
+		slog.Info("despues del copy","Content:",string(page))
 
 		bytesRestantes -= bytesAEscribir
 		escrito += bytesAEscribir
+
+		if bytesRestantes <= 0 {
+			return true
+		}
 
 		var flagNP bool
 		nextPage,frames, flagNP := NextPageMMU(paginaActual)
@@ -532,10 +545,6 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			}
 			
 			AddEntryCache(paginaActual,page)
-		}
-
-		if bytesRestantes <= 0 {
-			return true
 		}
 	}
 	return true
