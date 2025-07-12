@@ -134,12 +134,6 @@ type Process struct {
 
 func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Path }
 
-func IsAnyProcessPendingInit() bool {
-	WaitingForRetryMu.Lock()
-	defer WaitingForRetryMu.Unlock()
-	return WaitingForRetry
-}
-
 func SendIORequest(pid uint, timer int, io *IOConnection) {
 	io.Handler <- IORequest{Pid: pid, Timer: timer}
 }

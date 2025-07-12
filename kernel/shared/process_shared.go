@@ -106,7 +106,7 @@ func TryInititializeProcess(process *globals.Process) bool {
 func InititializeProcess(process *globals.Process) bool {
 	initialized := TryInititializeProcess(process)
 
-	if globals.IsAnyProcessPendingInit() || initialized {
+	if globals.WaitingForRetry || initialized {
 		return initialized
 	}
 
@@ -184,7 +184,7 @@ func notifyNewProcessInNew() {
 func shouldTryInitialize(process *globals.Process) bool {
 	switch config.Values.ReadyIngressAlgorithm {
 	case "FIFO":
-		return !globals.IsAnyProcessPendingInit() && NewIsEmpty()
+		return !globals.WaitingForRetry && NewIsEmpty()
 	case "PMCP":
 		return isSmallerThanAll(process)
 	default:
