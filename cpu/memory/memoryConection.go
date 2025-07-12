@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"ssoo-cpu/config"
 	"ssoo-utils/httputils"
+	"ssoo-utils/logger"
 	"strconv"
 	"strings"
 )
@@ -133,37 +134,10 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 }
 
 func SavePageInMemory(page []byte, addr []int, pid int) error {
-	addr_str := fmt.Sprint(addr[0])
-	i := 1
-	for range len(addr) - 1 {
-		addr_str += "|" + fmt.Sprint(addr[i])
-		i++
-	}
 
-	frame_url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "frame",
-		Queries: map[string]string{
-			"pid":     fmt.Sprint(config.Pcb.PID),
-			"address": addr_str,
-		},
-	})
+	addr = append(addr, 0)
 
-	frame_resp, err := http.Get(frame_url)
-	if err != nil {
-		return err
-	}
-	defer frame_resp.Body.Close()
-
-	if frame_resp.StatusCode != http.StatusOK {
-		b_err, _ := io.ReadAll(frame_resp.Body)
-		slog.Error("La memoria respondió con error", "status", frame_resp.Status, "err", string(b_err))
-		return err
-	}
-
-	fmt.Println(addr_str)
-	frame_str, _ := io.ReadAll(frame_resp.Body)
+	frame_str, _ := Traducir(addr)
 	fmt.Println(frame_str)
 
 	url := httputils.BuildUrl(httputils.URLData{
@@ -171,8 +145,8 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 		Port:     config.Values.PortMemory,
 		Endpoint: "full_page",
 		Queries: map[string]string{
-			"pid":  fmt.Sprint(config.Pcb.PID),
-			"base": string(frame_str),
+			"pid":  fmt.Sprint(pid),
+			"base": fmt.Sprint(frame_str[0]),
 		},
 	})
 
@@ -189,7 +163,10 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 		return err
 	}
 
-	slog.Info("PID:", string(config.Pcb.PID), "- Memory Update - Página: ", addr, "- Frame:", string(frame_str))
+	logger.RequiredLog(false,uint(config.Pcb.PID),"Memory Update",map[string]string{
+		"Pagina": fmt.Sprint(addr),
+		"Frame": fmt.Sprint(frame_str[0]),
+	})
 
 	return nil
 }

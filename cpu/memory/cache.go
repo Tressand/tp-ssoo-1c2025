@@ -275,6 +275,15 @@ func ModifyCache(logicAddr []int) {
 	}
 }
 
+func UseCache(logicAddr []int) {
+	for _, entrada := range config.Cache.Entries {
+		if areSlicesEqual(entrada.Page, logicAddr) {
+			entrada.Use = true
+			return
+		}
+	}
+}
+
 func IsInCache(logicAddr []int) bool {
 	for _, entrada := range config.Cache.Entries {
 		if areSlicesEqual(entrada.Page, logicAddr) {
@@ -332,6 +341,7 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 	}
 
 	if size <= pageSize - delta {
+		UseCache(base)
 		return page[delta : delta+size],true
 	}
 
@@ -347,9 +357,9 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 	copy(chunk, page[offset:offset+bytesALeer])
 	resultado = append(resultado, chunk...)
 
-	bytesRestantes -= pageSize - delta
+	UseCache(paginaActual)
 
-	slog.Info("Resultado,","Contenido: ",fmt.Sprint(resultado))
+	bytesRestantes -= pageSize - delta
 
 	newPage,frames,flag := NextPageMMU(paginaActual)
 	paginaActual = newPage
@@ -393,13 +403,14 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 		copy(chunk, page[:bytesALeer])
 		resultado = append(resultado, chunk...)
 
+		UseCache(paginaActual)
+
 		bytesRestantes -= bytesALeer
 
 		nextPage,frames,flag := NextPageMMU(paginaActual) //obtengo la siguiente pagina de memoria
 		paginaActual = nextPage
 		if !flag {
 			slog.Error(" Error al leer en memoria, no se puede leer ", "Pagina", fmt.Sprint(paginaActual))
-
 			return nil, false
 		}
 
@@ -464,6 +475,8 @@ func WriteCache(logicAddr []int, value []byte) bool {
 			"Valor":            string(value),
 		})
 
+		ModifyCache(paginaActual)
+
 		return true
 	}
 
@@ -479,6 +492,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 		"Valor":            string(value[escrito:]),
 	})
 
+	ModifyCache(paginaActual)
 	// Actualizo cuántos bytes quedan por escribir
 	bytesRestantes -= bytesPrimeraPagina
 	escrito += bytesPrimeraPagina
@@ -532,6 +546,8 @@ func WriteCache(logicAddr []int, value []byte) bool {
 			"Valor":            string(value[escrito:]),
 		})
 
+		ModifyCache(paginaActual)
+
 		bytesRestantes -= bytesAEscribir
 		escrito += bytesAEscribir
 
@@ -563,20 +579,35 @@ func WriteCache(logicAddr []int, value []byte) bool {
 }
 
 func EndProcess(pid int) {
+
+	nuevasEntradas := make([]config.CacheEntry, 0, len(config.Cache.Entries))
+
 	for _, entrada := range config.Cache.Entries {
 		if entrada.Pid != pid {
+			nuevasEntradas = append(nuevasEntradas, entrada)
 			continue
 		}
-		err := SavePageInMemory(entrada.Content, entrada.Page, entrada.Pid)
-		if err != nil {
-			slog.Error("error guardando página a memoria", "error", err.Error())
-			continue
+
+		// Si la página fue modificada, la guardamos en memoria
+		if entrada.Modified {
+			err := SavePageInMemory(entrada.Content, entrada.Page, entrada.Pid)
+			if err != nil {
+				slog.Error("Error guardando página a memoria", "PID", pid, "Error", err.Error())
+				// Si falló, podemos elegir conservarla en cache o no, según política
+				continue
+			}
 		}
-		entrada.Modified = false
-		entrada.Content = nil
-		entrada.Page = nil
-		entrada.Pid = 0
-		entrada.Use = false
-		entrada.Position = false
+		nueva := config.CacheEntry{
+			Modified: false,
+			Content:  nil,
+			Page:     nil,
+			Use:      false,
+			Pid:      -1,
+		}
+
+		nuevasEntradas = append(nuevasEntradas, nueva)
 	}
+
+	// Asignamos el nuevo slice, sin las entradas del proceso
+	config.Cache.Entries = nuevasEntradas
 }

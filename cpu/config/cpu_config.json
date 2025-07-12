@@ -6,7 +6,7 @@
   "port_kernel": 8081,
   "tlb_entries": 15,
   "tlb_replacement": "TLB",
-  "cache_entries": 10,
+  "cache_entries": 2,
   "cache_replacement": "CLOCK",
   "cache_delay": 10,
   "log_level": "DEBUG"

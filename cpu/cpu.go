@@ -281,6 +281,9 @@ func sendIO() int{
 }
 
 func DeleteProcess() int{
+
+	cache.EndProcess(config.Pcb.PID)
+
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para eliminar proceso.", "error", err)
@@ -293,8 +296,6 @@ func DeleteProcess() int{
 		return -1
 	}
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
-
-	cache.EndProcess(config.Pcb.PID)
 
 	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
 	return 0
