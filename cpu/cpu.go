@@ -47,10 +47,8 @@ func main() {
 	if !configManager.IsCompiledEnv() {
 		config.Values.PortCPU += identificador
 	}
-	if config.Values.CacheEntries > 0 {
-		cache.InitCache()
-		config.CacheEnable = true
-	}
+	cache.InitCache()
+	
 
 	//cargar config de memoria
 	cache.FindMemoryConfig()
@@ -97,6 +95,7 @@ func main() {
 	for {
 		mainMenu.Activate()
 	}
+
 }
 
 func ciclo() {
@@ -182,17 +181,17 @@ func exec() int{
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
+		status = writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		readMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
+		status = readMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
 
 	case "GOTO":
 		config.Pcb.PC = config.Exec_values.Arg1
 		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
 		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
-
+		
 	//SYSCALLS
 	case "IO":
 		//habilita la IO a traves de kernel
@@ -217,17 +216,24 @@ func exec() int{
 	}
 	if status == -1{
 		return status
+	}else{
+		config.Pcb.PC++
 	}
 	return 0
 }
 
-func writeMemory(logicAddr []int, value []byte) {
+func writeMemory(logicAddr []int, value []byte) int{
 
-	cache.WriteMemory(logicAddr,value)
-	config.Pcb.PC++
+	flag :=cache.WriteMemory(logicAddr,value)
+	
+	if !flag{
+		return -1
+	}
+
+	return 0
 }
 
-func readMemory(logicAddr []int, size int) {
+func readMemory(logicAddr []int, size int) int{
 
 	base := logicAddr[:len(logicAddr)-1]
 
@@ -238,7 +244,7 @@ func readMemory(logicAddr []int, size int) {
 		if !flag {
 			slog.Error("Error al leer la cache en la pagina ", base)
 			config.ExitChan <- struct{}{}
-			return
+			return -1
 		}
 
 		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
@@ -250,7 +256,7 @@ func readMemory(logicAddr []int, size int) {
 		if !flag {
 			slog.Error("Error al traducir la pagina ", base)
 			config.ExitChan <- struct{}{}
-			return
+			return -1
 		}
 
 		page, _ := cache.GetPageInMemory(fisicAddr)
@@ -260,11 +266,12 @@ func readMemory(logicAddr []int, size int) {
 		if !flag {
 			slog.Error("Error al leer la cache en la pagina ", base)
 			config.ExitChan <- struct{}{}
-			return
+			return -1
 		}
 
 		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
 	}
+	return 0
 }
 
 // #endregion
@@ -291,7 +298,6 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 	if err != nil {
 		return nil, fmt.Errorf("error al serializar instruccion: %w", err)
 	}
-
 	return resp, nil
 }
 
@@ -307,7 +313,6 @@ func sendIO() int{
 		slog.Error("Kernel respondió con error la syscall IO.", "status", resp.StatusCode)
 		return -1
 	}
-	config.Pcb.PC++
 	return 0
 }
 
@@ -323,7 +328,6 @@ func DeleteProcess() int{
 		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
 		return -1
 	}
-	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
 
 	cache.EndProcess(config.Pcb.PID)
@@ -344,9 +348,7 @@ func initProcess() int{
 		slog.Error("Kernel respondió con error al crear el proceso.", "status", resp.StatusCode)
 		return -1
 	}
-	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
-	
 	return 0
 }
 
@@ -362,7 +364,6 @@ func dumpMemory() int{
 		slog.Error("Kernel respondió con error al dump memory.", "status", resp.StatusCode)
 		return -1
 	}
-	config.Pcb.PC++
 	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
 
 	return 0
@@ -496,7 +497,7 @@ func asign() {
 	switch instruction.Opcode {
 	case codeutils.NOOP:
 		config.Instruccion = "NOOP"
-		config.Pcb.PC++
+		
 
 	case codeutils.WRITE:
 		config.Instruccion = "WRITE"

@@ -164,10 +164,19 @@ func GetPageInMemory(fisicAddr []int) ([]byte,bool){
 		return nil, false
 	}
 
+	slog.Info("Cache Content","Content:",fmt.Sprint(page))
+
 	return page,true
 }
 
 func SavePageInMemory(page []byte,fisicAddr []int,logicAddr []int) bool{
+
+	frame:= 0
+	if len(fisicAddr) == 0 || fisicAddr==nil {
+		slog.Error("SavePageInMemory: fisicAddr está vacío, no se puede guardar la página.")
+	}else{
+		frame = fisicAddr[0]
+	}
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -175,7 +184,7 @@ func SavePageInMemory(page []byte,fisicAddr []int,logicAddr []int) bool{
 		Endpoint: "full_page",
 		Queries: map[string]string{
 			"pid": fmt.Sprint(config.Pcb.PID),
-			"base": fmt.Sprint(fisicAddr[0]),
+			"base": fmt.Sprint(frame),
 		},
 	})
 
@@ -191,9 +200,11 @@ func SavePageInMemory(page []byte,fisicAddr []int,logicAddr []int) bool{
 		return false
 	}
 	lgcaddr := fromLogicAddrToString(logicAddr[:len(logicAddr)-1])
-	frame := fisicAddr[len(fisicAddr)]
+	
 
 	slog.Info("PID:",string(config.Pcb.PID), "- Memory Update - Página: ",lgcaddr,"- Frame:",frame)
+
+
 
 	return true
 }

@@ -29,26 +29,11 @@ func SearchPageInCache(logicAddr []int)([]byte,bool){
 }
 
 func AddEntryCache(logicAddr []int, content []byte){
-	if len(config.Cache.Entries) < config.Cache.Capacity {
-		nuevaEntrada := config.CacheEntry{
-			Page:     logicAddr,
-			Content:  make([]byte, 1), // Esto deberías cambiarlo según tu caso de uso
-			Use:      false,
-			Modified: false,
-		}
-		config.Cache.Entries = append(config.Cache.Entries, nuevaEntrada)
-
-		logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
-			"Pagina": fmt.Sprint(logicAddr),
-		})
-
+	
+	if config.Cache.ReplacementAlg == "CLOCK"{
+		AddEntryCacheClock(logicAddr,content)
 	}else{
-		if config.Cache.ReplacementAlg == "CLOCK"{
-			AddEntryCacheClock(logicAddr,content)
-		}else{
-			AddEntryCacheClockM(logicAddr,content)
-		}
-		
+		AddEntryCacheClockM(logicAddr,content)
 	}
 }
 
@@ -65,12 +50,32 @@ func AddEntryCacheClock(logicAddr []int, content []byte){
 		}
 	}
 
+
+
+
 	for {
 		entry := &config.Cache.Entries[position]
+		
+		if entry.Pid == -1{	//cache vacia
+			entry.Content = content
+			entry.Page = logicAddr
+			entry.Use = true
+			entry.Position = false
+
+			position = (position + 1) % len(config.Cache.Entries)
+			config.Cache.Entries[position].Position = true
+			
+			logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
+				"Pagina": fmt.Sprint(logicAddr),
+			})
+
+			return
+		}
 
 		if !entry.Use{
 
 			fisicAddr := traducirCache(entry.Page)
+
 			SavePageInMemory(entry.Content,fisicAddr,entry.Page)
 
 			entry.Content = content
@@ -116,7 +121,23 @@ func AddEntryCacheClockM(logicAddr []int, content []byte){
 
 		for{ //primer ciclo busca no usado ni modificado
 			entry := &config.Cache.Entries[position]
-			
+
+				if entry.Pid == -1{	//cache vacia
+					entry.Content = content
+					entry.Page = logicAddr
+					entry.Use = true
+					entry.Position = false
+
+					position = (position + 1) % len(config.Cache.Entries)
+					config.Cache.Entries[position].Position = true
+					
+					logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Add",map[string]string{
+						"Pagina": fmt.Sprint(logicAddr),
+					})
+
+					return
+				}
+				
 			if !entry.Use && !entry.Modified{
 				
 				fisicAddr := traducirCache(entry.Page)
@@ -248,10 +269,25 @@ func IsInCache(logicAddr []int) bool{
 }
 
 func InitCache(){
-	config.Cache.ReplacementAlg = config.Values.CacheReplacement
-	config.Cache.Capacity = config.Values.CacheEntries
-	config.Cache.Delay = config.Values.CacheDelay
-	ClearCache()
+
+	config.Cache = config.CACHE{
+		Entries: make([]config.CacheEntry, config.Values.CacheEntries),
+		Capacity:  config.Values.CacheEntries,
+		Delay: config.Values.CacheDelay,
+	}
+
+	for i := 0; i < config.Values.CacheEntries; i++ {
+		config.Cache.Entries[i] = config.CacheEntry{
+			Page:     nil,                   
+			Content:  make([]byte, config.MemoryConf.PageSize), 
+			Use:      false,
+			Modified: false,
+			Position: false,
+			Pid:      -1, 
+		}
+	}
+
+	config.Cache.Entries[0].Position = true
 }
 
 func ClearCache(){
@@ -287,8 +323,12 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 
 		page,flag := SearchPageInCache(paginaActual)
 		if !flag{
-			slog.Error("Error buscando la pagina en cache")
-			page,_ =GetPageInMemory(paginaActual)
+			page,flag =GetPageInMemory(paginaActual)
+
+			if !flag{
+				slog.Error("Error buscando la pagina en cache")
+				return []byte{0},false
+			}
 			AddEntryCache(paginaActual,page)
 		}
 
@@ -374,9 +414,11 @@ func WriteCache(logicAddr []int, value []byte) bool{
 		slog.Int("len(page)", len(page)),
 		slog.Int("PageSize",pageSize),
 	)
+	slog.Info("Antes del copy", "len(page)", len(page), "offset", offset)
 
 	copy(page[offset:], value[:bytesPrimeraPagina])
 	
+	slog.Info("Cache Content","Content:",fmt.Sprint(page))
 
 	frame,_ :=findFrame(base)
 	fisicAddr := []int{frame,delta}
@@ -390,21 +432,24 @@ func WriteCache(logicAddr []int, value []byte) bool{
 	bytesRestantes -= bytesPrimeraPagina
 	escrito += bytesPrimeraPagina
 
-	newPage, flagNP := NextPageMMU(paginaActual)
+	paginaActual, flagNP := NextPageMMU(paginaActual)
 	if !flagNP {
 		slog.Error("No se pudo obtener la siguiente página")
 		return false
 	}
-	paginaActual = newPage
 	
 
 	for bytesRestantes > 0{
 
 		page,flag := SearchPageInCache(paginaActual) //busco la pagina
 		if !flag{
-			slog.Error("Error buscando la pagina en cache")
+			
 			GetPageInMemory(paginaActual)
-			page,_ = SearchPageInCache(paginaActual)
+			page,flag = SearchPageInCache(paginaActual)
+			if !flag{
+				slog.Error("Error en escribir"," No se encontro la pagina: ",fmt.Sprint(paginaActual))
+				return false
+			}
 		}
 
 		bytesAEscribir := pageSize
@@ -418,8 +463,6 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			slog.Int("escrito", escrito),
 		)
 
-
-
 		copy(page[:], value[escrito:escrito+bytesAEscribir])
 
 		frame,_ :=findFrame(paginaActual)
@@ -432,7 +475,6 @@ func WriteCache(logicAddr []int, value []byte) bool{
 
 		bytesRestantes -= bytesAEscribir
 		escrito += bytesAEscribir
-
 
 		var flagNP bool
 		paginaActual, flagNP = NextPageMMU(paginaActual)
