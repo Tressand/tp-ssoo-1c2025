@@ -41,9 +41,12 @@ func (cw *PrettyWriter) Write(p []byte) (n int, err error) {
 }
 
 func prettyfy(entry map[string]any) string {
-	time, err := time.Parse("2006-01-02T15:04:05.999999999Z", fmt.Sprint(entry["time"]))
+	format_size := 27
+	time, err := time.Parse("2006-01-02T15:04:05.999999999Z", fmt.Sprint(entry["time"])[:format_size]+"Z")
 	if err != nil {
-		panic("time conversion failed!")
+		fmt.Println("time conversion failed!")
+		fmt.Println(fmt.Sprint(entry["time"])[:format_size] + "Z")
+		fmt.Println(err.Error())
 	}
 	var str string
 	str += fmt.Sprintf("[%s]", time.Format("15:04:05.9999"))
