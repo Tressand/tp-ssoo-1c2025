@@ -36,9 +36,6 @@ var (
 	AvailableCPUs []*CPUConnection = make([]*CPUConnection, 0)
 	AvCPUmu       sync.Mutex
 
-	CPUsSlots   []*CPUSlot = make([]*CPUSlot, 0)
-	CPUsSlotsMu sync.Mutex
-
 	MTSQueue   []*BlockedByIO = make([]*BlockedByIO, 0)
 	MTSQueueMu sync.Mutex
 	//
@@ -82,34 +79,20 @@ type IORequest struct {
 	Timer int
 }
 
-type CpuState int
-
-const (
-	Available CpuState = iota
-	Occupied
-	Any
-)
-
 type BlockedByIO struct {
-	Process      *Process
-	IOConnection *IOConnection
+	Process *Process
 	// ----
-	IOName string
-	IOTime int
+	Name string
+	Time int
 	// ----
 	TimerStarted bool
 }
 
-type CPUSlot struct {
-	Cpu     *CPUConnection
-	Process *Process // nil si no hay proceso asignado
-}
-
 type CPUConnection struct {
-	ID    string
-	IP    string
-	Port  int
-	State CpuState
+	ID      string
+	IP      string
+	Port    int
+	Process *Process
 }
 
 type DispatchResponse struct {
