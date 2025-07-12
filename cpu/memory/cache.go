@@ -11,7 +11,13 @@ import (
 func SearchPageInCache(logicAddr []int)([]byte,bool){
 
 	for _, entrada := range config.Cache.Entries {
+
 		if areSlicesEqual(entrada.Page, logicAddr) {
+
+			logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Hit",map[string]string{
+				"Pagina": fmt.Sprint(logicAddr),
+			})
+
 			entrada.Use = true
 			return entrada.Content,true
 		}else{
@@ -229,10 +235,6 @@ func ModifyCache(logicAddr []int){
 func IsInCache(logicAddr []int) bool{
 	for _, entrada := range config.Cache.Entries {
 		if areSlicesEqual(entrada.Page, logicAddr) {
-
-			logger.RequiredLog(false,uint(config.Pcb.PID),"Cache Hit",map[string]string{
-				"Pagina": fmt.Sprint(logicAddr),
-			})
 			
 			return true
 		}
@@ -263,8 +265,9 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 	base := logicAddr[:len(logicAddr)-1]
 	pageSize := config.MemoryConf.PageSize
 
+	slog.Info("read Cache","size",size,"delta",delta,"pagesize",pageSize)
 
-	if delta+size <= pageSize {
+	if delta+size < pageSize {
 		page, flag := SearchPageInCache(base)
 		if !flag {
 			slog.Error("Error buscando página en caché")
@@ -318,30 +321,82 @@ func ReadCache(logicAddr []int , size int)([]byte,bool){
 
 func WriteCache(logicAddr []int, value []byte) bool{
 	
-	delta := logicAddr[len(logicAddr)-1]
+	delta := logicAddr[len(logicAddr)-1]//1-->63  64
 	base := logicAddr[:len(logicAddr)-1]
-	pageSize := config.MemoryConf.PageSize
-	size := len(value)
 
-	bytesRestantes := size
+	page,found := SearchPageInCache(base)
+
+	if !found{
+		slog.Error("Error buscando la página en cache")
+		GetPageInMemory(base)
+		page, _ = SearchPageInCache(base)
+	}
+
+	pageSize := config.MemoryConf.PageSize
+	bytesRestantes := len(value)
 	paginaActual := make([]int,len(base))
 	copy(paginaActual,base)
-
+	
 	offset := delta
 	escrito := 0
 	
-	if delta + size <= pageSize {
-		page,flag := SearchPageInCache(paginaActual)
+	if bytesRestantes <= pageSize - delta {
+		
+		slog.Info("Debug copy",
+			slog.Int("offset", delta),
+			slog.Int("bytesAEscribir", bytesRestantes),
+			slog.Int("len(page)", len(page)),
+			slog.Int("PageSize",pageSize),
+		)
 
-		if flag{
-			slog.Error("Error buscando la página en cache")
-			GetPageInMemory(paginaActual)
-			page, _ = SearchPageInCache(paginaActual)
-		}
+		copy(page[delta:], value)
+		
 
-		copy(page[offset:], value)
+		frame,_ :=findFrame(base)
+		fisicAddr := []int{frame,delta}
+
+		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
+			"Direccion Fisica": fmt.Sprint(fisicAddr),
+			"Valor": fmt.Sprint(value),
+		})
+
+		slog.Info("Cache Content","Content:",fmt.Sprint(page))
+		
 		return true
 	}
+
+	bytesPrimeraPagina := pageSize - offset
+
+
+	slog.Info("Debug copy",
+		slog.Int("offset", offset),
+		slog.Int("bytesAEscribir", bytesPrimeraPagina),
+		slog.Int("len(page)", len(page)),
+		slog.Int("PageSize",pageSize),
+	)
+
+	copy(page[offset:], value[:bytesPrimeraPagina])
+	
+
+	frame,_ :=findFrame(base)
+	fisicAddr := []int{frame,delta}
+
+	logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
+		"Direccion Fisica": fmt.Sprint(fisicAddr),
+		"Valor": fmt.Sprint(value),
+	})
+
+	// Actualizo cuántos bytes quedan por escribir
+	bytesRestantes -= bytesPrimeraPagina
+	escrito += bytesPrimeraPagina
+
+	newPage, flagNP := NextPageMMU(paginaActual)
+	if !flagNP {
+		slog.Error("No se pudo obtener la siguiente página")
+		return false
+	}
+	paginaActual = newPage
+	
 
 	for bytesRestantes > 0{
 
@@ -352,16 +407,31 @@ func WriteCache(logicAddr []int, value []byte) bool{
 			page,_ = SearchPageInCache(paginaActual)
 		}
 
-		bytesAEscribir := pageSize - offset
+		bytesAEscribir := pageSize
 		if bytesAEscribir > bytesRestantes {
 			bytesAEscribir = bytesRestantes
 		}
 
-		copy(page[offset:offset+bytesAEscribir], value[escrito:escrito+bytesAEscribir])
+		slog.Info("Debug copy",
+			slog.Int("bytesAEscribir", bytesAEscribir),
+			slog.Int("len(page)", len(page)),
+			slog.Int("escrito", escrito),
+		)
+
+
+
+		copy(page[:], value[escrito:escrito+bytesAEscribir])
+
+		frame,_ :=findFrame(paginaActual)
+		fisicAddr := []int{frame,0}
+
+		logger.RequiredLog(false,uint(config.Pcb.PID),"Escribir",map[string]string{
+			"Direccion Fisica": fmt.Sprint(fisicAddr),
+			"Valor": fmt.Sprint(value),
+		})
 
 		bytesRestantes -= bytesAEscribir
 		escrito += bytesAEscribir
-		offset = 0
 
 
 		var flagNP bool

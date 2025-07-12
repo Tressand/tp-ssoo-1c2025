@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"ssoo-cpu/config"
-	cache "ssoo-cpu/memory"
+	"ssoo-cpu/memory"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
@@ -102,13 +102,14 @@ func main() {
 func ciclo() {
 
 	for {
-		slog.Info("PID: ", fmt.Sprint(config.Pcb.PID), "- FETCH - Program Counter: ", fmt.Sprint(config.Pcb.PC))
 
-		//obtengo la intruccion (fetch)
+		logger.RequiredLog(true,uint(config.Pcb.PID),"FETCH",map[string]string{
+			"Program Counter": fmt.Sprint(config.Pcb.PC),
+		})
+
+		//fetch
 		sendPidPcToMemory()
 
-		//loggearla
-		slog.Info("Instruccion recibida", "instruccion", fmt.Sprint(instruction))
 		//decode
 		asign()
 
@@ -135,6 +136,8 @@ func ciclo() {
 		}
 	}
 }
+
+//#region FETCH
 
 func sendPidPcToMemory() {
 
@@ -165,6 +168,7 @@ func sendPidPcToMemory() {
 		slog.Error("error al deserializar la respuesta", "error", err)
 	}
 }
+// #endregion
 
 // #region Execute
 func exec() int{
@@ -510,11 +514,7 @@ func asign() {
 			slog.Error("READ requiere 2 argumentos")
 		}
 		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
-		arg1, err1 := strconv.Atoi(instruction.Args[1])
-		if err1 != nil {
-			slog.Error("error convirtiendo argumentos en READ")
-		}
-		config.Exec_values.Arg2 = arg1
+		config.Exec_values.Arg1,_ = strconv.Atoi(instruction.Args[1])
 
 	case codeutils.GOTO:
 		config.Instruccion = "GOTO"

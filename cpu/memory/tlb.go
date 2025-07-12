@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"ssoo-cpu/config"
 	"time"
+	"ssoo-utils/logger"
+	"fmt"
 )
 
 // "ssoo-cpu/config"
@@ -75,6 +77,11 @@ func AddEntryTLB(page []int, frame int) {
 		Page:     page,
 		Frame:    frame,
 		LastUsed: time.Now().UnixNano(),
+	})
+
+	logger.RequiredLog(false,uint(config.Pcb.PID),"TLB ADD",map[string]string{
+		"Pagina": fmt.Sprint(page),
+		"Marco": fmt.Sprint(frame),
 	})
 }
 
