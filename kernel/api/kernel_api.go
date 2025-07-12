@@ -41,7 +41,7 @@ func ReceiveCPU() http.HandlerFunc {
 		cpu.ID = id
 		cpu.IP = ip
 		cpu.Port = port
-		cpu.Working = false
+		cpu.State = globals.Available
 
 		globals.AvCPUmu.Lock()
 		exists := false
