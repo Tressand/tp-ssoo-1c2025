@@ -8,7 +8,6 @@ import (
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
 	"ssoo-kernel/queues"
-	queue "ssoo-kernel/queues"
 	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
@@ -89,7 +88,7 @@ func HandleReason(pid uint, pc int, reason string) {
 	switch reason {
 	case "Interrupt":
 		slog.Info("Procesando interrupción para el proceso", "pid", pid, "pc", pc)
-		queue.Enqueue(pcb.READY, process)
+		queues.Enqueue(pcb.READY, process)
 	case "Exit":
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
 		process_shared.TerminateProcess(process)
@@ -211,7 +210,7 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.AvIOmu.Unlock()
 
 			if !deviceFound {
-				process = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+				process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 				if process == nil {
 					return
@@ -219,7 +218,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 				process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
-				queue.Enqueue(pcb.EXIT, process)
+				queues.Enqueue(pcb.EXIT, process)
 
 				process_shared.TerminateProcess(process)
 
@@ -235,7 +234,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 			if !selectedIO.Disp {
 				// ????
-				process = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+				process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 				if process == nil {
 					return
@@ -243,7 +242,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 				process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
-				queue.Enqueue(pcb.BLOCKED, process)
+				queues.Enqueue(pcb.BLOCKED, process)
 
 				blockedByIO := new(globals.BlockedByIO)
 				blockedByIO.Process = process
@@ -266,7 +265,7 @@ func RecieveSyscall() http.HandlerFunc {
 			selectedIO.Disp = false
 
 			// ????
-			process = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 			if process == nil {
 				return
@@ -274,7 +273,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
-			queue.Enqueue(pcb.BLOCKED, process)
+			queues.Enqueue(pcb.BLOCKED, process)
 
 			blockedByIO := new(globals.BlockedByIO)
 			blockedByIO.Process = process
@@ -313,7 +312,7 @@ func RecieveSyscall() http.HandlerFunc {
 		case codeutils.DUMP_MEMORY:
 			DUMP_MEMORY(process)
 		case codeutils.EXIT:
-			process := queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			process := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 			if process == nil {
 				return
@@ -323,7 +322,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
-			queue.Enqueue(pcb.EXIT, process)
+			queues.Enqueue(pcb.EXIT, process)
 			process_shared.TerminateProcess(process)
 		default:
 			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)
@@ -344,13 +343,13 @@ func unlockMTS() {
 }
 
 func DUMP_MEMORY(process *globals.Process) {
-	removedProcess := queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+	removedProcess := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 	if removedProcess == nil {
 		return
 	}
 
-	queue.Enqueue(pcb.BLOCKED, process)
+	queues.Enqueue(pcb.BLOCKED, process)
 
 	go func(p *globals.Process) {
 		success := HandleDumpMemory(p)
@@ -358,23 +357,23 @@ func DUMP_MEMORY(process *globals.Process) {
 		if success {
 			slog.Info("Proceso desbloqueado tras syscall DUMP_MEMORY exitosa", "pid", p.PCB.GetPID())
 
-			removedProcess = queue.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+			removedProcess = queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
 
 			if removedProcess == nil {
 				return
 			}
 
-			queue.Enqueue(pcb.READY, p)
+			queues.Enqueue(pcb.READY, p)
 		} else {
 			slog.Info("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
 
-			removedProcess = queue.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+			removedProcess = queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
 
 			if removedProcess == nil {
 				return
 			}
 
-			queue.Enqueue(pcb.EXIT, p)
+			queues.Enqueue(pcb.EXIT, p)
 
 			process_shared.TerminateProcess(p)
 		}
