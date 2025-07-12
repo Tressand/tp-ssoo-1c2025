@@ -75,9 +75,10 @@ func main() {
 
 	globals.SchedulerStatus = "STOP"
 
-	wg.Add(2)
+	wg.Add(3)
 	go scheduler.LTS()
 	go scheduler.STS()
+	go scheduler.MTS()
 
 	// #region CREATE SERVER
 
