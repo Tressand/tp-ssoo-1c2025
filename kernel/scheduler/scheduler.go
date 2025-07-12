@@ -19,12 +19,6 @@ import (
 	"time"
 )
 
-func WaitingForRetry() bool {
-	globals.WaitingForRetryMu.Lock()
-	defer globals.WaitingForRetryMu.Unlock()
-	return globals.WaitingForRetry
-}
-
 func LTS() {
 	<-globals.LTSStopped
 	globals.SchedulerStatus = "START"
@@ -44,7 +38,7 @@ func LTS() {
 	}
 
 	for {
-		if WaitingForRetry() {
+		if globals.IsAnyProcessPendingInit() {
 			<-globals.BlockedForMemory
 			continue
 		}
