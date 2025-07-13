@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,21 +9,21 @@ import (
 	"net/http"
 	"os"
 	"ssoo-cpu/config"
-	"ssoo-cpu/memory"
+	cache "ssoo-cpu/memory"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
-	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
-	"sync"
 	"time"
 )
 
 type Instruction = codeutils.Instruction
 
 var instruction Instruction
+
+var shutdownSignal = make(chan any)
 
 func main() {
 	//Obtener identificador
@@ -48,7 +47,7 @@ func main() {
 		config.Values.PortCPU += identificador
 	}
 
-	if config.Values.CacheEntries != 0{
+	if config.Values.CacheEntries != 0 {
 		config.CacheEnable = true
 		cache.InitCache()
 	} else {
@@ -72,42 +71,38 @@ func main() {
 	cache.InitTLB(config.Values.TLBEntries, config.Values.TLBReplacement)
 
 	//iniciar server
-	var wg sync.WaitGroup
-	ctx, cancelctx := context.WithCancel(context.Background())
 
 	var mux *http.ServeMux = http.NewServeMux()
 
 	mux.Handle("/interrupt", interrupt())
-	mux.Handle("/dispatch", receivePIDPC(ctx))
+	mux.Handle("/dispatch", receivePIDPC())
+	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+		go func() {
+			fmt.Println("Se solició cierre. o7")
+			shutdownSignal <- struct{}{}
+			<-shutdownSignal
+			close(shutdownSignal)
+			os.Exit(0)
+		}()
+	})
 
-	shutdownSignal := make(chan any)
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
-	wg.Add(1)
-	go createKernelConnection(identificadorStr, &wg)
-
-	//crear menu
-	mainMenu := menu.Create()
-	mainMenu.Add("Send Pid and Pc to memory", func() { sendPidPcToMemory() })
-	mainMenu.Add("Close Server and Exit Program", func() {
-		cancelctx()
-		shutdownSignal <- struct{}{}
-		<-shutdownSignal
-		close(shutdownSignal)
-		os.Exit(0)
-	})
-	mainMenu.Add("Start cicle.", func() { ciclo() })
-	for {
-		mainMenu.Activate()
+	err = notifyKernel(identificadorStr)
+	if err != nil {
+		slog.Error("Error al notificar al Kernel", "error", err)
+		return
 	}
 
+	select {}
 }
 
 func ciclo() {
 
 	for {
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"FETCH",map[string]string{
+		logger.RequiredLog(true, uint(config.Pcb.PID), "FETCH", map[string]string{
 			"Program Counter": fmt.Sprint(config.Pcb.PC),
 		})
 
@@ -170,17 +165,18 @@ func sendPidPcToMemory() {
 		slog.Error("error al deserializar la respuesta", "error", err)
 	}
 }
+
 // #endregion
 
 // #region Execute
-func exec() int{
+func exec() int {
 
 	status := 0
 	// TODO : Deberiamos mejorar el incremento de PC.
 	switch config.Instruccion {
 	case "NOOP":
-		
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
 			"Ejecutando": config.Instruccion,
 		})
 		time.Sleep(time.Duration(config.Exec_values.Arg1) * time.Millisecond)
@@ -188,8 +184,8 @@ func exec() int{
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
-			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Value),
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Value),
 		})
 
 		status = writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
@@ -197,25 +193,25 @@ func exec() int{
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
-			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Arg1),
 		})
 		status = ReadMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
 
 	case "GOTO":
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
-			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Arg1),
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Arg1),
 		})
 
 		config.Pcb.PC = config.Exec_values.Arg1
-		
+
 	//SYSCALLS
 	case "IO":
 		//habilita la IO a traves de kernel
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
-			"Ejecutando": config.Instruccion + "-"+ fmt.Sprint(config.Exec_values.Arg1),
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Arg1),
 		})
 
 		status = sendIO()
@@ -223,8 +219,8 @@ func exec() int{
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
-			"Ejecutando": config.Instruccion + "-"+ config.Exec_values.Str + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + config.Exec_values.Str + "-" + fmt.Sprint(config.Exec_values.Arg1),
 		})
 
 		status = initProcess()
@@ -232,7 +228,7 @@ func exec() int{
 	case "DUMP_MEMORY":
 		//comprueba la memoria
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
 			"Ejecutando": config.Instruccion,
 		})
 		status = dumpMemory()
@@ -240,7 +236,7 @@ func exec() int{
 	case "EXIT":
 		//fin de proceso
 
-		logger.RequiredLog(true,uint(config.Pcb.PID),"",map[string]string{
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
 			"Ejecutando": config.Instruccion,
 		})
 		status = DeleteProcess()
@@ -248,28 +244,28 @@ func exec() int{
 	default:
 
 	}
-	if status == -1{
+	if status == -1 {
 		return status
-	}else{
+	} else {
 		config.Pcb.PC++
 	}
 	return 0
 }
 
-func writeMemory(logicAddr []int, value []byte) int{
+func writeMemory(logicAddr []int, value []byte) int {
 
-	flag :=cache.WriteMemory(logicAddr,value)
-	
-	if !flag{
+	flag := cache.WriteMemory(logicAddr, value)
+
+	if !flag {
 		return -1
 	}
 
 	return 0
 }
 
-func ReadMemory(logicAddr []int,size int) int{
-	
-	return cache.ReadMemory(logicAddr,size)
+func ReadMemory(logicAddr []int, size int) int {
+
+	return cache.ReadMemory(logicAddr, size)
 }
 
 // #endregion
@@ -299,7 +295,7 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 	return resp, nil
 }
 
-func sendIO() int{
+func sendIO() int {
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Error en syscall IO", "error", err)
@@ -313,7 +309,7 @@ func sendIO() int{
 	return 0
 }
 
-func DeleteProcess() int{
+func DeleteProcess() int {
 
 	cache.EndProcess(config.Pcb.PID)
 
@@ -333,7 +329,7 @@ func DeleteProcess() int{
 	return 0
 }
 
-func initProcess() int{
+func initProcess() int {
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para crear el proceso.", "error", err)
@@ -348,7 +344,7 @@ func initProcess() int{
 	return 0
 }
 
-func dumpMemory() int{
+func dumpMemory() int {
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para dump memory.", "error", err)
@@ -367,21 +363,6 @@ func dumpMemory() int{
 //#endregion
 
 // #region kernel Connection
-func createKernelConnection(
-	name string,
-	wg *sync.WaitGroup, // AHORA HACE CONEXIÓN UNICA YA NO REINTENTA.
-) {
-	defer wg.Done()
-
-	// Intenta conectar una sola vez
-	err := notifyKernel(name)
-	if err != nil {
-		slog.Error("Error al notificar al Kernel", "error", err)
-		return
-	}
-
-	slog.Info("Notificación al Kernel completada exitosamente")
-}
 
 func notifyKernel(id string) error {
 	log := slog.With("name", id)
@@ -407,10 +388,6 @@ func notifyKernel(id string) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusTeapot {
-			log.Info("Server asked for shutdown.")
-			return nil
-		}
 		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
 		return fmt.Errorf("response error: %w", err)
 	}
@@ -418,7 +395,7 @@ func notifyKernel(id string) error {
 	return nil
 }
 
-func receivePIDPC(ctx context.Context) http.HandlerFunc {
+func receivePIDPC() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -472,7 +449,7 @@ func interrupt() http.HandlerFunc {
 
 		if pidRecibido == config.Pcb.PID {
 
-			logger.RequiredLog(true,uint(config.Pcb.PID),"Llega interrupción al puerto Interrupt",nil)
+			logger.RequiredLog(true, uint(config.Pcb.PID), "Llega interrupción al puerto Interrupt", nil)
 
 			config.InterruptChan <- struct{}{} // Interrupción al proceso
 			w.WriteHeader(http.StatusOK)
@@ -499,7 +476,7 @@ func asign() {
 			slog.Error("WRITE requiere 2 argumentos")
 		}
 		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
-		
+
 		bytes := []byte(instruction.Args[1])
 		config.Exec_values.Value = bytes
 
@@ -509,7 +486,7 @@ func asign() {
 			slog.Error("READ requiere 2 argumentos")
 		}
 		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
-		config.Exec_values.Arg1,_ = strconv.Atoi(instruction.Args[1])
+		config.Exec_values.Arg1, _ = strconv.Atoi(instruction.Args[1])
 
 	case codeutils.GOTO:
 		config.Instruccion = "GOTO"

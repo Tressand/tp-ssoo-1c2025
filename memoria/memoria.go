@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"ssoo-memoria/config"
 	"ssoo-memoria/storage"
 	"ssoo-utils/httputils"
@@ -32,7 +33,6 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca Memoria")
 
-	mainCloserChan := make(chan any)
 	// #endregion
 
 	// #region CREATE SERVER
@@ -53,10 +53,11 @@ func main() {
 	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 		go func() {
+			fmt.Println("Se solició cierre. o7")
 			shutdownSignal <- struct{}{}
 			<-shutdownSignal
 			close(shutdownSignal)
-			mainCloserChan <- struct{}{}
+			os.Exit(0)
 		}()
 	})
 
@@ -66,9 +67,7 @@ func main() {
 
 	storage.InitializeUserMemory()
 
-	<-mainCloserChan
-	close(mainCloserChan)
-	// #endregion
+	select {}
 }
 
 // #region GENERIC REQUEST API REST HANDLER
