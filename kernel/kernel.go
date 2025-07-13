@@ -75,9 +75,10 @@ func main() {
 
 	globals.SchedulerStatus = "STOP"
 
-	wg.Add(2)
+	wg.Add(3)
 	go scheduler.LTS()
 	go scheduler.STS()
+	go scheduler.MTS()
 
 	// #region CREATE SERVER
 
@@ -94,6 +95,7 @@ func main() {
 	mux.Handle("/cpu-notify", kernel_api.ReceiveCPU())
 	mux.Handle("/io-notify", recieveIO(ctx))
 	mux.Handle("/io-finished", handleIOFinished())
+	mux.Handle("/io-disconnected", handleIODisconnected())
 	mux.Handle("/cpu-results", kernel_api.ReceivePidPcReason())
 	mux.Handle("/syscall", kernel_api.RecieveSyscall())
 
@@ -137,6 +139,37 @@ func main() {
 
 // #region SECTION: HANDLE IO CONNECTIONS
 
+func hasIO(name string, ip string, port string) bool {
+	globals.AvIOmu.Lock()
+	defer globals.AvIOmu.Unlock()
+
+	intPort, err := strconv.Atoi(port)
+
+	if err != nil {
+		slog.Error("Error converting port to int", "port", port, "error", err)
+		return false
+	}
+
+	for _, io := range globals.AvailableIOs {
+		if io.Name == name && io.IP == ip && io.Port == intPort {
+			return true
+		}
+	}
+	return false
+}
+
+func getIoConnection(name string, ip string, port int) *globals.IOConnection {
+	globals.AvIOmu.Lock()
+	defer globals.AvIOmu.Unlock()
+
+	for _, io := range globals.AvailableIOs {
+		if io.Name == name && io.IP == ip && io.Port == port {
+			return io
+		}
+	}
+	return nil
+}
+
 func recieveIO(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -144,52 +177,79 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		// Get IO name
-		name := r.URL.Query().Get("name")
-		slog.Info("IO available", "name", name)
+		query := r.URL.Query()
 
-		// Check if there is a process waiting for this IO
+		ip := query.Get("ip")
 
-		globals.WaitingForIOMu.Lock()
-		for _, waitingIO := range globals.WaitingForIO {
-			if waitingIO.IOName == name {
-				waitingIO.IOSignalAvailable <- struct{}{}
-				slog.Info("Found waiting process for IO", "pid", waitingIO.Process.PCB.GetPID(), "ioName", name)
-				globals.WaitingForIOMu.Unlock()
+		if ip == "" {
+			http.Error(w, "IP is required", http.StatusBadRequest)
+			return
+		}
+
+		port := query.Get("port")
+
+		if port == "" {
+			http.Error(w, "Port is required", http.StatusBadRequest)
+			return
+		}
+
+		portInt, err := strconv.Atoi(port)
+
+		if err != nil {
+			http.Error(w, "Invalid port", http.StatusBadRequest)
+			return
+		}
+
+		name := query.Get("name")
+
+		if name == "" {
+			http.Error(w, "Name is required", http.StatusBadRequest)
+			return
+		}
+
+		var ioConnection *globals.IOConnection
+
+		if !hasIO(name, ip, port) {
+			// If the IO is not available, we create a new IOConnection
+			slog.Info("New IO connection", "name", name, "ip", ip, "port", port)
+
+			connHandler := make(chan globals.IORequest)
+			ioConnection := new(globals.IOConnection)
+			ioConnection.Name = name
+			ioConnection.IP = ip
+			ioConnection.Port = portInt
+			ioConnection.Handler = connHandler
+			ioConnection.Disp = true
+
+			globals.AvIOmu.Lock()
+			globals.AvailableIOs = append(globals.AvailableIOs, ioConnection)
+			globals.AvIOmu.Unlock()
+		} else {
+			ioConnection = getIoConnection(name, ip, portInt)
+		}
+
+		// check if there is a process waiting for this IO
+
+		globals.MTSQueueMu.Lock()
+		for _, blocked := range globals.MTSQueue {
+			if blocked.IOName == name && blocked.TimerStarted {
+				blocked.IOConnection = ioConnection
+				blocked.IOConnection.Disp = false
+				slog.Info("Found waiting process for IO", "pid", blocked.Process.PCB.GetPID(), "ioName", name)
+				globals.MTSQueueMu.Unlock()
 
 				w.WriteHeader(http.StatusOK)
 				w.Header().Set("Content-Type", "text/plain")
-				w.Write([]byte(fmt.Sprintf("%d|%d", waitingIO.Process.PCB.GetPID(), waitingIO.IOTime)))
+				w.Write([]byte(fmt.Sprintf("%d|%d", blocked.Process.PCB.GetPID(), blocked.IOTime)))
 				return
 			}
 		}
-		globals.WaitingForIOMu.Unlock()
-
-		// !!!!!
-
-		// Create handler channel and add this IO to the list of available IOs
-		connHandler := make(chan globals.IORequest)
-		thisConnection := new(globals.IOConnection)
-		thisConnection.Name = name
-		thisConnection.Handler = connHandler
-		thisConnection.Disp = true
-
-		// Note: Mutex is to prevent race condition on the availableIOs' list
-		globals.AvIOmu.Lock()
-		globals.AvailableIOs = append(globals.AvailableIOs, thisConnection)
-		globals.AvIOmu.Unlock()
+		globals.MTSQueueMu.Unlock()
 
 		// select will wait for whoever comes first:
 		select {
 		// A timer is sent through this specific IO handler channel
-		case request := <-connHandler:
-			// Remove the IOConnection from the list of available ones before sending the response.
-			for index, elem := range globals.AvailableIOs {
-				if elem == thisConnection {
-					globals.AvailableIOs = append(globals.AvailableIOs[:index], globals.AvailableIOs[index+1:]...)
-					break
-				}
-			}
+		case request := <-ioConnection.Handler:
 			w.WriteHeader(http.StatusOK)
 			w.Header().Set("Content-Type", "text/plain")
 			w.Write([]byte(fmt.Sprintf("%d|%d", request.Pid, request.Timer)))
@@ -201,10 +261,17 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 	}
 }
 
-func handleIOFinished() http.HandlerFunc {
+func handleIOFinished() http.HandlerFunc { /// ??? Tendre que verificar que también sea la misma ip y puerto??
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		name := r.URL.Query().Get("name")
+
+		if name == "" {
+			http.Error(w, "IO name is required", http.StatusBadRequest)
 			return
 		}
 
@@ -223,25 +290,122 @@ func handleIOFinished() http.HandlerFunc {
 
 		pidUint := uint(pidInt)
 
-		process, err := queues.FindByPID(pcb.SUSP_BLOCKED, pidUint)
+		var process *globals.Process
 
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Process with PID %d not found in SUSP_BLOCKED queue", pidInt), http.StatusNotFound)
-			return
+		globals.MTSQueueMu.Lock()
+
+		for index, blocked := range globals.MTSQueue {
+			if blocked.IOName == name && blocked.Process.PCB.GetPID() == pidUint { // ????
+				process = blocked.Process
+				blocked.IOConnection.Disp = true
+				globals.MTSQueue = append(globals.MTSQueue[:index], globals.MTSQueue[index+1:]...)
+				break
+			}
 		}
 
-		process, err = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+		globals.MTSQueueMu.Unlock()
 
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error removing process with PID %d from queue: %v", pidInt, err), http.StatusInternalServerError)
-			return
+		if process.PCB.GetState() == pcb.SUSP_BLOCKED {
+			queues.RemoveByPID(pcb.SUSP_BLOCKED, process.PCB.GetPID())
+			queues.Enqueue(pcb.SUSP_READY, process)
+			slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a SUSP_READY", process.PCB.GetPID()))
+		} else {
+			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
+			queues.Enqueue(pcb.READY, process)
+			slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a READY", process.PCB.GetPID()))
 		}
-
-		queues.Enqueue(pcb.SUSP_READY, process)
 
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte(fmt.Sprintf("IO finished for PID %s", pid)))
+	}
+}
+
+/// TODO: Terminar IO connection when the IO is disconnected
+
+func handleIODisconnected() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		query := r.URL.Query()
+
+		ip := query.Get("ip")
+
+		if ip == "" {
+			http.Error(w, "IP is required", http.StatusBadRequest)
+			return
+		}
+
+		port := query.Get("port")
+
+		if port == "" {
+			http.Error(w, "Port is required", http.StatusBadRequest)
+			return
+		}
+
+		portInt, err := strconv.Atoi(port)
+
+		if err != nil {
+			http.Error(w, "Invalid port", http.StatusBadRequest)
+			return
+		}
+
+		name := query.Get("name")
+
+		if name == "" {
+			http.Error(w, "Name is required", http.StatusBadRequest)
+			return
+		}
+
+		var ioConnection *globals.IOConnection
+
+		if !hasIO(name, ip, port) {
+			http.Error(w, "IO connection not found", http.StatusNotFound)
+			return
+		}
+
+		globals.AvIOmu.Lock()
+		for index, io := range globals.AvailableIOs {
+			if io.Name == name && io.IP == ip && io.Port == portInt {
+				ioConnection = io
+				globals.AvailableIOs = append(globals.AvailableIOs[:index], globals.AvailableIOs[index+1:]...)
+			}
+		}
+		globals.AvIOmu.Unlock()
+
+		if ioConnection == nil {
+			http.Error(w, "IO connection not found", http.StatusNotFound)
+			return
+		}
+
+		var process *globals.Process
+
+		globals.MTSQueueMu.Lock()
+		for index, blocked := range globals.MTSQueue {
+			if blocked.IOConnection == ioConnection {
+				process = blocked.Process
+				globals.MTSQueue = append(globals.MTSQueue[:index], globals.MTSQueue[index+1:]...)
+				break
+			}
+		}
+		globals.MTSQueueMu.Unlock()
+
+		if process != nil {
+			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			queues.Enqueue(pcb.EXIT, process)
+			process_shared.TerminateProcess(process)
+		}
+
+		// TODO: Antes de hacer lo de abajo, revisar sí los procesos en blocked estan esperando una IOConnection especifica o una IO de un nombre específico.
+		// TODO: Tienen que hacer esto ultimo,.
+		// TODO: Revisar sí hay más IOs con el mismo nombre y si no hay, buscar todos los procesos que estaban esperando por este IO y moverlos a EXIT
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("IO disconnected successfully!"))
 	}
 }
 

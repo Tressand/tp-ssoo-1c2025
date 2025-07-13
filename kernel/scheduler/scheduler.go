@@ -10,8 +10,7 @@ import (
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
 	"ssoo-kernel/queues"
-	queue "ssoo-kernel/queues"
-	process_shared "ssoo-kernel/shared"
+	shared "ssoo-kernel/shared"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
@@ -25,91 +24,73 @@ func LTS() {
 	slog.Info("LTS iniciado")
 	slog.Info("Planificando con ", "algoritmo", config.Values.ReadyIngressAlgorithm)
 
-	var sortBy queue.SortBy
+	var sortBy queues.SortBy
 
 	switch config.Values.ReadyIngressAlgorithm {
 	case "FIFO":
-		sortBy = queue.NoSort
+		sortBy = queues.NoSort
 	case "PMCP":
-		sortBy = queue.Size
+		sortBy = queues.Size
 	default:
 		fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
 		return
 	}
 
 	for {
+		if globals.WaitingForRetry {
+			<-globals.BlockedForMemory
+			continue
+		}
+
 		var process *globals.Process
-		var err error
-		var found bool = false
+		var queue pcb.STATE = pcb.SUSP_READY
 
-		process, err = queues.Dequeue(pcb.SUSP_READY, sortBy)
+		// Sí vamos a necesitar que Kernel se apague cuando todas las colas esten vacias.
+		// El Dequeue deberia solo darme la referencia al proceso y no quitarlo de la cola.
 
-		if err == nil {
-			found = true
-			slog.Debug("Se encontró un proceso en Susp Ready", "pid", process.PCB.GetPID())
-		} else {
-			slog.Debug("No se encontró un proceso en Susp Ready")
+		process = queues.Dequeue(queue, sortBy)
+
+		if process == nil {
+			queue = pcb.NEW
+			process = queues.Dequeue(queue, sortBy)
 		}
-
-		if !found {
-			process, err = queues.Dequeue(pcb.NEW, sortBy)
-
-			if err == nil {
-				found = true
-				slog.Debug("Se encontró un proceso en New", "pid", process.PCB.GetPID())
-			} else {
-				slog.Debug("No se encontró un proceso en New")
-			}
-		}
-
-		if !found {
-			slog.Info("No hay procesos en SuspReadyQueue o NewQueue. Se bloquea hasta que se agregen procesos nuevos")
+		if process == nil {
+			slog.Info("No hay procesos pendientes. Se bloquea hasta que se agregen procesos nuevos")
 			<-globals.LTSEmpty
 			continue
 		}
 
-		logger.Instance.Debug("Se intenta inicializar un proceso en LTS", "pid", process.PCB.GetPID())
+		slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID(), "queue", queue)
 
-		process_shared.InititializeProcess(process)
+		shared.InititializeProcess(process)
 	}
 }
 
 func STS() {
 	slog.Info("STS iniciado")
 
-	globals.AvCPUmu.Lock()
-	noCPUsConnected := len(globals.AvailableCPUs) == 0
-	globals.AvCPUmu.Unlock()
-
-	if noCPUsConnected {
+	if shared.ListCPUsIsEmpty(globals.Any) {
 		slog.Debug("No hay CPUs conectadas, esperando a que se conecte una")
 		<-globals.CpuAvailableSignal
 	}
 
-	var sortBy queue.SortBy
+	var sortBy queues.SortBy
 
 	switch config.Values.SchedulerAlgorithm {
 	case "FIFO":
-		sortBy = queue.NoSort
+		sortBy = queues.NoSort
 	case "SJF", "SRT":
-		sortBy = queue.EstimatedBurst
+		sortBy = queues.EstimatedBurst
 	default:
-		fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
-		return
+		panic("algoritmo de planificación de corto plazo inválido, se ordena matar al culpable.")
 	}
 
-	usingSRT := config.Values.SchedulerAlgorithm == "SRT"
-
 	for {
-		globals.AvCPUmu.Lock()
-		availableCPUs := process_shared.GetCPUList(false)
-		CPUsAvailable := len(availableCPUs) != 0
-		globals.AvCPUmu.Unlock()
+		var cpu *globals.CPUConnection = shared.GetCPU(globals.Available)
+		if cpu != nil {
+			process := queues.Dequeue(pcb.READY, sortBy)
 
-		if CPUsAvailable {
-			process, readyIsEmpty := queue.Dequeue(pcb.READY, sortBy)
-
-			if readyIsEmpty != nil {
+			if process == nil {
 				slog.Info("Se bloquea STS porque no hay procesos en READY")
 				<-globals.STSEmpty
 				slog.Info("Se desbloquea STS porque hay nuevos procesos en READY")
@@ -118,55 +99,36 @@ func STS() {
 
 			slog.Debug("STS encontró un proceso en READY", "pid", process.PCB.GetPID())
 
-			go sendToExecute(process, availableCPUs[0])
+			go sendToExecute(process, cpu)
 			continue
 		}
 
-		if usingSRT {
-			process, readyIsEmpty := queue.Search(pcb.READY, sortBy)
+		if ShouldTryInterrupt() {
+			process := queues.Search(pcb.READY, sortBy)
 
-			if readyIsEmpty != nil {
+			if process == nil {
 				slog.Info("Se bloquea STS porque no hay procesos en READY")
 				<-globals.STSEmpty
 				slog.Info("Se desbloquea STS porque hay nuevos procesos en READY")
 				continue
 			}
 
-			globals.CPUsSlotsMu.Lock()
+			minSlot := GetSlotWithShortestBurst()
 
-			var minSlot *globals.CPUSlot
-			var minBurst float64
-			first := true
+			interrupt := minSlot != nil && minSlot.Process.EstimatedBurst > process.EstimatedBurst
 
-			for _, slot := range globals.CPUsSlots {
-				if slot.Process == nil { // No deberia pasar con SRT
-					slog.Debug("slot.Process == nil usando SRT - No deberia entrar aca")
-					continue
-				}
-				if first || slot.Process.EstimatedBurst < minBurst {
-					minSlot = slot
-					minBurst = slot.Process.EstimatedBurst
-					first = false
-				}
-			}
-
-			globals.CPUsSlotsMu.Unlock()
-
-			forInterrupt := minSlot != nil && minSlot.Process.EstimatedBurst < process.EstimatedBurst
-
-			if forInterrupt {
+			if interrupt {
 				err := interruptCPU(minSlot.Cpu, minSlot.Process.PCB.GetPID())
 
 				if err != nil {
 					slog.Error("Error al interrumpir proceso", "pid", minSlot.Process.PCB.GetPID(), "error", err)
-					queue.Enqueue(pcb.READY, process)
+					queues.Enqueue(pcb.READY, process)
 					return
 				}
 
-				process, err = queue.RemoveByPID(pcb.READY, process.PCB.GetPID())
+				process = queues.RemoveByPID(pcb.READY, process.PCB.GetPID())
 
-				if err != nil {
-					slog.Error("Error al remover el proceso de la cola READY", "pid", process.PCB.GetPID(), "error", err)
+				if process == nil {
 					return
 				}
 
@@ -176,9 +138,23 @@ func STS() {
 		}
 
 		slog.Debug("No hay CPUs disponibles, esperando a que se libere una")
-		<-globals.CpuAvailableSignal // TODO: investigar sí necesito con buffer
+		<-globals.CpuAvailableSignal
 		slog.Debug("Se desbloquea STS porque hay CPUs disponibles")
 	}
+}
+
+func ShouldTryInterrupt() bool {
+	return config.Values.SchedulerAlgorithm == "SRT" && len(globals.CPUsSlots) != 0
+}
+
+func GetSlotWithShortestBurst() *globals.CPUSlot {
+	minSlot := globals.CPUsSlots[0]
+	for _, slot := range globals.CPUsSlots {
+		if slot.Process != nil && slot.Process.EstimatedBurst < minSlot.Process.EstimatedBurst {
+			minSlot = slot
+		}
+	}
+	return minSlot
 }
 
 func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
@@ -188,9 +164,7 @@ func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
 		Endpoint: "interrupt",
 	})
 
-	body := bytes.NewReader([]byte(strconv.Itoa(int(pid))))
-
-	resp, err := http.Post(url, "text/plain", body)
+	resp, err := http.Post(url, "text/plain", bytes.NewReader([]byte(fmt.Sprint(pid))))
 	if err != nil {
 		logger.Instance.Error("Error enviando interrupción a CPU", "ip", cpu.IP, "port", cpu.Port, "pid", pid, "error", err)
 		return err
@@ -207,35 +181,27 @@ func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
 }
 
 func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
+	queues.Enqueue(pcb.EXEC, process)
 
-	slog.Debug("Se agrega al proceso a EXEC", "pid", process.PCB.GetPID())
-
-	queue.Enqueue(pcb.EXEC, process)
-
-	slog.Debug("Se asocia el proceso a la CPU", "pid", process.PCB.GetPID(), "cpuID", cpu.ID)
-
-	globals.CPUsSlotsMu.Lock()
 	exists := false
 	for _, slot := range globals.CPUsSlots {
 		if slot.Cpu.ID == cpu.ID {
 			exists = true
+			globals.CPUsSlotsMu.Lock()
 			slot.Process = process
-			slot.Cpu.Working = true
+			slot.Cpu.State = globals.Occupied
+			globals.CPUsSlotsMu.Unlock()
 			slog.Debug("Se actualiza el slot de la CPU con el proceso", "cpuID", cpu.ID, "pid", process.PCB.GetPID())
 			break
 		}
 	}
 
 	if !exists {
-		slog.Debug("No existe un slot para la CPU, se crea uno nuevo", "cpuID", cpu.ID)
-		slot := new(globals.CPUSlot)
-		slot.Cpu = cpu
-		slot.Cpu.Working = true
-		slot.Process = process
+		slot := newCpuSlot(process, cpu)
+		globals.CPUsSlotsMu.Lock()
 		globals.CPUsSlots = append(globals.CPUsSlots, slot)
+		globals.CPUsSlotsMu.Unlock()
 	}
-
-	globals.CPUsSlotsMu.Unlock()
 
 	request := globals.CPURequest{
 		PID: process.PCB.GetPID(),
@@ -246,41 +212,56 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	err := sendToWork(*cpu, request)
 
-	slog.Debug("La CPU termino de trabajar" , "PID", process.PCB.GetPID(), "CPU", cpu.ID)
-
-	if err != nil {
-		slog.Debug(err.Error())
-		process, err := queue.RemoveByPID(pcb.EXEC, process.PCB.GetPID())
-
-		if err != nil {
-			slog.Error("Error al remover el proceso de la cola EXEC", "pid", process.PCB.GetPID(), "error", err)
-			return
-		}
-		err = queue.Enqueue(pcb.READY, process)
-
-		if err != nil {
-			slog.Error("Error al re-enqueue el proceso en READY", "pid", process.PCB.GetPID(), "error", err)
-		}
-
-		globals.AvCPUmu.Lock()
-		cpu.Working = false
-		globals.AvCPUmu.Unlock()
-
-		globals.CPUsSlotsMu.Lock()
-		for _, slot := range globals.CPUsSlots {
-			if slot.Cpu.ID == cpu.ID {
-				slot.Process = nil
-				break
-			}
-		}
-		globals.CPUsSlotsMu.Unlock()
-
-		slog.Error("Error al enviar el proceso a la CPU", "error", err)
-		return
-	} else {
+	if err == nil {
 		slog.Info("Proceso enviado a la CPU correctamente", "pid", process.PCB.GetPID(), "cpuID", cpu.ID)
+		return
 	}
 
+	slog.Error(err.Error())
+
+	process = queues.RemoveByPID(pcb.EXEC, process.PCB.GetPID())
+	if process == nil {
+		return
+	}
+
+	queues.Enqueue(pcb.READY, process)
+
+	globals.AvCPUmu.Lock()
+	cpu.State = globals.Available
+	globals.AvCPUmu.Unlock()
+
+	for _, slot := range globals.CPUsSlots {
+		if slot.Cpu.ID == cpu.ID {
+			globals.CPUsSlotsMu.Lock()
+			slot.Process = nil
+			globals.CPUsSlotsMu.Unlock()
+			break
+		}
+	}
+}
+
+func newCpuSlot(process *globals.Process, cpu *globals.CPUConnection) *globals.CPUSlot {
+	slot := new(globals.CPUSlot)
+	slot.Process = process
+	slot.Cpu = cpu
+	slot.Cpu.State = globals.Occupied
+	slog.Debug("Se crea un nuevo slot de CPU", "cpuID", cpu.ID, "pid", process.PCB.GetPID())
+	return slot
+}
+
+func freeSlot(id string) {
+	for i, slot := range globals.CPUsSlots {
+		if slot.Cpu.ID == id {
+			slog.Debug("Se libera el slot de la CPU", "cpuID", id)
+			globals.CPUsSlotsMu.Lock()
+			globals.CPUsSlots[i].Process = nil
+			globals.CPUsSlots[i].Cpu.State = globals.Available
+			globals.CPUsSlotsMu.Unlock()
+			return
+		}
+	}
+
+	slog.Warn("No se encontró un slot para liberar en la CPU", "cpuID", id)
 }
 
 func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
@@ -315,12 +296,10 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
 	return nil
 }
 
-func forSendToWaiting() []*globals.WaitingIO {
-	globals.WaitingForIOMu.Lock()
-	defer globals.WaitingForIOMu.Unlock()
-	list := make([]*globals.WaitingIO, 0)
-	for _, elem := range globals.WaitingForIO {
-		if elem.Waiting == false {
+func withoutTimerStarted() []*globals.BlockedByIO {
+	list := make([]*globals.BlockedByIO, 0)
+	for _, elem := range globals.MTSQueue {
+		if !elem.TimerStarted {
 			list = append(list, elem)
 		}
 	}
@@ -329,72 +308,34 @@ func forSendToWaiting() []*globals.WaitingIO {
 
 func MTS() {
 	for {
-		waitingList := forSendToWaiting()
+		forInitTimer := withoutTimerStarted()
 
-		if len(waitingList) == 0 {
+		if len(forInitTimer) == 0 {
 			<-globals.MTSEmpty
 			continue
 		}
 
-		for _, waiting := range waitingList {
-			waiting.Waiting = true
-			go sendToWait(waiting)
+		for _, blocked := range forInitTimer {
+			blocked.TimerStarted = true
+			go sendToWait(blocked)
 		}
 	}
 }
 
-func sendToWait(waiting *globals.WaitingIO) {
-	select {
-	case waiting.IOSignalAvailable <- struct{}{}:
-		slog.Debug("Se desbloquea el proceso esperando IO", "pid", waiting.Process.PCB.GetPID(), "IOName", waiting.IOName)
-		waiting.Waiting = false
+func sendToWait(blocked *globals.BlockedByIO) {
+	slog.Debug("Se inicia el timer para el proceso bloqueado por IO", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.IOName)
+	time.Sleep(time.Duration(config.Values.SuspensionTime) * time.Millisecond)
+	slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.IOName)
 
-		process, err := removeProcess(waiting)
-		if err != nil {
-			slog.Error("Error al remover el proceso de la cola", "pid", waiting.Process.PCB.GetPID(), "error", err)
-			return
-		}
+	process := removeProcess(blocked)
 
-		queues.Enqueue(pcb.SUSP_BLOCKED, process)
+	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
-		dispatchToIOHandler(waiting, process.PCB.GetPID())
-
-	case <-time.After(time.Duration(config.Values.SuspensionTime) * time.Millisecond):
-		slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", waiting.Process.PCB.GetPID(), "IOName", waiting.IOName)
-
-		process, err := removeProcess(waiting)
-		if err != nil {
-			slog.Error("Error al remover el proceso de la cola", "pid", waiting.Process.PCB.GetPID(), "error", err)
-			return
-		}
-
-		err = queue.Enqueue(pcb.SUSP_BLOCKED, process)
-		if err != nil {
-			slog.Error("Error al re-enqueue el proceso en SUSP_BLOCKED", "pid", process.PCB.GetPID(), "error", err)
-			return
-		}
-
-		requestSuspend(process)
-	}
+	requestSuspend(process)
 }
 
-func removeProcess(waiting *globals.WaitingIO) (*globals.Process, error) {
-	return queue.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
-}
-
-func dispatchToIOHandler(waiting *globals.WaitingIO, pid uint) {
-	globals.AvIOmu.Lock()
-	defer globals.AvIOmu.Unlock()
-
-	for _, io := range globals.AvailableIOs {
-		if io.Name == waiting.IOName {
-			io.Handler <- globals.IORequest{
-				Pid:   uint(pid),
-				Timer: waiting.IOTime,
-			}
-			break
-		}
-	}
+func removeProcess(waiting *globals.BlockedByIO) *globals.Process {
+	return queues.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
 }
 
 func requestSuspend(process *globals.Process) error {

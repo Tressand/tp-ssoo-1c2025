@@ -1,8 +1,8 @@
 package queues
 
 import (
-	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"ssoo-kernel/globals"
 	"ssoo-utils/logger"
@@ -10,65 +10,66 @@ import (
 	"sync"
 )
 
-func getQueueAndMutex(state pcb.STATE) (*[]*globals.Process, *sync.Mutex, error) {
+type SortBy int
+
+const (
+	Size SortBy = iota
+	EstimatedBurst
+	NoSort
+)
+
+func getQueueAndMutex(state pcb.STATE) (*[]*globals.Process, *sync.Mutex) {
 	switch state {
 	case pcb.NEW:
-		return &globals.NewQueue, &globals.NewQueueMutex, nil
+		return &globals.NewQueue, &globals.NewQueueMutex
 	case pcb.READY:
-		return &globals.ReadyQueue, &globals.ReadyQueueMutex, nil
+		return &globals.ReadyQueue, &globals.ReadyQueueMutex
 	case pcb.BLOCKED:
-		return &globals.BlockedQueue, &globals.BlockedQueueMutex, nil // Ahora es []*Process
+		return &globals.BlockedQueue, &globals.BlockedQueueMutex // Ahora es []*Process
 	case pcb.EXEC:
-		return &globals.ExecQueue, &globals.ExecQueueMutex, nil // Ahora es []*Process
+		return &globals.ExecQueue, &globals.ExecQueueMutex // Ahora es []*Process
 	case pcb.SUSP_READY:
-		return &globals.SuspReadyQueue, &globals.SuspReadyQueueMutex, nil
+		return &globals.SuspReadyQueue, &globals.SuspReadyQueueMutex
 	case pcb.SUSP_BLOCKED:
-		return &globals.SuspBlockedQueue, &globals.SuspBlockedQueueMutex, nil
+		return &globals.SuspBlockedQueue, &globals.SuspBlockedQueueMutex
 	case pcb.EXIT:
-		return &globals.ExitQueue, &globals.ExitQueueMutex, nil
+		return &globals.ExitQueue, &globals.ExitQueueMutex
 	default:
-		return nil, nil, errors.New("estado no soportado")
+		panic("una persona con pocas neuronas puso un estado inválido, encuentrenlo y mátenlo.")
 	}
 }
 
-func Enqueue(state pcb.STATE, process *globals.Process) error {
+func IsEmpty(state pcb.STATE) bool {
+	queue, _ := getQueueAndMutex(state)
+
+	return len(*queue) == 0
+}
+
+func Enqueue(state pcb.STATE, process *globals.Process) {
 	lastState := process.PCB.GetState()
 	process.PCB.SetState(state)
 	actualState := process.PCB.GetState()
 
-	queue, mutex, err := getQueueAndMutex(state)
-	if err != nil {
-		return err
-	}
+	queue, mutex := getQueueAndMutex(state)
 
 	mutex.Lock()
-	defer mutex.Unlock()
-
 	*queue = append(*queue, process)
+	mutex.Unlock()
 
 	logger.RequiredLog(true, process.PCB.GetPID(),
 		fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
-		map[string]string{})
-
-	return nil
+		map[string]string{},
+	)
 }
 
-func Search(state pcb.STATE, sortBy SortBy) (*globals.Process, error) {
-	queue, mutex, err := getQueueAndMutex(state)
-	if err != nil {
-		return nil, err
-	}
-
-	mutex.Lock()
-	defer mutex.Unlock()
+func Search(state pcb.STATE, sortBy SortBy) *globals.Process {
+	queue, _ := getQueueAndMutex(state)
 
 	if len(*queue) == 0 {
-		return nil, fmt.Errorf("La cola para estado %s está vacía", state.String())
+		return nil
 	}
-
 	if len(*queue) == 1 {
-		proc := (*queue)[0]
-		return proc, nil
+		return (*queue)[0]
 	}
 
 	switch sortBy {
@@ -83,36 +84,19 @@ func Search(state pcb.STATE, sortBy SortBy) (*globals.Process, error) {
 	case NoSort:
 	}
 
-	proc := (*queue)[0]
-
-	return proc, nil
+	return (*queue)[0]
 }
 
-type SortBy int
-
-const (
-	Size SortBy = iota
-	EstimatedBurst
-	NoSort
-)
-
-func Dequeue(state pcb.STATE, sortBy SortBy) (*globals.Process, error) {
-	queue, mutex, err := getQueueAndMutex(state)
-	if err != nil {
-		return nil, err
-	}
-
-	mutex.Lock()
-	defer mutex.Unlock()
+func Dequeue(state pcb.STATE, sortBy SortBy) *globals.Process {
+	queue, _ := getQueueAndMutex(state)
 
 	if len(*queue) == 0 {
-		return nil, fmt.Errorf("La cola para estado %s está vacía", state.String())
+		return nil
 	}
-
 	if len(*queue) == 1 {
 		proc := (*queue)[0]
 		*queue = (*queue)[1:]
-		return proc, nil
+		return proc
 	}
 
 	switch sortBy {
@@ -130,44 +114,32 @@ func Dequeue(state pcb.STATE, sortBy SortBy) (*globals.Process, error) {
 	proc := (*queue)[0]
 	*queue = (*queue)[1:]
 
-	return proc, nil
+	return proc
 }
 
-func FindByPID(state pcb.STATE, pid uint) (*globals.Process, error) {
-	queue, mutex, err := getQueueAndMutex(state)
-	if err != nil {
-		return nil, err
-	}
-
-	mutex.Lock()
-	defer mutex.Unlock()
+func FindByPID(state pcb.STATE, pid uint) *globals.Process {
+	queue, _ := getQueueAndMutex(state)
 
 	for _, proc := range *queue {
 		if proc.PCB.GetPID() == pid {
-			return proc, nil
+			return proc
 		}
 	}
 
-	return nil, fmt.Errorf("Proceso con PID %d no encontrado en cola %s", pid, state.String())
+	return nil
 }
 
-func RemoveByPID(state pcb.STATE, pid uint) (*globals.Process, error) {
-	queue, mutex, err := getQueueAndMutex(state)
-	if err != nil {
-		return nil, err
-	}
-
-	mutex.Lock()
-	defer mutex.Unlock()
+func RemoveByPID(state pcb.STATE, pid uint) *globals.Process {
+	queue, mutex := getQueueAndMutex(state)
 
 	for i, proc := range *queue {
 		if proc.PCB.GetPID() == pid {
-			// Lo saco de la cola
-			removed := proc
+			mutex.Lock()
 			*queue = append((*queue)[:i], (*queue)[i+1:]...)
-			return removed, nil
+			mutex.Unlock()
+			return proc
 		}
 	}
-
-	return nil, fmt.Errorf("Proceso con PID %d no encontrado en cola %s", pid, state.String())
+	slog.Error("No hay proceso con pid en cola", "pid", pid, "queue", state)
+	return nil
 }

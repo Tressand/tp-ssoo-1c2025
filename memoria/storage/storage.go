@@ -129,14 +129,15 @@ func CreateProcess(newpid uint, codeFile io.Reader, memoryRequirement int) error
 		newProcessData.code = append(newProcessData.code, instruction{Opcode: newOpCode, Args: parts[1:]})
 	}
 
-	reservedPageBases, err := allocateMemory(memoryRequirement)
-	if err != nil {
-		slog.Error("failed memory allocation", "error", err)
-		return err
+	if memoryRequirement != 0 {
+		reservedPageBases, err := allocateMemory(memoryRequirement)
+		if err != nil {
+			slog.Error("failed memory allocation", "error", err)
+			return err
+		}
+
+		newProcessData.pageBases = reservedPageBases
 	}
-
-	newProcessData.pageBases = reservedPageBases
-
 	systemMemoryMutex.Lock()
 	systemMemory = append(systemMemory, *newProcessData)
 	systemMemoryMutex.Unlock()

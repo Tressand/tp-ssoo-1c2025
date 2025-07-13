@@ -39,13 +39,15 @@ var (
 	CPUsSlots   []*CPUSlot = make([]*CPUSlot, 0)
 	CPUsSlotsMu sync.Mutex
 
-	WaitingForIO   []*WaitingIO = make([]*WaitingIO, 0)
-	WaitingForIOMu sync.Mutex
+	MTSQueue   []*BlockedByIO = make([]*BlockedByIO, 0)
+	MTSQueueMu sync.Mutex
 	//
 
 	SchedulerStatus string
 	NextPID         uint = 1 // ?
 	PIDMutex        sync.Mutex
+
+	BlockedForMemory = make(chan struct{})
 
 	LTSEmpty = make(chan struct{})
 	STSEmpty = make(chan struct{})
@@ -69,6 +71,8 @@ var (
 
 type IOConnection struct {
 	Name    string
+	IP      string
+	Port    int
 	Handler chan IORequest
 	Disp    bool
 }
@@ -78,12 +82,22 @@ type IORequest struct {
 	Timer int
 }
 
-type WaitingIO struct {
-	Process           *Process
-	IOName            string
-	IOTime            int
-	Waiting           bool
-	IOSignalAvailable chan struct{}
+type CpuState int
+
+const (
+	Available CpuState = iota
+	Occupied
+	Any
+)
+
+type BlockedByIO struct {
+	Process      *Process
+	IOConnection *IOConnection
+	// ----
+	IOName string
+	IOTime int
+	// ----
+	TimerStarted bool
 }
 
 type CPUSlot struct {
@@ -92,10 +106,10 @@ type CPUSlot struct {
 }
 
 type CPUConnection struct {
-	ID      string
-	IP      string
-	Port    int
-	Working bool
+	ID    string
+	IP    string
+	Port  int
+	State CpuState
 }
 
 type DispatchResponse struct {
