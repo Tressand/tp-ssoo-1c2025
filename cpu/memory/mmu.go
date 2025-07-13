@@ -363,3 +363,23 @@ func ReadMemory(logicAddr []int, size int) int{
 	
 	return 0
 }
+
+func FromIntToLogicalAddres(direccion int) []int {
+	pageSize := config.MemoryConf.PageSize
+	entradasPorTabla := config.MemoryConf.EntriesPerPage
+	cantidadNiveles := config.MemoryConf.NumberOfLevels
+
+	nroPagina := direccion / pageSize
+	delta := direccion % pageSize
+
+	// Convertir nroPagina a base entradasPorTabla, con cantidadNiveles dígitos
+	niveles := make([]int, cantidadNiveles)
+	for i := cantidadNiveles - 1; i >= 0; i-- {
+		niveles[i] = nroPagina % entradasPorTabla
+		nroPagina = nroPagina / entradasPorTabla
+	}
+
+	// Concatenar los niveles y el delta
+	niveles = append(niveles, delta)
+	return niveles
+}

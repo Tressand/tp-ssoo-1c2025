@@ -18,6 +18,7 @@ import (
 	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
+	"structs"
 	"sync"
 	"time"
 )
@@ -310,6 +311,8 @@ func sendIO() int{
 		slog.Error("Kernel respondió con error la syscall IO.", "status", resp.StatusCode)
 		return -1
 	}
+
+	config.InterruptChan <- struct{}{} // Interrupción al proceso
 	return 0
 }
 
@@ -498,7 +501,8 @@ func asign() {
 		if len(instruction.Args) != 2 {
 			slog.Error("WRITE requiere 2 argumentos")
 		}
-		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
+		addr,_ := strconv.Atoi(instruction.Args[0])
+		config.Exec_values.Addr = cache.FromIntToLogicalAddres(addr)
 		
 		bytes := []byte(instruction.Args[1])
 		config.Exec_values.Value = bytes
@@ -508,7 +512,10 @@ func asign() {
 		if len(instruction.Args) != 2 {
 			slog.Error("READ requiere 2 argumentos")
 		}
-		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
+		addr,_ := strconv.Atoi(instruction.Args[0])
+		config.Exec_values.Addr = cache.FromIntToLogicalAddres(addr)
+
+		//recibe int devuelve la lista de ints
 		config.Exec_values.Arg1,_ = strconv.Atoi(instruction.Args[1])
 
 	case codeutils.GOTO:
