@@ -3,20 +3,20 @@ package main
 // #region SECTION: IMPORTS
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"ssoo-io/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
-	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -60,65 +60,41 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	ctx, cancelctx := context.WithCancel(context.Background())
 	for n := range count {
 		wg.Add(1)
-		go createKernelConnection(names[n], 3, 5, &wg, ctx)
+		go createKernelConnection(names[n], &wg)
 	}
 	time.Sleep(5 * time.Millisecond)
 
 	// #endregion
 
-	if !config.Values.ShowMenu {
-		wg.Wait()
-		return
-	}
-
-	// #region MENU
-
-	menu := menu.Create()
-	menu.Add("Add new IO thread.", func() {
-		wg.Add(1)
-		count++
-		go createKernelConnection("IO"+fmt.Sprint(count), 3, 5, &wg, ctx)
-	})
-	menu.Add("Wait for all IO's to close and exit.", func() {
-		wg.Wait()
-		os.Exit(0)
-	})
-	menu.Add("Close all connections and exit.", func() {
-		cancelctx()
-		wg.Wait()
-		os.Exit(0)
-	})
-	for {
-		menu.Activate()
-	}
-	// #endregion
+	wg.Wait()
 }
 
-func createKernelConnection(name string, retryAmount int, retrySeconds int, wg *sync.WaitGroup, ctx context.Context) {
-	var assignedPID uint = 0
+func createKernelConnection(name string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			notifyIODisconnected(name)
-			return
-		default:
-			retry, err := notifyKernel(name, &assignedPID)
-			if !retry {
-				return
-			}
-			if err != nil {
-				if retryAmount <= 0 {
-					return
-				}
-				time.Sleep(time.Duration(retrySeconds) * time.Second)
-				retryAmount--
-			}
-		}
 
+	force_kill_chan := make(chan os.Signal, 1)
+	signal.Notify(force_kill_chan, syscall.SIGINT, syscall.SIGTERM)
+
+	var assignedPID uint = 0
+
+	go func() {
+		sig := <-force_kill_chan
+		fmt.Println(sig)
+		notifyIODisconnected(name, &assignedPID)
+	}()
+
+	for {
+		retry, err := notifyKernel(name, &assignedPID)
+		if err != nil {
+			slog.Error(err.Error())
+		}
+		if retry {
+			continue
+		}
+		notifyIODisconnected(name, &assignedPID)
+		break
 	}
 }
 
@@ -193,7 +169,7 @@ func notifyIOFinished(pid int) {
 	slog.Info("IO finalizado notificado correctamente")
 }
 
-func notifyIODisconnected(name string) {
+func notifyIODisconnected(name string, pidptr *uint) {
 	slog.Info("Notificando a Kernel que IO ha sido desconectado...")
 
 	ip := httputils.GetOutboundIP()
@@ -204,7 +180,7 @@ func notifyIODisconnected(name string) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-disconnected",
-		Queries:  map[string]string{"ip": ip, port: port, "name": name},
+		Queries:  map[string]string{"ip": ip, "port": port, "name": name, "pid": fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {

@@ -5,22 +5,29 @@ import (
 	"ssoo-kernel/globals"
 )
 
-func ListCPUsIsEmpty(state globals.CpuState) bool {
+func CPUsNotConnected() bool {
+	globals.AvCPUmu.Lock()
+	defer globals.AvCPUmu.Unlock()
+	return len(globals.AvailableCPUs) == 0
+}
+
+func IsCPUAvailable() bool {
+	globals.AvCPUmu.Lock()
+	defer globals.AvCPUmu.Unlock()
 	for _, cpu := range globals.AvailableCPUs {
-		if cpu.State == state || state == globals.Any {
-			return false
+		if cpu.Process == nil {
+			return true
 		}
 	}
-	return true
+	return len(globals.AvailableCPUs) == 0
 }
 
 func FreeCPU(process *globals.Process) {
-	globals.CPUsSlotsMu.Lock()
-	defer globals.CPUsSlotsMu.Unlock()
-	for _, slot := range globals.CPUsSlots {
-		if slot.Process == process {
-			slot.Process = nil
-			slot.Cpu.State = globals.Available
+	globals.AvCPUmu.Lock()
+	defer globals.AvCPUmu.Unlock()
+	for _, cpu := range globals.AvailableCPUs {
+		if cpu.Process == process {
+			cpu.Process = nil
 
 			select {
 			case globals.CpuAvailableSignal <- struct{}{}:
@@ -33,12 +40,14 @@ func FreeCPU(process *globals.Process) {
 	}
 }
 
-func GetCPU(state globals.CpuState) *globals.CPUConnection {
+func GetAvailableCPU() *globals.CPUConnection {
+	globals.AvCPUmu.Lock()
+	defer globals.AvCPUmu.Unlock()
 	for _, cpu := range globals.AvailableCPUs {
-		if cpu.State == state || state == globals.Any {
+		if cpu.Process == nil {
 			return cpu
 		}
 	}
-	slog.Debug("No se encontró una CPU disponible", "state", state)
+	slog.Error("No available CPU found")
 	return nil
 }

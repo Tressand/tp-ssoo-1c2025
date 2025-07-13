@@ -40,7 +40,7 @@ func ReceiveCPU() http.HandlerFunc {
 		cpu.ID = id
 		cpu.IP = ip
 		cpu.Port = port
-		cpu.State = globals.Available
+		cpu.Process = nil
 
 		globals.AvCPUmu.Lock()
 		exists := false
@@ -91,6 +91,7 @@ func HandleReason(pid uint, pc int, reason string) {
 		queues.Enqueue(pcb.READY, process)
 	case "Exit":
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
+		queues.Enqueue(pcb.EXIT, process)
 		process_shared.TerminateProcess(process)
 	}
 }
@@ -129,7 +130,7 @@ func ReceivePidPcReason() http.HandlerFunc {
 			return
 		}
 
-		go HandleReason(pidUint, pcInt, reason) // ????
+		HandleReason(pidUint, pcInt, reason) // ????
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Reason received successfully"))
@@ -147,14 +148,14 @@ func RecieveSyscall() http.HandlerFunc {
 
 		var process *globals.Process
 
-		globals.CPUsSlotsMu.Lock()
-		for _, slot := range globals.CPUsSlots {
-			if slot.Cpu.ID == cpuID {
-				process = slot.Process
+		globals.AvCPUmu.Lock()
+		for _, cpu := range globals.AvailableCPUs {
+			if cpu.ID == cpuID {
+				process = cpu.Process
 				break
 			}
 		}
-		globals.CPUsSlotsMu.Unlock()
+		globals.AvCPUmu.Unlock()
 
 		if process == nil {
 			slog.Error("No se encontró el proceso asociado al CPU", "cpuID", cpuID)
@@ -232,68 +233,38 @@ func RecieveSyscall() http.HandlerFunc {
 				return
 			}
 
-			if !selectedIO.Disp {
-				// ????
-				process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
-
-				if process == nil {
-					return
-				}
-
-				process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
-
-				queues.Enqueue(pcb.BLOCKED, process)
-
-				blockedByIO := new(globals.BlockedByIO)
-				blockedByIO.Process = process
-				blockedByIO.IOConnection = selectedIO
-				blockedByIO.IOName = device
-				blockedByIO.IOTime = timeMs
-				blockedByIO.TimerStarted = false
-
-				globals.MTSQueueMu.Lock()
-				globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
-				globals.MTSQueueMu.Unlock()
-
-				unlockMTS()
-
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
-				return
-			}
-
-			selectedIO.Disp = false
-
-			// ????
 			process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 			if process == nil {
 				return
 			}
 
-			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
+			process_shared.FreeCPU(process)
 
 			queues.Enqueue(pcb.BLOCKED, process)
 
-			blockedByIO := new(globals.BlockedByIO)
-			blockedByIO.Process = process
-			blockedByIO.IOConnection = selectedIO
-			blockedByIO.IOName = device
-			blockedByIO.IOTime = timeMs
-			blockedByIO.TimerStarted = false
+			blockedByIO := CreateBlockedByIO(process, device, timeMs)
 
 			globals.MTSQueueMu.Lock()
 			globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
 			globals.MTSQueueMu.Unlock()
 
-			unlockMTS()
+			UnlockMTS()
 
-			// ????
+			if selectedIO.Disp {
+				selectedIO.Disp = false
 
-			globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
+				globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
+
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("Operación IO iniciada (en background)"))
+
+				return
+			}
 
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Operación IO iniciada (en background)"))
+			w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
+
 			return
 
 			//
@@ -309,6 +280,7 @@ func RecieveSyscall() http.HandlerFunc {
 				return
 			}
 			process_shared.CreateProcess(codePath, size)
+
 		case codeutils.DUMP_MEMORY:
 			DUMP_MEMORY(process)
 		case codeutils.EXIT:
@@ -334,7 +306,16 @@ func RecieveSyscall() http.HandlerFunc {
 	}
 }
 
-func unlockMTS() {
+func CreateBlockedByIO(process *globals.Process, name string, time int) *globals.BlockedByIO {
+	blockedByIO := new(globals.BlockedByIO)
+	blockedByIO.Process = process
+	blockedByIO.Name = name
+	blockedByIO.Time = time
+	blockedByIO.TimerStarted = false
+	return blockedByIO
+}
+
+func UnlockMTS() {
 	select {
 	case globals.MTSEmpty <- struct{}{}:
 		slog.Debug("Se desbloquea MTSEmpty")

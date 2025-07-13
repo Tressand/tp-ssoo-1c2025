@@ -1,7 +1,9 @@
 package globals
 
 import (
+	"net/http"
 	config "ssoo-kernel/config"
+	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
 	"sync"
 	"time"
@@ -35,9 +37,6 @@ var (
 
 	AvailableCPUs []*CPUConnection = make([]*CPUConnection, 0)
 	AvCPUmu       sync.Mutex
-
-	CPUsSlots   []*CPUSlot = make([]*CPUSlot, 0)
-	CPUsSlotsMu sync.Mutex
 
 	MTSQueue   []*BlockedByIO = make([]*BlockedByIO, 0)
 	MTSQueueMu sync.Mutex
@@ -82,34 +81,20 @@ type IORequest struct {
 	Timer int
 }
 
-type CpuState int
-
-const (
-	Available CpuState = iota
-	Occupied
-	Any
-)
-
 type BlockedByIO struct {
-	Process      *Process
-	IOConnection *IOConnection
+	Process *Process
 	// ----
-	IOName string
-	IOTime int
+	Name string
+	Time int
 	// ----
 	TimerStarted bool
 }
 
-type CPUSlot struct {
-	Cpu     *CPUConnection
-	Process *Process // nil si no hay proceso asignado
-}
-
 type CPUConnection struct {
-	ID    string
-	IP    string
-	Port  int
-	State CpuState
+	ID      string
+	IP      string
+	Port    int
+	Process *Process
 }
 
 type DispatchResponse struct {
@@ -136,4 +121,22 @@ func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Pa
 
 func SendIORequest(pid uint, timer int, io *IOConnection) {
 	io.Handler <- IORequest{Pid: pid, Timer: timer}
+}
+
+func Clear() {
+	kill_url := func(ip string, port int) string {
+		return httputils.BuildUrl(httputils.URLData{
+			Ip:       ip,
+			Port:     port,
+			Endpoint: "shutdown",
+		})
+	}
+
+	for _, cpu := range AvailableCPUs {
+		http.Get(kill_url(cpu.IP, cpu.Port))
+	}
+	for _, io := range AvailableIOs {
+		http.Get(kill_url(io.IP, io.Port))
+	}
+	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
 }
