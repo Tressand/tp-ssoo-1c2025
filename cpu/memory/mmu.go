@@ -180,6 +180,8 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 
 func NextPageMMU(logicAddr []int)([]int,[]int,bool){ //me da una base y yo busco la dirección logica y la fisica //0|0|0
 
+	slog.Info("ActualPage","ActualPage",fmt.Sprint(logicAddr))
+
 	tamPag := config.MemoryConf.EntriesPerPage
 
 	sum(logicAddr,tamPag)
@@ -217,7 +219,10 @@ func sum(val []int, mod int) {
 func ReadMemory(logicAddr []int, size int) int{
 
 	base := logicAddr[:len(logicAddr)-1]
+	delta := logicAddr[len(logicAddr)-1]
 	fisicAddr, flag := Traducir(logicAddr)
+	frame := fisicAddr
+
 	if !flag {
 
 		fisicAddr, flag = Traducir(logicAddr)
@@ -229,24 +234,132 @@ func ReadMemory(logicAddr []int, size int) int{
 		}
 	}
 
-	if !IsInCache(base){
-		page, _ := GetPageInMemory(fisicAddr)
-		AddEntryCache(base, page)
+	if config.CacheEnable{
+
+		if !IsInCache(base){
+			page, _ := GetPageInMemory(fisicAddr)
+			AddEntryCache(base, page)
+		}
+
+		content, flag := ReadCache(logicAddr, size)
+
+		if !flag {
+			slog.Error("Error al leer la cache ","Pagina", fmt.Sprint(base))
+			config.ExitChan <- struct{}{}
+			return -1
+		}
+
+		logger.RequiredLog(false,uint(config.Pcb.PID),"LEER",map[string]string{
+			"Direccion Fisica": fmt.Sprint(fisicAddr),
+			"Valor": string(content),
+			"Size": fmt.Sprint(len(content)),
+		})
+
+	} else {
+
+		page,flag :=GetPageInMemory(fisicAddr)
+
+		if !flag {
+
+			page,flag =GetPageInMemory(fisicAddr)
+
+			if !flag {
+
+				slog.Error("Error al traducir la pagina ","Pagina", base)
+				return -1
+			}
+		}
+
+		content := make([]byte, size)
+		bytesRestante := size
+		leido := 0
+		pageSize := config.MemoryConf.PageSize
+		paginaActual := make([]int,len(base))
+		copy(paginaActual,base)
+
+
+		if bytesRestante <= pageSize - delta{
+
+			copy(content[:],page[delta:bytesRestante])
+
+			logger.RequiredLog(false,uint(config.Pcb.PID),"LEER",map[string]string{
+				"Direccion Fisica": fmt.Sprint(fisicAddr),
+				"Valor": string(content),
+				"Size": fmt.Sprint(len(content)),
+			})
+			return 0
+		}
+
+		bytesAleer := pageSize - delta
+
+		copy(content[:],page[delta:bytesAleer])
+
+		bytesRestante -= bytesAleer
+		bytesAleer = pageSize
+		leido += bytesAleer
+
+		flagNP := false
+		paginaActual, fisicAddr, flagNP = NextPageMMU(paginaActual)
+
+		if !flagNP {
+			slog.Error("No se pudo obtener la siguiente página")
+			return -1
+		}
+
+		page,flag = GetPageInMemory(fisicAddr)
+
+		if !flag {
+
+			page,flag =GetPageInMemory(fisicAddr)
+			if !flag {
+
+				slog.Error("Error al traducir la pagina ","Pagina", paginaActual)
+				return -1
+			}
+		}
+
+		for bytesRestante >= 0{
+
+			if bytesRestante < pageSize{
+				bytesAleer = bytesRestante
+			}
+
+			copy(content[leido:],page[delta:bytesAleer])
+
+			bytesRestante -= bytesAleer
+			leido += bytesAleer
+
+			if bytesRestante <= 0{
+				break
+			}
+
+			//busco la siguiente pagina
+			paginaActual, fisicAddr, flagNP = NextPageMMU(paginaActual)
+			if !flagNP {
+				slog.Error("No se pudo obtener la siguiente página")
+				return -1
+			}
+
+			page,flag = GetPageInMemory(fisicAddr)
+
+			if !flag {
+
+				page,flag =GetPageInMemory(fisicAddr)
+
+				if !flag {
+
+					slog.Error("Error al traducir la pagina ","Pagina", base)
+					return -1
+				}
+			}
+		}
+
+		logger.RequiredLog(false,uint(config.Pcb.PID),"LEER",map[string]string{
+			"Direccion Fisica": fmt.Sprint(frame),
+			"Valor": string(content),
+			"Size": fmt.Sprint(len(content)),
+		})
 	}
-
-	content, flag := ReadCache(logicAddr, size)
-
-	if !flag {
-		slog.Error("Error al leer la cache ","Pagina", fmt.Sprint(base))
-		config.ExitChan <- struct{}{}
-		return -1
-	}
-
-	logger.RequiredLog(false,uint(config.Pcb.PID),"LEER",map[string]string{
-		"Direccion Fisica": fmt.Sprint(fisicAddr),
-		"Valor": string(content),
-		"Size": fmt.Sprint(len(content)),
-	})
 	
 	return 0
 }

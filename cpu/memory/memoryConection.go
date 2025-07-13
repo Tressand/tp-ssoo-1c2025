@@ -134,7 +134,7 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 		"Pagina": fmt.Sprint(logicAddr),
 		"Marco": fmt.Sprint(fisicAddr[0]),
 	})
-
+	
 	return page, true
 }
 
