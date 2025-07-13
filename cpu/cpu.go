@@ -101,7 +101,7 @@ func main() {
 func ciclo() {
 
 	for {
-
+		fmt.Println()
 		logger.RequiredLog(true, uint(config.Pcb.PID), "FETCH", map[string]string{
 			"Program Counter": fmt.Sprint(config.Pcb.PC),
 		})
@@ -160,7 +160,6 @@ func sendPidPcToMemory() {
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(&instruction)
-	fmt.Printf("%v", instruction)
 	if err != nil {
 		slog.Error("error al deserializar la respuesta", "error", err)
 	}
@@ -179,7 +178,6 @@ func exec() int {
 		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
 			"Ejecutando": config.Instruccion,
 		})
-		time.Sleep(time.Duration(config.Exec_values.Arg1) * time.Millisecond)
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2

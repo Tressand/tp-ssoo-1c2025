@@ -4,8 +4,8 @@
   "port_kernel": 8001,
   "scheduler_algorithm": "FIFO",
   "ready_ingress_algorithm": "FIFO",
-  "alpha": 0.5,
-  "suspension_time": 4500,
+  "alpha": 1,
+  "suspension_time": 3000,
   "log_level": "DEBUG",
   "initial_estimate": 10000
 }

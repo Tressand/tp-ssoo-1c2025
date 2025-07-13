@@ -88,7 +88,7 @@ func STS() {
 	for {
 		if shared.IsCPUAvailable() {
 			cpu := shared.GetAvailableCPU()
-			process := queues.Search(pcb.READY, sortBy)
+			process := queues.Dequeue(pcb.READY, sortBy)
 
 			if process == nil {
 				slog.Info("Se bloquea STS porque no hay procesos en READY")

@@ -85,7 +85,7 @@ func FindMemoryConfig() bool {
 		return false
 	}
 
-	var memoryConfig config.MemoryConfig
+	var memoryConfig config.PaginationConfig
 	if err := json.NewDecoder(resp.Body).Decode(&memoryConfig); err != nil {
 		slog.Error("error al decodificar la respuesta de memoria", "error", err)
 		return false
