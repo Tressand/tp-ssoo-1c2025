@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,17 +14,16 @@ import (
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
-	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 )
 
 type Instruction = codeutils.Instruction
 
 var instruction Instruction
+
+var shutdownSignal = make(chan any)
 
 func main() {
 	//Obtener identificador
@@ -48,9 +46,12 @@ func main() {
 	if !configManager.IsCompiledEnv() {
 		config.Values.PortCPU += identificador
 	}
-	if config.Values.CacheEntries > 0 {
-		cache.InitCache()
+
+	if config.Values.CacheEntries != 0 {
 		config.CacheEnable = true
+		cache.InitCache()
+	} else {
+		config.CacheEnable = false
 	}
 
 	//cargar config de memoria
@@ -70,59 +71,55 @@ func main() {
 	cache.InitTLB(config.Values.TLBEntries, config.Values.TLBReplacement)
 
 	//iniciar server
-	var wg sync.WaitGroup
-	ctx, cancelctx := context.WithCancel(context.Background())
 
 	var mux *http.ServeMux = http.NewServeMux()
 
 	mux.Handle("/interrupt", interrupt())
-	mux.Handle("/dispatch", receivePIDPC(ctx))
+	mux.Handle("/dispatch", receivePIDPC())
+	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+		go func() {
+			fmt.Println("Se solició cierre. o7")
+			shutdownSignal <- struct{}{}
+			<-shutdownSignal
+			close(shutdownSignal)
+			os.Exit(0)
+		}()
+	})
 
-	shutdownSignal := make(chan any)
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
-	wg.Add(1)
-	go createKernelConnection(identificadorStr, &wg)
-
-	//crear menu
-	mainMenu := menu.Create()
-	mainMenu.Add("Send Pid and Pc to memory", func() { sendPidPcToMemory() })
-	mainMenu.Add("Close Server and Exit Program", func() {
-		cancelctx()
-		shutdownSignal <- struct{}{}
-		<-shutdownSignal
-		close(shutdownSignal)
-		os.Exit(0)
-	})
-	mainMenu.Add("Start cicle.", func() { ciclo() })
-	for {
-		mainMenu.Activate()
+	err = notifyKernel(identificadorStr)
+	if err != nil {
+		slog.Error("Error al notificar al Kernel", "error", err)
+		return
 	}
+
+	select {}
 }
 
 func ciclo() {
 
 	for {
-		slog.Info("Inicio de ciclo de instrucción", "PID", config.Pcb.PID, "PC", config.Pcb.PC)
 
-		//obtengo la intruccion (fetch)
+		logger.RequiredLog(true, uint(config.Pcb.PID), "FETCH", map[string]string{
+			"Program Counter": fmt.Sprint(config.Pcb.PC),
+		})
+
+		//fetch
 		sendPidPcToMemory()
 
-		//loggearla
-		slog.Info("Instruccion recibida", "instruccion", fmt.Sprint(instruction))
 		//decode
 		asign()
 
 		//execute
-		exec()
+		status := exec()
 
 		select {
 		case <-config.InterruptChan:
-			logger.Instance.Info("Interrupción recibida", "PID", config.Pcb.PID)
 			sendResults(config.Pcb.PID, config.Pcb.PC, "Interrupt")
 			return
 		case <-config.ExitChan:
-			logger.Instance.Info("Exit Process", "PID", config.Pcb.PID)
 			sendResults(config.Pcb.PID, config.Pcb.PC, "Exit")
 			return
 		default:
@@ -130,8 +127,14 @@ func ciclo() {
 
 		//pequeña pausa para ver mejor el tema de los logs
 		time.Sleep(1 * time.Second)
+
+		if status == -1 {
+			return
+		}
 	}
 }
+
+//#region FETCH
 
 func sendPidPcToMemory() {
 
@@ -156,125 +159,113 @@ func sendPidPcToMemory() {
 		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
 	}
 
-	// Deserializa la respuesta JSON a un objeto Instruction
 	err = json.NewDecoder(resp.Body).Decode(&instruction)
 	fmt.Printf("%v", instruction)
 	if err != nil {
 		slog.Error("error al deserializar la respuesta", "error", err)
 	}
-	// Devuelve la instrucción obtenida
-	//return &instruction, nil
-	//falta ver que se hacen con los datos enviados por memoria en response.
-	//log.Printf("Instrucciones recibidas: %v", response.Instrucciones) //dejo esto por q no se que me trae todavia
 }
 
+// #endregion
+
 // #region Execute
-func exec() {
+func exec() int {
+
+	status := 0
 	// TODO : Deberiamos mejorar el incremento de PC.
 	switch config.Instruccion {
 	case "NOOP":
-		time.Sleep(1 * time.Millisecond)
-		slog.Info("se espero 1 milisegundo por instruccion NOOP.")
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion,
+		})
+		time.Sleep(time.Duration(config.Exec_values.Arg1) * time.Millisecond)
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
-		writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Value),
+		})
+
+		status = writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
-		readMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		})
+		status = ReadMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
 
 	case "GOTO":
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		})
+
 		config.Pcb.PC = config.Exec_values.Arg1
-		fmt.Printf("se actualizo el pc a %d\n", config.Exec_values.Arg1)
-		fmt.Printf("PCB:\n%s", parsers.Struct(config.Pcb))
-		return
 
 	//SYSCALLS
 	case "IO":
 		//habilita la IO a traves de kernel
-		sendIO()
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		})
+
+		status = sendIO()
 
 	case "INIT_PROC":
 		//inicia un proceso con el arg1 como el arch de instrc. y el arg2 como el tamaño
-		initProcess()
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion + "-" + config.Exec_values.Str + "-" + fmt.Sprint(config.Exec_values.Arg1),
+		})
+
+		status = initProcess()
 
 	case "DUMP_MEMORY":
-		//vacia la memoria
-		slog.Info("DUMP_MEMORY Instruction not implemented.")
-		dumpMemory()
+		//comprueba la memoria
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion,
+		})
+		status = dumpMemory()
 
 	case "EXIT":
 		//fin de proceso
-		DeleteProcess()
+
+		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"Ejecutando": config.Instruccion,
+		})
+		status = DeleteProcess()
 
 	default:
 
 	}
-
+	if status == -1 {
+		return status
+	} else {
+		config.Pcb.PC++
+	}
+	return 0
 }
 
-func writeMemory(logicAddr []int, value []byte) {
+func writeMemory(logicAddr []int, value []byte) int {
 
-	if cache.IsInCache(logicAddr) { //si la pagina esta en cache opero direcatamente
-		cache.WriteMemory(logicAddr, value)
-		return
-	}
-	//si no esta en memoria, traduzco la direccion, busco la pagina, y escribo en cache
-	fisicAddr, flag := cache.Traducir(logicAddr)
+	flag := cache.WriteMemory(logicAddr, value)
 
 	if !flag {
-		slog.Error("Error al traducir la pagina ", logicAddr)
-		config.ExitChan <- struct{}{}
-	} else {
-		cache.GetPageInMemory(fisicAddr)
-		flag := cache.WriteMemory(logicAddr, value)
-		if !flag {
-			config.ExitChan <- struct{}{}
-		}
+		return -1
 	}
-	config.Pcb.PC++
+
+	return 0
 }
 
-func readMemory(logicAddr []int, size int) {
+func ReadMemory(logicAddr []int, size int) int {
 
-	base := logicAddr[:len(logicAddr)-1]
-
-	if cache.IsInCache(logicAddr) { //si la pagina esta en cache leo directamente
-
-		content, flag := cache.ReadCache(base, size)
-
-		if !flag {
-			slog.Error("Error al leer la cache en la pagina ", base)
-			config.ExitChan <- struct{}{}
-			return
-		}
-
-		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
-
-	} else { //sino la busco y la leo
-
-		fisicAddr, flag := cache.Traducir(logicAddr)
-
-		if !flag {
-			slog.Error("Error al traducir la pagina ", base)
-			config.ExitChan <- struct{}{}
-			return
-		}
-
-		page, _ := cache.GetPageInMemory(fisicAddr)
-		cache.AddEntryCache(base, page)
-		content, flag := cache.ReadCache(logicAddr, size)
-
-		if !flag {
-			slog.Error("Error al leer la cache en la pagina ", base)
-			config.ExitChan <- struct{}{}
-			return
-		}
-
-		slog.Info("Contenido de direccion: ", logicAddr, " tamanio: ", size, " ", content)
-	}
-	config.Pcb.PC++
+	return cache.ReadMemory(logicAddr, size)
 }
 
 // #endregion
@@ -290,99 +281,88 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 		},
 	})
 
-	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	// Serializar la instrucción a JSON
+	jsonData, err := json.Marshal(syscallInst)
+	if err != nil {
+		return nil, fmt.Errorf("error al serializar instrucción: %w", err)
+	}
+
+	// Enviar el POST con el body correcto y el Content-Type
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error al serializar instruccion: %w", err)
 	}
-
 	return resp, nil
 }
 
-func sendIO() {
+func sendIO() int {
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Error en syscall IO", "error", err)
-		return
+		return -1
 	}
 	defer resp.Body.Close()
-	slog.Info("Syscall IO enviada correctamente")
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
-		return
+		slog.Error("Kernel respondió con error la syscall IO.", "status", resp.StatusCode)
+		return -1
 	}
-	config.Pcb.PC++
+	return 0
 }
 
-func DeleteProcess() {
-	resp, err := sendSyscall("syscall", instruction)
-	if err != nil {
-		slog.Error("Fallo la solicitud para eliminar proceso.", "error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
-		return
-	}
-	config.Pcb.PC++
-	slog.Info("Kernel recibió la orden de Delete Process", "pid", config.Pcb.PID)
+func DeleteProcess() int {
 
 	cache.EndProcess(config.Pcb.PID)
 
+	resp, err := sendSyscall("syscall", instruction)
+	if err != nil {
+		slog.Error("Fallo la solicitud para eliminar proceso.", "error", err)
+		return -1
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
+		return -1
+	}
+
 	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
+	return 0
 }
 
-func initProcess() {
+func initProcess() int {
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para crear el proceso.", "error", err)
-		return
+		return -1
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("Kernel respondió con error al crear el proceso.", "status", resp.StatusCode)
-		return
+		return -1
 	}
-	config.Pcb.PC++
-	slog.Info("Kernel recibió la orden de init Process.", "pid", config.Pcb.PID)
+	return 0
 }
 
-func dumpMemory() {
+func dumpMemory() int {
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para dump memory.", "error", err)
-		return
+		return -1
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("Kernel respondió con error al dump memory.", "status", resp.StatusCode)
-		return
+		return -1
 	}
-	config.Pcb.PC++
-	slog.Info("Kernel recibió la orden de dump memory.", "pid", config.Pcb.PID)
+
+	return 0
 }
 
 //#endregion
 
 // #region kernel Connection
-func createKernelConnection(
-	name string,
-	wg *sync.WaitGroup, // AHORA HACE CONEXIÓN UNICA YA NO REINTENTA.
-) {
-	defer wg.Done()
-
-	// Intenta conectar una sola vez
-	err := notifyKernel(name)
-	if err != nil {
-		slog.Error("Error al notificar al Kernel", "error", err)
-		return
-	}
-
-	slog.Info("Notificación al Kernel completada exitosamente")
-}
 
 func notifyKernel(id string) error {
 	log := slog.With("name", id)
@@ -408,10 +388,6 @@ func notifyKernel(id string) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusTeapot {
-			log.Info("Server asked for shutdown.")
-			return nil
-		}
 		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
 		return fmt.Errorf("response error: %w", err)
 	}
@@ -419,7 +395,7 @@ func notifyKernel(id string) error {
 	return nil
 }
 
-func receivePIDPC(ctx context.Context) http.HandlerFunc {
+func receivePIDPC() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -472,6 +448,9 @@ func interrupt() http.HandlerFunc {
 		}
 
 		if pidRecibido == config.Pcb.PID {
+
+			logger.RequiredLog(true, uint(config.Pcb.PID), "Llega interrupción al puerto Interrupt", nil)
+
 			config.InterruptChan <- struct{}{} // Interrupción al proceso
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Proceso interrumpido."))
@@ -490,7 +469,6 @@ func asign() {
 	switch instruction.Opcode {
 	case codeutils.NOOP:
 		config.Instruccion = "NOOP"
-		config.Pcb.PC++
 
 	case codeutils.WRITE:
 		config.Instruccion = "WRITE"
@@ -499,20 +477,7 @@ func asign() {
 		}
 		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
 
-		parts := strings.Split(instruction.Args[1], "|")
-		bytes := make([]byte, len(parts))
-		for i, s := range parts {
-			val, err := strconv.Atoi(s)
-			if err != nil {
-				slog.Error("error al convertir '%s' a byte: %v", s, err)
-				return
-			}
-			if val < 0 || val > 255 {
-				slog.Error("valor fuera de rango para byte: %d", val)
-				return
-			}
-			bytes[i] = byte(val)
-		}
+		bytes := []byte(instruction.Args[1])
 		config.Exec_values.Value = bytes
 
 	case codeutils.READ:
@@ -521,11 +486,7 @@ func asign() {
 			slog.Error("READ requiere 2 argumentos")
 		}
 		config.Exec_values.Addr = cache.StringToLogicAddress(instruction.Args[0])
-		arg1, err1 := strconv.Atoi(instruction.Args[1])
-		if err1 != nil {
-			slog.Error("error convirtiendo argumentos en READ")
-		}
-		config.Exec_values.Arg2 = arg1
+		config.Exec_values.Arg1, _ = strconv.Atoi(instruction.Args[1])
 
 	case codeutils.GOTO:
 		config.Instruccion = "GOTO"

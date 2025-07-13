@@ -8,7 +8,6 @@ import (
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
 	"ssoo-kernel/queues"
-	queue "ssoo-kernel/queues"
 	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
@@ -77,10 +76,9 @@ func ReceiveCPU() http.HandlerFunc {
 
 func HandleReason(pid uint, pc int, reason string) {
 
-	process, err := queues.RemoveByPID(pcb.EXEC, pid)
+	process := queues.RemoveByPID(pcb.EXEC, pid)
 
-	if err != nil {
-		slog.Error("Error al remover proceso de la cola EXEC", "pid", pid, "error", err.Error())
+	if process == nil {
 		return
 	}
 
@@ -90,10 +88,10 @@ func HandleReason(pid uint, pc int, reason string) {
 	switch reason {
 	case "Interrupt":
 		slog.Info("Procesando interrupción para el proceso", "pid", pid, "pc", pc)
-		queue.Enqueue(pcb.READY, process)
+		queues.Enqueue(pcb.READY, process)
 	case "Exit":
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
-		queue.Enqueue(pcb.EXIT, process)
+		queues.Enqueue(pcb.EXIT, process)
 		process_shared.TerminateProcess(process)
 	}
 }
@@ -213,17 +211,15 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.AvIOmu.Unlock()
 
 			if !deviceFound {
-				process, err = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+				process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
-				if err != nil {
-					slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
-					http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
+				if process == nil {
 					return
 				}
 
 				process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
-				queue.Enqueue(pcb.EXIT, process)
+				queues.Enqueue(pcb.EXIT, process)
 
 				process_shared.TerminateProcess(process)
 
@@ -237,17 +233,15 @@ func RecieveSyscall() http.HandlerFunc {
 				return
 			}
 
-			process, err = queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
-			if err != nil {
-				slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
-				http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
+			if process == nil {
 				return
 			}
 
 			process_shared.FreeCPU(process)
 
-			queue.Enqueue(pcb.BLOCKED, process)
+			queues.Enqueue(pcb.BLOCKED, process)
 
 			blockedByIO := CreateBlockedByIO(process, device, timeMs)
 
@@ -290,18 +284,17 @@ func RecieveSyscall() http.HandlerFunc {
 		case codeutils.DUMP_MEMORY:
 			DUMP_MEMORY(process)
 		case codeutils.EXIT:
-			_, err := queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			process := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
-			if err != nil {
-				slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
-				http.Error(w, "Error al remover proceso de la cola", http.StatusInternalServerError)
+			if process == nil {
 				return
 			}
+
 			slog.Info("Syscall EXIT recibida", "pid", process.PCB.GetPID())
 
 			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 
-			queue.Enqueue(pcb.EXIT, process)
+			queues.Enqueue(pcb.EXIT, process)
 			process_shared.TerminateProcess(process)
 		default:
 			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)
@@ -331,19 +324,13 @@ func UnlockMTS() {
 }
 
 func DUMP_MEMORY(process *globals.Process) {
-	_, err := queue.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+	removedProcess := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
-	if err != nil {
-		slog.Error("Error al remover proceso de la cola", "pid", process.PCB.GetPID(), "error", err.Error())
+	if removedProcess == nil {
 		return
 	}
 
-	err = queue.Enqueue(pcb.BLOCKED, process)
-
-	if err != nil {
-		slog.Error("Error al encolar proceso para DUMP_MEMORY", "pid", process.PCB.GetPID(), "error", err.Error())
-		return
-	}
+	queues.Enqueue(pcb.BLOCKED, process)
 
 	go func(p *globals.Process) {
 		success := HandleDumpMemory(p)
@@ -351,35 +338,23 @@ func DUMP_MEMORY(process *globals.Process) {
 		if success {
 			slog.Info("Proceso desbloqueado tras syscall DUMP_MEMORY exitosa", "pid", p.PCB.GetPID())
 
-			_, err := queue.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+			removedProcess = queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
 
-			if err != nil {
-				slog.Error("Error al remover proceso de la cola", "pid", p.PCB.GetPID(), "error", err.Error())
+			if removedProcess == nil {
 				return
 			}
 
-			err = queue.Enqueue(pcb.READY, p)
-
-			if err != nil {
-				slog.Error("Error al encolar proceso en BLOCKED para DUMP_MEMORY", "pid", p.PCB.GetPID(), "error", err.Error())
-				return
-			}
+			queues.Enqueue(pcb.READY, p)
 		} else {
 			slog.Info("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
 
-			_, err := queue.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+			removedProcess = queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
 
-			if err != nil {
-				slog.Error("Error al remover proceso de la cola", "pid", p.PCB.GetPID(), "error", err.Error())
+			if removedProcess == nil {
 				return
 			}
 
-			err = queue.Enqueue(pcb.EXIT, p)
-
-			if err != nil {
-				slog.Error("Error al encolar proceso en EXIT para DUMP_MEMORY", "pid", p.PCB.GetPID(), "error", err.Error())
-				return
-			}
+			queues.Enqueue(pcb.EXIT, p)
 
 			process_shared.TerminateProcess(p)
 		}

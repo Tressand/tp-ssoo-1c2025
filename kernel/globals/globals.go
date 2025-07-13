@@ -1,7 +1,9 @@
 package globals
 
 import (
+	"net/http"
 	config "ssoo-kernel/config"
+	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
 	"sync"
 	"time"
@@ -117,12 +119,24 @@ type Process struct {
 
 func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Path }
 
-func IsAnyProcessPendingInit() bool {
-	WaitingForRetryMu.Lock()
-	defer WaitingForRetryMu.Unlock()
-	return WaitingForRetry
-}
-
 func SendIORequest(pid uint, timer int, io *IOConnection) {
 	io.Handler <- IORequest{Pid: pid, Timer: timer}
+}
+
+func Clear() {
+	kill_url := func(ip string, port int) string {
+		return httputils.BuildUrl(httputils.URLData{
+			Ip:       ip,
+			Port:     port,
+			Endpoint: "shutdown",
+		})
+	}
+
+	for _, cpu := range AvailableCPUs {
+		http.Get(kill_url(cpu.IP, cpu.Port))
+	}
+	for _, io := range AvailableIOs {
+		http.Get(kill_url(io.IP, io.Port))
+	}
+	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
 }

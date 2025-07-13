@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"ssoo-utils/configManager"
 	"sync"
 	"time"
 )
@@ -29,12 +30,22 @@ var configsDir string
 
 func main() {
 	// Get the directory of the executable
-	exePath, err := os.Executable()
-	if err != nil {
-		fmt.Println("Error getting executable path:", err)
-		return
+	var exePath string
+	var err error
+	if configManager.IsCompiledEnv() {
+		exePath, err = os.Executable()
+		if err != nil {
+			fmt.Println("Error getting executable path:", err)
+			return
+		}
+		scriptDir = filepath.Dir(exePath)
+	} else {
+		scriptDir, err = filepath.Abs("./")
+		if err != nil {
+			fmt.Println("Error getting executable path:", err)
+			return
+		}
 	}
-	scriptDir = filepath.Dir(exePath)
 
 	// Define directories
 	buildsDir = filepath.Join(scriptDir, "builds")

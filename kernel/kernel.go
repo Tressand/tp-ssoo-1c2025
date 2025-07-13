@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
 	globals "ssoo-kernel/globals"
@@ -17,16 +18,28 @@ import (
 	process_shared "ssoo-kernel/shared"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
-	"ssoo-utils/menu"
 	"ssoo-utils/parsers"
 	"ssoo-utils/pcb"
 	"strconv"
 	"sync"
+	"syscall"
 )
 
 // #endregion
 
 // #region SECTION: MAIN
+
+var ioctx, cancelioctx = context.WithCancel(context.Background())
+
+func clearAndExit(shutdownSignal chan any) {
+	fmt.Println("Cerrando Kernel...")
+	cancelioctx()
+	globals.Clear()
+	shutdownSignal <- struct{}{}
+	<-shutdownSignal
+	close(shutdownSignal)
+	os.Exit(0)
+}
 
 func main() {
 	// #region SETUP
@@ -85,15 +98,11 @@ func main() {
 	// Create mux
 	var mux *http.ServeMux = http.NewServeMux()
 
-	// Closing this context with cancelctx() will trigger a select statement on io connections (see below)
-	// Serving as a closer for all established connections.
-	ctx, cancelctx := context.WithCancel(context.Background())
-
 	// Add routes to mux
 
 	// Pass the globalCloser to handlers that will block.
 	mux.Handle("/cpu-notify", kernel_api.ReceiveCPU())
-	mux.Handle("/io-notify", recieveIO(ctx))
+	mux.Handle("/io-notify", recieveIO(ioctx))
 	mux.Handle("/io-finished", handleIOFinished())
 	mux.Handle("/io-disconnected", handleIODisconnected())
 	mux.Handle("/cpu-results", kernel_api.ReceivePidPcReason())
@@ -104,35 +113,24 @@ func main() {
 	shutdownSignal := make(chan any)
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortKernel, mux, shutdownSignal)
 
+	force_kill_chan := make(chan os.Signal, 1)
+	signal.Notify(force_kill_chan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-force_kill_chan
+		fmt.Println(sig)
+		clearAndExit(shutdownSignal)
+	}()
+
 	// #endregion
 
 	fmt.Println("Presione enter para iniciar el planificador de largo plazo...")
-
 	bufio.NewReader(os.Stdin).ReadString('\n')
+
 	globals.LTSStopped <- struct{}{}
 
 	wg.Wait()
-
-	// #region MENU
-
-	mainMenu := menu.Create()
-	moduleMenu := menu.Create()
-
-	mainMenu.Add("Communicate with other module", func() {
-		moduleMenu.Activate()
-	})
-	mainMenu.Add("Close Server and Exit Program", func() {
-		cancelctx()
-		shutdownSignal <- struct{}{}
-		<-shutdownSignal
-		close(shutdownSignal)
-		os.Exit(0)
-	})
-	for {
-		mainMenu.Activate()
-	}
-
-	// #endregion
+	clearAndExit(shutdownSignal)
 }
 
 // #endregion
@@ -239,15 +237,11 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		}
 		globals.MTSQueueMu.Unlock()
 
-		// select will wait for whoever comes first:
 		select {
-		// A timer is sent through this specific IO handler channel
 		case request := <-ioConnection.Handler:
 			w.WriteHeader(http.StatusOK)
 			w.Header().Set("Content-Type", "text/plain")
 			w.Write([]byte(fmt.Sprintf("%d|%d", request.Pid, request.Timer)))
-
-		// The io context channel closed
 		case <-ctx.Done():
 			w.WriteHeader(http.StatusTeapot)
 		}
