@@ -9,14 +9,6 @@ import (
 	"strings"
 )
 
-type MMU struct {
-	levels      int
-	pageSize    uint32
-	tableEntrys uint32
-}
-
-var mmu MMU
-
 func StringToLogicAddress(str string) []int {
 	slice := strings.Split(str, "|")
 	addr := make([]int, len(slice))
@@ -53,37 +45,34 @@ func Traducir(addr []int) ([]int,bool) {
 	return fisicAddr,true
 }
 
-func traducirCache(logicAddr []int) []int {
-
-	if len(logicAddr) == 0 {
-		return nil
-	}
-
-	frame, condition := findFrame(logicAddr)
-
-	if !condition {
-		frame, condition = findFrameInMemory(logicAddr)
-		if !condition {
-			frame, _ = findFrameInMemory(logicAddr)
-		}
-
-		AddEntryTLB(logicAddr, frame)
-	}
-
-	fisicAddr := make([]int, 2)
-	fisicAddr[0] = frame
-
-	return fisicAddr
-}
-
 func WriteMemory(logicAddr []int, value []byte) bool{
 
 	base := logicAddr[:len(logicAddr)-1]
 
-	if IsInCache(base){ //si la pagina esta en cache
-		WriteCache(logicAddr,value)
+	if config.CacheEnable{
+		if IsInCache(base){ //si la pagina esta en cache
+			WriteCache(logicAddr,value)
 
-	} else{ //si la pagina no esta en cache
+		} else{ //si la pagina no esta en cache
+
+			fisicAddr,flag := Traducir(logicAddr) //traduzco la direccion
+			
+			if !flag {
+				slog.Error("Error"," al traducir la dirección logica, ",fmt.Sprint(logicAddr))
+				return false
+			}
+
+			page, flag := GetPageInMemory(fisicAddr) //busco la pagina
+			
+			if !flag{
+				slog.Error("error al conseguir la pagina de memoria. ")
+				return false
+			}
+
+			AddEntryCache(base,page) //guardo en la cache
+			WriteCache(logicAddr,value)	//escribo la pagina en cache
+		}
+	} else {
 
 		fisicAddr,flag := Traducir(logicAddr) //traduzco la direccion
 		
@@ -92,18 +81,101 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 			return false
 		}
 
-		page, flag := GetPageInMemory(fisicAddr) //busco la pagina
+		escrito := 0
+		pageSize := config.MemoryConf.PageSize
+		bytesRestantes := len(value)
+		paginaActual := make([]int, len(base))
+		copy(paginaActual, base)
+		delta := logicAddr[len(logicAddr)-1]
+
+		page,flag := GetPageInMemory(fisicAddr)
 		
 		if !flag{
-			slog.Error("error al conseguir la pagina de memoria. ")
 			return false
 		}
 
-		AddEntryCache(base,page) //guardo en la cache
-		WriteCache(logicAddr,value)	//escribo la pagina en cache
+		if bytesRestantes <= pageSize-delta {
+
+			copy(page[delta:], value)
+
+			logger.RequiredLog(false, uint(config.Pcb.PID), "Escribir", map[string]string{
+				"Direccion Fisica": fmt.Sprint(fisicAddr),
+				"Valor":            string(value),
+			})
+
+			SavePageInMemory(page,fisicAddr,config.Pcb.PID)
+
+			return true
+		}
+
+		bytesPrimeraPagina := pageSize - delta
+
+		copy(page[delta:], value[:bytesPrimeraPagina])
+
+		escrito += bytesPrimeraPagina
+		bytesRestantes -= bytesPrimeraPagina
+
+		logger.RequiredLog(false, uint(config.Pcb.PID), "Escribir", map[string]string{
+			"Direccion Fisica": fmt.Sprint(fisicAddr),
+			"Valor":            string(value[escrito:]),
+		})
+
+		SavePageInMemory(page,base,config.Pcb.PID)
+
+		// Actualizo cuántos bytes quedan por escribir
+
+		paginaActual, frames, flagNP := NextPageMMU(paginaActual)
+		if !flagNP {
+			slog.Error("No se pudo obtener la siguiente página")
+			return false
+		}
+
+		for bytesRestantes > 0{
+
+			page,flag := GetPageInMemory(frames)
+
+			if !flag {
+				return false
+			}
+
+			bytesAEscribir := pageSize
+			if bytesAEscribir > bytesRestantes {
+				bytesAEscribir = bytesRestantes
+			}
+
+			copy(page[:], value[escrito:escrito+bytesAEscribir])
+
+			paginaActual = append(paginaActual, 0)
+
+			frames, _ = Traducir(paginaActual)
+
+			paginaActual = paginaActual[:len(paginaActual)-1]
+
+			logger.RequiredLog(false, uint(config.Pcb.PID), "Escribir", map[string]string{
+				"Direccion Fisica": fmt.Sprint(frames),
+				"Valor":            string(value[escrito:]),
+			})
+
+
+			bytesRestantes -= bytesAEscribir
+			escrito += bytesAEscribir
+
+			SavePageInMemory(page,paginaActual,config.Pcb.PID)
+
+			if bytesRestantes <= 0 {
+				return true
+			}
+
+			var flagNP bool
+			paginaActual, frames, flagNP = NextPageMMU(paginaActual)
+			if !flagNP {
+				slog.Error("No se pudo obtener la siguiente página")
+				return false
+			}
+		}
 	}
 
-	return true
+		return true
 }
 
 func NextPageMMU(logicAddr []int)([]int,[]int,bool){ //me da una base y yo busco la dirección logica y la fisica //0|0|0
@@ -119,7 +191,7 @@ func NextPageMMU(logicAddr []int)([]int,[]int,bool){ //me da una base y yo busco
 	frame,flag := Traducir(logicAddr)
 
 	if !flag{
-		slog.Error("No existe la pagina ",fmt.Sprint(logicAddr))
+		slog.Error("Page Fault","No existe la pagina ",fmt.Sprint(logicAddr))
 		return nil,nil, false
 	}
 

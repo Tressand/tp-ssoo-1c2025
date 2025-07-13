@@ -47,8 +47,13 @@ func main() {
 	if !configManager.IsCompiledEnv() {
 		config.Values.PortCPU += identificador
 	}
-	cache.InitCache()
-	
+
+	if config.Values.CacheEntries != 0{
+		config.CacheEnable = true
+		cache.InitCache()
+	} else {
+		config.CacheEnable = false
+	}
 
 	//cargar config de memoria
 	cache.FindMemoryConfig()
