@@ -191,6 +191,10 @@ func shouldTryInitialize(process *globals.Process) bool {
 }
 
 func TerminateProcess(process *globals.Process) {
+	if len(globals.ExitQueue) == globals.TotalProcessesCreated {
+		defer globals.ClearAndExit()
+	}
+
 	pid := process.PCB.GetPID()
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -201,12 +205,7 @@ func TerminateProcess(process *globals.Process) {
 		},
 	})
 
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
-	if err != nil {
-		logger.RequiredLog(true, pid, "Error creando request DELETE", map[string]string{"Error": err.Error()})
-		return
-	}
-
+	req, _ := http.NewRequest(http.MethodDelete, url, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		logger.RequiredLog(true, pid, "Error al eliminar el proceso de memoria", map[string]string{"Error": err.Error()})

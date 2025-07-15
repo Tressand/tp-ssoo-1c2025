@@ -45,9 +45,8 @@ var (
 	MTSQueueMu sync.Mutex
 	//
 
-	SchedulerStatus string
-	NextPID         uint = 1 // ?
-	PIDMutex        sync.Mutex
+	NextPID  uint = 1 // ?
+	PIDMutex sync.Mutex
 
 	BlockedForMemory = make(chan struct{})
 
@@ -148,9 +147,7 @@ func ClearAndExit() {
 	for _, cpu := range AvailableCPUs {
 		http.Get(kill_url(cpu.IP, cpu.Port))
 	}
-	for _, io := range AvailableIOs {
-		http.Get(kill_url(io.IP, io.Port))
-	}
+
 	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
 
 	ShutdownSignal <- struct{}{}

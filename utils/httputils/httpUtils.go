@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
 )
 
 func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal chan interface{}) {
@@ -21,7 +20,7 @@ func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal cha
 	go func() {
 		slog.Info("Arranca servidor en: " + server.Addr)
 		waitserverstart <- struct{}{}
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != http.ErrServerClosed {
 			slog.Error("Error arrancando servidor HTTP: %v", "error", err)
 		}
 		slog.Info("Servidor HTTP Detenido")
@@ -29,10 +28,7 @@ func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal cha
 	// Wait for shutdown signal
 	go func() {
 		<-shutdownSignal
-		shutdownCtx := context.Background()
-		shutdownCtx, cancel := context.WithTimeout(shutdownCtx, 10*time.Second)
-		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
+		if err := server.Shutdown(context.Background()); err != nil {
 			slog.Error("Error cerrando servidor HTTP", "error", err)
 		}
 		shutdownSignal <- struct{}{}

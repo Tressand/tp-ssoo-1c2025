@@ -87,21 +87,22 @@ func GetDataByPID(pid uint) *process_data {
 	return nil
 }
 
-func GetInstruction(pid uint, pc int) (*instruction, error) {
+func GetInstruction(pid uint, pc int) (instruction, error) {
 	targetProcess := GetDataByPID(pid)
 	if targetProcess == nil {
-		return nil, errors.New("process pid=" + fmt.Sprint(pid) + " does not exist")
+		return instruction{}, errors.New("process pid=" + fmt.Sprint(pid) + " does not exist")
 	}
 	if pc >= len(targetProcess.code) {
-		return nil, errors.New("out of scope program counter")
+		return instruction{}, errors.New("out of scope program counter")
 	}
 	targetProcess.metrics.Instructions_requested++
 
+	inst := targetProcess.code[pc]
 	logger.RequiredLog(true, pid, "Obtener Instrucción: "+fmt.Sprint(pc), map[string]string{
-		"Instrucción": fmt.Sprintf("%v", targetProcess.code[pc]),
+		"Instrucción": fmt.Sprintf("(%s %v)", opcodeStrings[inst.Opcode], inst.Args),
 	})
 
-	return &targetProcess.code[pc], nil
+	return inst, nil
 }
 
 func CreateProcess(newpid uint, codeFile io.Reader, memoryRequirement int) error {

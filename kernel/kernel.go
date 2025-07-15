@@ -22,8 +22,8 @@ import (
 	"ssoo-utils/parsers"
 	"ssoo-utils/pcb"
 	"strconv"
-	"sync"
 	"syscall"
+	"time"
 )
 
 // #endregion
@@ -44,6 +44,20 @@ func main() {
 	}
 	log := logger.Instance
 	log.Info("Arranca Kernel")
+
+	memoryPing := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "/ping",
+	})
+	_, err = http.Get(memoryPing)
+	if err != nil {
+		fmt.Println("Esperando a Memoria")
+	}
+	for err != nil {
+		time.Sleep(1 * time.Second)
+		_, err = http.Get(memoryPing)
+	}
 
 	if len(os.Args) > 1 {
 		if len(os.Args) < 3 {
@@ -73,15 +87,6 @@ func main() {
 
 	// #endregion
 
-	var wg sync.WaitGroup
-
-	globals.SchedulerStatus = "STOP"
-
-	wg.Add(3)
-	go scheduler.LTS()
-	go scheduler.STS()
-	go scheduler.MTS()
-
 	// #region CREATE SERVER
 
 	// Create mux
@@ -96,6 +101,9 @@ func main() {
 	mux.Handle("/io-disconnected", handleIODisconnected())
 	mux.Handle("/cpu-results", kernel_api.ReceivePidPcReason())
 	mux.Handle("/syscall", kernel_api.RecieveSyscall())
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortKernel, mux, globals.ShutdownSignal)
 
@@ -110,13 +118,16 @@ func main() {
 
 	// #endregion
 
+	go scheduler.LTS()
+	go scheduler.STS()
+	go scheduler.MTS()
+
 	fmt.Println("Presione enter para iniciar el planificador de largo plazo...")
 	bufio.NewReader(os.Stdin).ReadString('\n')
 
 	globals.LTSStopped <- struct{}{}
 
-	wg.Wait()
-	globals.ClearAndExit()
+	select {}
 }
 
 // #endregion

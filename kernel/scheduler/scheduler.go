@@ -20,7 +20,6 @@ import (
 
 func LTS() {
 	<-globals.LTSStopped
-	globals.SchedulerStatus = "START"
 	slog.Info("LTS iniciado")
 	slog.Info("Planificando con ", "algoritmo", config.Values.ReadyIngressAlgorithm)
 

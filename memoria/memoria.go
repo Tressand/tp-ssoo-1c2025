@@ -56,9 +56,11 @@ func main() {
 			fmt.Println("Se solició cierre. o7")
 			shutdownSignal <- struct{}{}
 			<-shutdownSignal
-			close(shutdownSignal)
 			os.Exit(0)
 		}()
+	})
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 	})
 
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortMemory, mux, shutdownSignal)
@@ -95,7 +97,6 @@ type GenericRequest map[string]MethodRequestInfo
 func (request GenericRequest) HandlerFunc() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
-		fmt.Print("Request: ", r.Method, ":", r.URL.String(), "\n")
 		requestInfo, ok := request[r.Method]
 		if !ok {
 			requestInfo, ok = request["ANY"]
@@ -172,6 +173,7 @@ var processFrameReqHandler = GenericRequest{
 	"GET": MethodRequestInfo{
 		ReqParams: []string{"pid", "address"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			fmt.Printf("CPU solicita frame (PID: %v, DL: %v)\n", r.URL.Query()["pid"], r.URL.Query()["address"])
 			frameBase, err := storage.LogicAddressToFrame(
 				uint(numFromQuery(r, "pid")),
 				storage.StringToLogicAddress(r.URL.Query().Get("address")),
@@ -292,6 +294,7 @@ var suspendProcessRequestHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			fmt.Printf("Kernel solicita bajar PID %v a SWAP\n", r.URL.Query().Get("pid"))
 			err := storage.SuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())
@@ -305,6 +308,7 @@ var unsuspendProcessRequestHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			fmt.Printf("Kernel solicita subir PID %v de SWAP\n", r.URL.Query().Get("pid"))
 			err := storage.UnSuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())

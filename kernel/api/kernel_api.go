@@ -280,7 +280,6 @@ func DUMP_MEMORY(process *globals.Process) {
 			}
 
 			queues.Enqueue(pcb.EXIT, p)
-
 			process_shared.TerminateProcess(p)
 		}
 	}(process)

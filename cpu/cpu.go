@@ -9,13 +9,14 @@ import (
 	"net/http"
 	"os"
 	"ssoo-cpu/config"
-	"ssoo-cpu/memory"
+	cache "ssoo-cpu/memory"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/parsers"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -54,6 +55,29 @@ func main() {
 		config.CacheEnable = false
 	}
 
+	wait := func(name string, ip string, port int, wg *sync.WaitGroup) {
+		defer wg.Done()
+		url := httputils.BuildUrl(httputils.URLData{
+			Ip:       ip,
+			Port:     port,
+			Endpoint: "/ping",
+		})
+		_, err := http.Get(url)
+		if err != nil {
+			fmt.Println("Esperando a " + name)
+		}
+		for err != nil {
+			time.Sleep(1 * time.Second)
+			_, err = http.Get(url)
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go wait("Kernel", config.Values.IpKernel, config.Values.PortKernel, &wg)
+	go wait("Memoria", config.Values.IpMemory, config.Values.PortMemory, &wg)
+	wg.Wait()
+
 	//cargar config de memoria
 	cache.FindMemoryConfig()
 
@@ -82,19 +106,13 @@ func main() {
 			fmt.Println("Se solició cierre. o7")
 			shutdownSignal <- struct{}{}
 			<-shutdownSignal
-			close(shutdownSignal)
 			os.Exit(0)
 		}()
 	})
 
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortCPU, mux, shutdownSignal)
 
-	err = notifyKernel(identificadorStr)
-	if err != nil {
-		slog.Error("Error al notificar al Kernel", "error", err)
-		return
-	}
-
+	notifyKernel(identificadorStr)
 	select {}
 }
 
@@ -475,9 +493,9 @@ func asign() {
 		if len(instruction.Args) != 2 {
 			slog.Error("WRITE requiere 2 argumentos")
 		}
-		addr,_ := strconv.Atoi(instruction.Args[0])
+		addr, _ := strconv.Atoi(instruction.Args[0])
 		config.Exec_values.Addr = cache.FromIntToLogicalAddres(addr)
-		
+
 		bytes := []byte(instruction.Args[1])
 		config.Exec_values.Value = bytes
 
@@ -486,11 +504,11 @@ func asign() {
 		if len(instruction.Args) != 2 {
 			slog.Error("READ requiere 2 argumentos")
 		}
-		addr,_ := strconv.Atoi(instruction.Args[0])
+		addr, _ := strconv.Atoi(instruction.Args[0])
 		config.Exec_values.Addr = cache.FromIntToLogicalAddres(addr)
 
 		//recibe int devuelve la lista de ints
-		config.Exec_values.Arg1,_ = strconv.Atoi(instruction.Args[1])
+		config.Exec_values.Arg1, _ = strconv.Atoi(instruction.Args[1])
 
 	case codeutils.GOTO:
 		config.Instruccion = "GOTO"
