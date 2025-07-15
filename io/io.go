@@ -64,6 +64,20 @@ func main() {
 		}
 	}
 
+	kernelPing := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "/ping",
+	})
+	_, err = http.Get(kernelPing)
+	if err != nil {
+		fmt.Println("Esperando a Kernel")
+	}
+	for err != nil {
+		time.Sleep(1 * time.Second)
+		_, err = http.Get(kernelPing)
+	}
+
 	force_kill_chan := make(chan os.Signal, 1)
 	signal.Notify(force_kill_chan, syscall.SIGINT, syscall.SIGTERM)
 

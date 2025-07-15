@@ -16,7 +16,6 @@ import (
 	"ssoo-utils/logger"
 	"ssoo-utils/parsers"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -55,34 +54,25 @@ func main() {
 		config.CacheEnable = false
 	}
 
-	wait := func(name string, ip string, port int, wg *sync.WaitGroup) {
-		defer wg.Done()
-		url := httputils.BuildUrl(httputils.URLData{
-			Ip:       ip,
-			Port:     port,
-			Endpoint: "/ping",
-		})
-		_, err := http.Get(url)
-		if err != nil {
-			fmt.Println("Esperando a " + name)
-		}
-		for err != nil {
-			time.Sleep(1 * time.Second)
-			_, err = http.Get(url)
-		}
+	kernelPing := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpKernel,
+		Port:     config.Values.PortKernel,
+		Endpoint: "/ping",
+	})
+	_, err := http.Get(kernelPing)
+	if err != nil {
+		fmt.Println("Esperando a Kernel")
 	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go wait("Kernel", config.Values.IpKernel, config.Values.PortKernel, &wg)
-	go wait("Memoria", config.Values.IpMemory, config.Values.PortMemory, &wg)
-	wg.Wait()
+	for err != nil {
+		time.Sleep(1 * time.Second)
+		_, err = http.Get(kernelPing)
+	}
 
 	//cargar config de memoria
 	cache.FindMemoryConfig()
 
 	//crear logger
-	err := logger.SetupDefault("cpu", config.Values.LogLevel)
+	err = logger.SetupDefault("cpu", config.Values.LogLevel)
 	defer logger.Close()
 	if err != nil {
 		fmt.Printf("Error setting up logger: %v\n", err)

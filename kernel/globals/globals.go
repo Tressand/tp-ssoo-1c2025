@@ -134,7 +134,9 @@ func SendIORequest(pid uint, timer int, io *IOConnection) {
 func ClearAndExit() {
 	fmt.Println("Cerrando Kernel...")
 
+	fmt.Println("1-cancelio")
 	CancelIOctx()
+	fmt.Println("1-done")
 
 	kill_url := func(ip string, port int) string {
 		return httputils.BuildUrl(httputils.URLData{
@@ -144,13 +146,19 @@ func ClearAndExit() {
 		})
 	}
 
+	fmt.Println("2-cpu")
 	for _, cpu := range AvailableCPUs {
 		http.Get(kill_url(cpu.IP, cpu.Port))
 	}
+	fmt.Println("2-done")
 
+	fmt.Println("3-memoria")
 	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
+	fmt.Println("3-done")
 
+	fmt.Println("4-server")
 	ShutdownSignal <- struct{}{}
 	<-ShutdownSignal
+	fmt.Println("4-done")
 	os.Exit(0)
 }
