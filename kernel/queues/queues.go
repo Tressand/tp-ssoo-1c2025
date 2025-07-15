@@ -60,6 +60,10 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 		fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
 		map[string]string{},
 	)
+
+	if state == pcb.EXIT && len(globals.ExitQueue) == globals.TotalProcessesCreated {
+		globals.ClearAndExit()
+	}
 }
 
 func Search(state pcb.STATE, sortBy SortBy) *globals.Process {

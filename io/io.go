@@ -22,6 +22,11 @@ import (
 
 // #endregion
 
+var instances []struct {
+	name   string
+	pidptr *uint
+}
+
 func main() {
 	// #region SETUP
 
@@ -59,12 +64,23 @@ func main() {
 		}
 	}
 
+	force_kill_chan := make(chan os.Signal, 1)
+	signal.Notify(force_kill_chan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-force_kill_chan
+		fmt.Println(sig)
+		for _, instance := range instances {
+			notifyIODisconnected(instance.name, instance.pidptr)
+		}
+		os.Exit(0)
+	}()
+
 	var wg sync.WaitGroup
 	for n := range count {
 		wg.Add(1)
 		go createKernelConnection(names[n], &wg)
 	}
-	time.Sleep(5 * time.Millisecond)
 
 	// #endregion
 
@@ -74,16 +90,12 @@ func main() {
 func createKernelConnection(name string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	force_kill_chan := make(chan os.Signal, 1)
-	signal.Notify(force_kill_chan, syscall.SIGINT, syscall.SIGTERM)
-
 	var assignedPID uint = 0
 
-	go func() {
-		sig := <-force_kill_chan
-		fmt.Println(sig)
-		notifyIODisconnected(name, &assignedPID)
-	}()
+	instances = append(instances, struct {
+		name   string
+		pidptr *uint
+	}{name: name, pidptr: &assignedPID})
 
 	for {
 		retry, err := notifyKernel(name, &assignedPID)
@@ -91,6 +103,7 @@ func createKernelConnection(name string, wg *sync.WaitGroup) {
 			slog.Error(err.Error())
 		}
 		if retry {
+			time.Sleep(1 * time.Second)
 			continue
 		}
 		notifyIODisconnected(name, &assignedPID)

@@ -1,7 +1,10 @@
 package globals
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"os"
 	config "ssoo-kernel/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
@@ -66,6 +69,12 @@ var (
 	WaitingForRetry         bool = false
 	WaitingForRetryMu       sync.Mutex
 	WaitingInMTS            bool = false
+	TotalProcessesCreated   int  = 0
+
+	// Sending anything to this channel will shutdown the server.
+	// The server will respond back on this same channel to confirm closing.
+	ShutdownSignal     chan any = make(chan any)
+	IOctx, CancelIOctx          = context.WithCancel(context.Background())
 )
 
 type IOConnection struct {
@@ -123,7 +132,11 @@ func SendIORequest(pid uint, timer int, io *IOConnection) {
 	io.Handler <- IORequest{Pid: pid, Timer: timer}
 }
 
-func Clear() {
+func ClearAndExit() {
+	fmt.Println("Cerrando Kernel...")
+
+	CancelIOctx()
+
 	kill_url := func(ip string, port int) string {
 		return httputils.BuildUrl(httputils.URLData{
 			Ip:       ip,
@@ -139,4 +152,8 @@ func Clear() {
 		http.Get(kill_url(io.IP, io.Port))
 	}
 	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
+
+	ShutdownSignal <- struct{}{}
+	<-ShutdownSignal
+	os.Exit(0)
 }

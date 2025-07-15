@@ -144,14 +144,10 @@ func STS() {
 }
 
 func ShouldTryInterrupt() bool {
-	globals.AvCPUmu.Lock()
-	defer globals.AvCPUmu.Unlock()
 	return config.Values.SchedulerAlgorithm == "SRT" && len(globals.AvailableCPUs) != 0
 }
 
 func GetCPUWithShortestBurst() *globals.CPUConnection {
-	globals.AvCPUmu.Lock()
-	defer globals.AvCPUmu.Unlock()
 	minCPU := globals.AvailableCPUs[0]
 	for _, cpu := range globals.AvailableCPUs {
 		if cpu.Process != nil && cpu.Process.EstimatedBurst < minCPU.Process.EstimatedBurst {

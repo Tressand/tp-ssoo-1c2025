@@ -16,10 +16,11 @@ import (
 
 func CreateProcess(path string, size int) {
 	process := newProcess(path, size)
+	globals.TotalProcessesCreated++
 
 	slog.Info("Se crea el proceso", "pid", process.PCB.GetPID(), "path", path, "size", size)
 
-	go HandleNewProcess(process) // ????
+	HandleNewProcess(process) // ????
 }
 
 func UpdateBurstEstimation(process *globals.Process) {
@@ -148,14 +149,10 @@ func isSmallerThanAll(process *globals.Process) bool {
 }
 
 func SuspReadyIsEmpty() bool {
-	globals.SuspReadyQueueMutex.Lock()
-	defer globals.SuspReadyQueueMutex.Unlock()
 	return len(globals.SuspReadyQueue) == 0
 }
 
 func NewIsEmpty() bool {
-	globals.NewQueueMutex.Lock()
-	defer globals.NewQueueMutex.Unlock()
 	return len(globals.NewQueue) == 0
 }
 
@@ -234,8 +231,8 @@ func TerminateProcess(process *globals.Process) {
 
 func getNextPID() uint {
 	globals.PIDMutex.Lock()
-	defer globals.PIDMutex.Unlock()
 	pid := globals.NextPID
 	globals.NextPID++
+	globals.PIDMutex.Unlock()
 	return pid
 }

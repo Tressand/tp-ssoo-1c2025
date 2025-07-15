@@ -42,31 +42,22 @@ func ReceiveCPU() http.HandlerFunc {
 		cpu.Port = port
 		cpu.Process = nil
 
-		globals.AvCPUmu.Lock()
-		exists := false
 		for _, c := range globals.AvailableCPUs {
 			if c.ID == id {
-				exists = true
-				break
+				slog.Error("CPU already registered", "id", id)
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte("CPU already registered"))
 			}
 		}
+
+		globals.AvCPUmu.Lock()
+		globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
 		globals.AvCPUmu.Unlock()
 
-		if !exists {
-			globals.AvCPUmu.Lock()
-			globals.AvailableCPUs = append(globals.AvailableCPUs, cpu)
-			globals.AvCPUmu.Unlock()
-
-			select {
-			case globals.CpuAvailableSignal <- struct{}{}:
-				slog.Debug("Nueva CPU añadida. Se desbloquea CpuAvailableSignal..")
-			default:
-			}
-		} else {
-			slog.Warn("CPU already registered", "id", id)
-			w.WriteHeader(http.StatusConflict)
-			w.Write([]byte("CPU already registered"))
-			return
+		select {
+		case globals.CpuAvailableSignal <- struct{}{}:
+			slog.Debug("Nueva CPU añadida. Se desbloquea CpuAvailableSignal..")
+		default:
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -139,6 +130,8 @@ func ReceivePidPcReason() http.HandlerFunc {
 
 func RecieveSyscall() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		cpuID := r.URL.Query().Get("id")
 
 		if cpuID == "" {
@@ -148,22 +141,18 @@ func RecieveSyscall() http.HandlerFunc {
 
 		var process *globals.Process
 
-		globals.AvCPUmu.Lock()
 		for _, cpu := range globals.AvailableCPUs {
 			if cpu.ID == cpuID {
 				process = cpu.Process
 				break
 			}
 		}
-		globals.AvCPUmu.Unlock()
 
 		if process == nil {
-			slog.Error("No se encontró el proceso asociado al CPU", "cpuID", cpuID)
 			http.Error(w, "No se encontró el proceso asociado al CPU", http.StatusBadRequest)
 			return
 		}
 
-		// 2. Leer la instrucción del body (en lugar de URL-encoded query param)
 		var instruction codeutils.Instruction
 
 		if err := json.NewDecoder(r.Body).Decode(&instruction); err != nil {
@@ -171,78 +160,39 @@ func RecieveSyscall() http.HandlerFunc {
 			return
 		}
 
-		defer r.Body.Close()
-
 		// 3. Procesar la syscall con el PID disponible
-		opcode := codeutils.Opcode(instruction.Opcode)
+		opcode := instruction.Opcode
 
 		slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall: <%s>", process.PCB.GetPID(), codeutils.OpcodeStrings[opcode]))
 
 		switch opcode {
-
 		case codeutils.IO:
-			if len(instruction.Args) != 2 {
-				http.Error(w, "IO requiere 2 argumentos", http.StatusBadRequest)
-				return
-			}
-
 			device := instruction.Args[0]
-			timeMs, err := strconv.Atoi(instruction.Args[1])
+			timeMs, _ := strconv.Atoi(instruction.Args[1])
 
-			if err != nil {
-				http.Error(w, "Tiempo invalido", http.StatusBadRequest)
-				return
-			}
-
-			slog.Debug("Recibida syscall IO: dispositivo=%s, tiempo=%d\n", device, timeMs)
-
-			deviceFound := false
 			/* Ahora mismo, si esta ocupado, sigue con la ejecución, pero se bloquea si la envia.*/
 			var selectedIO *globals.IOConnection
 
-			globals.AvIOmu.Lock()
 			for _, io := range globals.AvailableIOs {
 				if io.Name == device {
-					deviceFound = true
 					selectedIO = io
 					break
 				}
 			}
-			globals.AvIOmu.Unlock()
 
-			if !deviceFound {
-				process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			process_shared.FreeCPU(process)
 
-				if process == nil {
-					return
-				}
-
-				process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
-
+			if selectedIO == nil {
 				queues.Enqueue(pcb.EXIT, process)
-
 				process_shared.TerminateProcess(process)
 
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("Dispositivo no existe - process terminado"))
+				w.Write([]byte("Dispositivo IO no existe - process terminado"))
 				return
 			}
-
-			if selectedIO == nil {
-				http.Error(w, "IO device no disponible o no encontrado", http.StatusServiceUnavailable)
-				return
-			}
-
-			process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
-
-			if process == nil {
-				return
-			}
-
-			process_shared.FreeCPU(process)
 
 			queues.Enqueue(pcb.BLOCKED, process)
-
 			blockedByIO := CreateBlockedByIO(process, device, timeMs)
 
 			globals.MTSQueueMu.Lock()
@@ -252,57 +202,32 @@ func RecieveSyscall() http.HandlerFunc {
 			UnlockMTS()
 
 			if selectedIO.Disp {
+				globals.AvIOmu.Lock()
 				selectedIO.Disp = false
+				globals.AvIOmu.Unlock()
 
 				globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
-
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("Operación IO iniciada (en background)"))
-
-				return
 			}
-
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Proceso encolado para dispositivo IO ocupado"))
-
-			return
-
-			//
 		case codeutils.INIT_PROC:
-			if len(instruction.Args) != 2 {
-				http.Error(w, "IO requiere 2 argumentos", http.StatusBadRequest)
-				return
-			}
 			codePath := instruction.Args[0]
-			size, err := strconv.Atoi(instruction.Args[1])
-			if err != nil {
-				http.Error(w, "tamaño invalido", http.StatusBadRequest)
-				return
-			}
+			size, _ := strconv.Atoi(instruction.Args[1])
 			process_shared.CreateProcess(codePath, size)
 
 		case codeutils.DUMP_MEMORY:
 			DUMP_MEMORY(process)
+
 		case codeutils.EXIT:
 			process := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
-
-			if process == nil {
-				return
-			}
-
-			slog.Info("Syscall EXIT recibida", "pid", process.PCB.GetPID())
-
-			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
-
 			queues.Enqueue(pcb.EXIT, process)
 			process_shared.TerminateProcess(process)
+			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
 		default:
 			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Syscall procesada"))
+		w.Write([]byte("Syscall " + codeutils.OpcodeStrings[opcode] + " procesada"))
 	}
 }
 
