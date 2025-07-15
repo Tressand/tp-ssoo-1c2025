@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal chan interface{}) {
@@ -28,8 +29,10 @@ func StartHTTPServer(ip string, port int, mux *http.ServeMux, shutdownSignal cha
 	// Wait for shutdown signal
 	go func() {
 		<-shutdownSignal
-		if err := server.Shutdown(context.Background()); err != nil {
-			slog.Error("Error cerrando servidor HTTP", "error", err)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			fmt.Println()
 		}
 		shutdownSignal <- struct{}{}
 	}()
