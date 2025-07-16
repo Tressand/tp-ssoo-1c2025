@@ -55,12 +55,16 @@ func LTS() {
 			continue
 		}
 
-		if !globals.ReadySuspended {
+		if queue == pcb.NEW {
 			slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID(), "queue", queue)
 			shared.InititializeProcess(process)
 		} else {
+
+			Unsuspend(process)
+
 			slog.Debug("ReadySuspended activo: proceso pasa directamente a READY", "pid", process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)
+			unlockSTS()
 		}
 		
 	}
@@ -332,4 +336,41 @@ func requestSuspend(process *globals.Process) error {
 	}
 
 	return nil
+}
+
+func Unsuspend(process *globals.Process){
+
+	slog.Debug("Desbloqueando proceso", "pid", process.PCB.GetPID())
+
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "unsuspend",
+		Queries: map[string]string{
+			"pid": strconv.Itoa(int(process.PCB.GetPID())),
+		},
+	})
+
+	resp, err := http.Post(url, "text/plain", nil)
+	if err != nil {
+		logger.Instance.Error("Error al enviar solicitud de unsuspend", "pid", process.PCB.GetPID(), "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Instance.Error("Memoria rechazó la solicitud de unsuspend", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
+		return
+	}
+
+	slog.Info("Solicitud de unsuspend enviada correctamente", "pid", process.PCB.GetPID())
+}
+
+func unlockSTS() {
+	select {
+	case globals.STSEmpty <- struct{}{}:
+		slog.Debug("Desbloqueando STS porque hay procesos en READY")
+	default:
+		slog.Debug("STS ya desbloqueado, no se envía señal")
+	}
 }

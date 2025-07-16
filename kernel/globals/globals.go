@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	config "ssoo-kernel/config"
+	"ssoo-kernel/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
 	"sync"

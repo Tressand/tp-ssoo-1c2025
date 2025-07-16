@@ -309,11 +309,9 @@ func handleIOFinished() http.HandlerFunc {
 			queues.RemoveByPID(pcb.SUSP_BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.SUSP_READY, process)
 
-			//slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a SUSP_READY", process.PCB.GetPID()))
 		} else {
 			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)
-			//slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a READY", process.PCB.GetPID()))
 		}
 
 		w.WriteHeader(http.StatusOK)

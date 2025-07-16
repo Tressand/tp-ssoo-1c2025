@@ -18,7 +18,12 @@ func CreateProcess(path string, size int) {
 	process := newProcess(path, size)
 	globals.TotalProcessesCreated++
 
-	slog.Info("Se crea el proceso", "pid", process.PCB.GetPID(), "path", path, "size", size)
+	logger.RequiredLog(true,process.PCB.GetPID(),"Se crea el proceso",
+		map[string]string{
+			"Estado": "NEW",
+			"Path":   path,
+			"Size":   fmt.Sprintf("%d bytes", size),
+		})
 
 	HandleNewProcess(process)
 }

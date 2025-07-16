@@ -25,6 +25,8 @@ var instruction Instruction
 
 var shutdownSignal = make(chan any)
 
+var bloqueante = false
+
 func main() {
 	//Obtener identificador
 	if len(os.Args) < 2 {
@@ -211,6 +213,7 @@ func exec() int {
 		})
 
 		config.Pcb.PC = config.Exec_values.Arg1
+		bloqueante = true // No es bloqueante, pero no queremos que se incremente el PC en el siguiente ciclo
 
 	//SYSCALLS
 	case "IO":
@@ -250,10 +253,14 @@ func exec() int {
 	default:
 
 	}
-	if status == -1 {
+	
+
+	if status == -1{
 		return status
-	} else {
+	} else if !bloqueante{
 		config.Pcb.PC++
+	}else{
+		bloqueante = false // Reseteamos el flag de bloqueante
 	}
 	return 0
 }
@@ -284,6 +291,8 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 		Endpoint: endpoint,
 		Queries: map[string]string{
 			"id": fmt.Sprint(config.Identificador),
+			"pid": fmt.Sprint(config.Pcb.PID),
+			"pc":  fmt.Sprint(config.Pcb.PC),
 		},
 	})
 
@@ -302,6 +311,10 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 }
 
 func sendIO() int {
+
+	config.Pcb.PC++ // Incrementar PC antes de enviar la syscall
+	bloqueante = true // Indicar que la syscall es bloqueante
+
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Error en syscall IO", "error", err)

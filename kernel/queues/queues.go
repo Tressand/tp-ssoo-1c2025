@@ -52,6 +52,13 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 
 	queue, mutex := getQueueAndMutex(state)
 
+	//mostrar la cola antes de agregar el proceso
+	pids := make([]uint, 0, len(*queue))
+	for _, proc := range *queue {
+		pids = append(pids, proc.PCB.GetPID())
+	}
+	slog.Info("Lista SUSP_READY", "PIDs", pids)
+
 	mutex.Lock()
 	*queue = append(*queue, process)
 	mutex.Unlock()
@@ -61,11 +68,6 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 		map[string]string{},
 	)
 	if actualState.String() == "SUSP_READY" {
-		pids := make([]uint, 0, len(*queue))
-		for _, proc := range *queue {
-			pids = append(pids, proc.PCB.GetPID())
-		}
-		slog.Info("Lista SUSP_READY", "PIDs", pids)
 
 		// Desbloquear el planificador LTS si está esperando
 		select {

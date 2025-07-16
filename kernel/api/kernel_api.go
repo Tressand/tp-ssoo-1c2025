@@ -73,15 +73,23 @@ func HandleReason(pid uint, pc int, reason string) {
 		return
 	}
 
+	fmt.Println(" ")
+	fmt.Println(" ")
+	slog.Debug("HandleReason", "pid", pid, "pc", pc, "reason", reason)
+	fmt.Println(" ")
+
+	process.PCB.SetPC(pc)
 	shared.FreeCPU(process)
 	shared.UpdateBurstEstimation(process)
 
 	switch reason {
 	case "Interrupt":
-		slog.Info("Procesando interrupción para el proceso", "pid", pid, "pc", pc)
+		logger.RequiredLog(true, pid, "## (%d) - Desalojado por algoritmo", map[string]string{
+			"Algoritmo": config.Values.ReadyIngressAlgorithm,
+		})
 		queues.Enqueue(pcb.READY, process)
 	case "Exit":
-		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
+		logger.RequiredLog(true, pid, "Finaliza el proceso", nil)
 		queues.Enqueue(pcb.EXIT, process)
 		shared.TerminateProcess(process)
 	}
@@ -139,6 +147,18 @@ func RecieveSyscall() http.HandlerFunc {
 			return
 		}
 
+		processPC := r.URL.Query().Get("pc")
+
+		if processPC == "" {
+			http.Error(w, "Parámetro 'pc' requerido", http.StatusBadRequest)
+			return
+		}
+		processPCInt, err := strconv.Atoi(processPC)
+		if err != nil {
+			http.Error(w, "Parámetro 'pc' inválido", http.StatusBadRequest)
+			return
+		}
+
 		var process *globals.Process
 
 		for _, cpu := range globals.AvailableCPUs {
@@ -152,6 +172,8 @@ func RecieveSyscall() http.HandlerFunc {
 			http.Error(w, "No se encontró el proceso asociado al CPU", http.StatusBadRequest)
 			return
 		}
+		
+		process.PCB.SetPC(processPCInt)
 
 		var instruction codeutils.Instruction
 
@@ -163,7 +185,12 @@ func RecieveSyscall() http.HandlerFunc {
 		// 3. Procesar la syscall con el PID disponible
 		opcode := instruction.Opcode
 
-		slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall: <%s>", process.PCB.GetPID(), codeutils.OpcodeStrings[opcode]))
+		logger.RequiredLog(true, process.PCB.GetPID(), "Solicitó Syscall",
+			map[string]string{
+				"syscall": codeutils.OpcodeStrings[opcode],
+				"args":    fmt.Sprintf("%v", instruction.Args),
+			})
+		
 
 		switch opcode {
 		case codeutils.IO:

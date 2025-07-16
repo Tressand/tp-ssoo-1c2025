@@ -29,6 +29,12 @@ type PCB struct {
 func (pcb PCB) GetPID() uint    { return pcb.pid }
 func (pcb PCB) GetState() STATE { return pcb.state }
 func (pcb PCB) GetPC() int      { return pcb.pc }
+func (pcb *PCB) SetPC(pc int) {
+	if pc < 0 {
+		panic("PC cannot be negative")
+	}
+	pcb.pc = pc
+}
 
 // Probably not necessary as their only use will be for logging at the end
 // That being the case, the only necessary exposed function is to format them to string/json
