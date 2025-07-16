@@ -25,9 +25,9 @@ func getQueueAndMutex(state pcb.STATE) (*[]*globals.Process, *sync.Mutex) {
 	case pcb.READY:
 		return &globals.ReadyQueue, &globals.ReadyQueueMutex
 	case pcb.BLOCKED:
-		return &globals.BlockedQueue, &globals.BlockedQueueMutex // Ahora es []*Process
+		return &globals.BlockedQueue, &globals.BlockedQueueMutex
 	case pcb.EXEC:
-		return &globals.ExecQueue, &globals.ExecQueueMutex // Ahora es []*Process
+		return &globals.ExecQueue, &globals.ExecQueueMutex
 	case pcb.SUSP_READY:
 		return &globals.SuspReadyQueue, &globals.SuspReadyQueueMutex
 	case pcb.SUSP_BLOCKED:

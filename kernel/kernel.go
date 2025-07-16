@@ -16,7 +16,7 @@ import (
 	globals "ssoo-kernel/globals"
 	"ssoo-kernel/queues"
 	scheduler "ssoo-kernel/scheduler"
-	process_shared "ssoo-kernel/shared"
+	"ssoo-kernel/shared"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/parsers"
@@ -79,10 +79,10 @@ func main() {
 			return
 		}
 
-		process_shared.CreateProcess(pathFile, processSize)
+		shared.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
-		process_shared.CreateProcess("helloworld", 300)
+		shared.CreateProcess("helloworld", 300)
 	}
 
 	// #endregion
@@ -159,14 +159,14 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		port := query.Get("port")
+		portStr := query.Get("port")
 
-		if port == "" {
+		if portStr == "" {
 			http.Error(w, "Port is required", http.StatusBadRequest)
 			return
 		}
 
-		portInt, err := strconv.Atoi(port)
+		port, err := strconv.Atoi(portStr)
 
 		if err != nil {
 			http.Error(w, "Invalid port", http.StatusBadRequest)
@@ -180,13 +180,13 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		var ioConnection *globals.IOConnection = getIO(name, ip, portInt)
+		var ioConnection *globals.IOConnection = getIO(name, ip, port)
 
 		if ioConnection == nil {
 			// If the IO is not available, we create a new IOConnection
 			slog.Info("New IO connection", "name", name, "ip", ip, "port", port)
 
-			ioConnection = CreateIOConnection(name, ip, portInt)
+			ioConnection = CreateIOConnection(name, ip, port)
 
 			globals.AvIOmu.Lock()
 			globals.AvailableIOs = append(globals.AvailableIOs, ioConnection)
@@ -196,7 +196,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		// check if there is a process waiting for this IO
 
 		for _, blocked := range globals.MTSQueue {
-			if blocked.Name == name && blocked.TimerStarted {
+			if blocked.Name == name {
 				ioConnection.Disp = false
 				slog.Info("Found waiting process for IO", "pid", blocked.Process.PCB.GetPID(), "ioName", name)
 
@@ -228,7 +228,7 @@ func CreateIOConnection(name string, ip string, port int) *globals.IOConnection 
 	return ioConnection
 }
 
-func handleIOFinished() http.HandlerFunc { /// ??? Tendre que verificar que también sea la misma ip y puerto??
+func handleIOFinished() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -244,14 +244,14 @@ func handleIOFinished() http.HandlerFunc { /// ??? Tendre que verificar que tamb
 			return
 		}
 
-		port := query.Get("port")
+		portStr := query.Get("port")
 
-		if port == "" {
+		if portStr == "" {
 			http.Error(w, "Port is required", http.StatusBadRequest)
 			return
 		}
 
-		portInt, err := strconv.Atoi(port)
+		port, err := strconv.Atoi(portStr)
 
 		if err != nil {
 			http.Error(w, "Invalid port", http.StatusBadRequest)
@@ -265,21 +265,21 @@ func handleIOFinished() http.HandlerFunc { /// ??? Tendre que verificar que tamb
 			return
 		}
 
-		pid := query.Get("pid")
+		pidStr := query.Get("pid")
 
-		if pid == "" {
+		if pidStr == "" {
 			http.Error(w, "PID is required", http.StatusBadRequest)
 			return
 		}
 
-		pidInt, err := strconv.Atoi(pid)
+		pid, err := strconv.Atoi(pidStr)
 
 		if err != nil {
 			http.Error(w, "Invalid PID", http.StatusBadRequest)
 			return
 		}
 
-		if io := getIO(name, ip, portInt); io != nil {
+		if io := getIO(name, ip, port); io != nil {
 			globals.AvIOmu.Lock()
 			io.Disp = true
 			globals.AvIOmu.Unlock()
@@ -291,7 +291,7 @@ func handleIOFinished() http.HandlerFunc { /// ??? Tendre que verificar que tamb
 		var process *globals.Process
 
 		for i, blocked := range globals.MTSQueue {
-			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pidInt) {
+			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
 				process = blocked.Process
 				globals.MTSQueueMu.Lock()
 				globals.MTSQueue = append(globals.MTSQueue[:i], globals.MTSQueue[i+1:]...)
@@ -314,8 +314,6 @@ func handleIOFinished() http.HandlerFunc { /// ??? Tendre que verificar que tamb
 		w.Write([]byte(fmt.Sprintf("IO finished for PID %s", pid)))
 	}
 }
-
-/// TODO: Terminar IO connection when the IO is disconnected
 
 func handleIODisconnected() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -380,7 +378,7 @@ func handleIODisconnected() http.HandlerFunc {
 
 				queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 				queues.Enqueue(pcb.EXIT, process)
-				process_shared.TerminateProcess(process)
+				shared.TerminateProcess(process)
 				slog.Info(fmt.Sprintf("Removed process %d from MTS queue due to IO disconnection", process.PCB.GetPID()))
 			}
 

@@ -20,8 +20,7 @@ import (
 
 func LTS() {
 	<-globals.LTSStopped
-	slog.Info("LTS iniciado")
-	slog.Info("Planificando con ", "algoritmo", config.Values.ReadyIngressAlgorithm)
+	slog.Info("LTS iniciado - Planificando con algoritmo", "algoritmo", config.Values.ReadyIngressAlgorithm)
 
 	var sortBy queues.SortBy
 
@@ -43,9 +42,6 @@ func LTS() {
 
 		var process *globals.Process
 		var queue pcb.STATE = pcb.SUSP_READY
-
-		// Sí vamos a necesitar que Kernel se apague cuando todas las colas esten vacias.
-		// El Dequeue deberia solo darme la referencia al proceso y no quitarlo de la cola.
 
 		process = queues.Dequeue(queue, sortBy)
 
@@ -98,7 +94,7 @@ func STS() {
 
 			slog.Debug("STS encontró un proceso en READY", "pid", process.PCB.GetPID())
 
-			go sendToExecute(process, cpu)
+			sendToExecute(process, cpu)
 			continue
 		}
 
@@ -131,7 +127,7 @@ func STS() {
 					return
 				}
 
-				go sendToExecute(process, cpu)
+				sendToExecute(process, cpu)
 			}
 
 		}
@@ -180,7 +176,6 @@ func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
 }
 
 func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
-	queues.Enqueue(pcb.EXEC, process)
 
 	slog.Debug("Se agrega al proceso a EXEC", "pid", process.PCB.GetPID())
 
@@ -256,10 +251,10 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
 	return nil
 }
 
-func withoutTimerStarted() []*globals.BlockedByIO {
-	list := make([]*globals.BlockedByIO, 0)
+func withoutTimerStarted() []*globals.Blocked {
+	list := make([]*globals.Blocked, 0)
 	for _, elem := range globals.MTSQueue {
-		if !elem.TimerStarted {
+		if !elem.Process.TimerStarted {
 			list = append(list, elem)
 		}
 	}
@@ -276,26 +271,30 @@ func MTS() {
 		}
 
 		for _, blocked := range forInitTimer {
-			blocked.TimerStarted = true
+			blocked.Process.TimerStarted = true
 			go sendToWait(blocked)
 		}
 	}
 }
 
-func sendToWait(blocked *globals.BlockedByIO) {
+func sendToWait(blocked *globals.Blocked) {
 	slog.Debug("Se inicia el timer para el proceso bloqueado por IO", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 	time.Sleep(time.Duration(config.Values.SuspensionTime) * time.Millisecond)
 	slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 
-	process := removeProcess(blocked)
+	if blocked.Process.PCB.GetState() != pcb.BLOCKED {
+		return
+	}
+
+	process := queues.RemoveByPID(blocked.Process.PCB.GetState(), blocked.Process.PCB.GetPID())
+
+	if process == nil {
+		return
+	}
 
 	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
 	requestSuspend(process)
-}
-
-func removeProcess(waiting *globals.BlockedByIO) *globals.Process {
-	return queues.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
 }
 
 func requestSuspend(process *globals.Process) error {

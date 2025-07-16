@@ -34,18 +34,16 @@ var (
 	ExecQueue      []*Process = make([]*Process, 0)
 	ExecQueueMutex sync.Mutex
 
-	//
 	AvailableIOs []*IOConnection = make([]*IOConnection, 0)
 	AvIOmu       sync.Mutex
 
 	AvailableCPUs []*CPUConnection = make([]*CPUConnection, 0)
 	AvCPUmu       sync.Mutex
 
-	MTSQueue   []*BlockedByIO = make([]*BlockedByIO, 0)
+	MTSQueue   []*Blocked = make([]*Blocked, 0)
 	MTSQueueMu sync.Mutex
-	//
 
-	NextPID  uint = 1 // ?
+	NextPID  uint = 1
 	PIDMutex sync.Mutex
 
 	BlockedForMemory = make(chan struct{})
@@ -60,15 +58,9 @@ var (
 
 	RetryInitialization = make(chan struct{})
 
-	RetryNew                     = make(chan struct{})
-	RetrySuspReady               = make(chan struct{})
-	WaitingForMemory             = make(chan struct{}, 1)
-	NewProcessInReadySignal      = make(chan struct{}) // ?
-	WaitingForCPU           bool = false
-	WaitingForRetry         bool = false
-	WaitingForRetryMu       sync.Mutex
-	WaitingInMTS            bool = false
-	TotalProcessesCreated   int  = 0
+	WaitingForRetry       bool = false
+	WaitingForRetryMu     sync.Mutex
+	TotalProcessesCreated int = 0
 
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
@@ -89,13 +81,10 @@ type IORequest struct {
 	Timer int
 }
 
-type BlockedByIO struct {
+type Blocked struct {
 	Process *Process
-	// ----
-	Name string
-	Time int
-	// ----
-	TimerStarted bool
+	Name    string
+	Time    int
 }
 
 type CPUConnection struct {
@@ -103,12 +92,6 @@ type CPUConnection struct {
 	IP      string
 	Port    int
 	Process *Process
-}
-
-type DispatchResponse struct {
-	PID    uint   `json:"pid"`
-	PC     int    `json:"pc"`
-	Motivo string `json:"motivo"`
 }
 
 type CPURequest struct {
@@ -123,6 +106,7 @@ type Process struct {
 	StartTime      time.Time // cuando entra a RUNNING
 	LastRealBurst  float64   // en segundos
 	EstimatedBurst float64   // estimación actual
+	TimerStarted   bool      // si se ha iniciado el timer en mts
 }
 
 func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Path }
