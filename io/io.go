@@ -59,10 +59,11 @@ func main() {
 		if err != nil || count < 0 {
 			continue
 		}
-		for n := range count {
+		for n := 0; n < count; n++ {
 			names = append(names, "IO"+fmt.Sprint(n+1))
 		}
 	}
+	slog.Info("Starting IO instances", "count", count, "names", names)
 
 	kernelPing := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
@@ -137,7 +138,11 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-notify",
-		Queries:  map[string]string{"ip": ip, "port": port, "name": name, "pid": fmt.Sprint(*pidptr)},
+		Queries:  map[string]string{
+			"ip": ip,
+			 "port": port,
+			  "name": fmt.Sprintf(name), // NO TOCAR NUNCA
+			   "pid": fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
@@ -168,28 +173,39 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 	time.Sleep(time.Duration(duration) * time.Millisecond)
 	logger.RequiredLog(true, *pidptr, "Fin de IO", map[string]string{})
 
-	notifyIOFinished(pid)
+	notifyIOFinished(name, pid)
 
 	return true, nil
 }
 
-func notifyIOFinished(pid int) {
+func notifyIOFinished(name string, pid int) {
 	slog.Info("Notificando a Kernel que IO ha finalizado...")
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-finished",
-		Queries:  map[string]string{"pid": fmt.Sprint(pid)},
+		Queries:  map[string]string{
+			"ip": fmt.Sprint(httputils.GetOutboundIP()),
+			"port": fmt.Sprint(config.Values.PortKernel),
+			"name": name,
+			"pid": fmt.Sprint(pid)},
 	})
-	resp, err := http.Post(url, http.MethodPost, http.NoBody)
+	req, err := http.NewRequest(http.MethodPost, url, nil) // nil == no body
 	if err != nil {
-		slog.Error("Error making POST request", "error", err)
+		slog.Error("Error creando request", "error", err)
+		return
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("Error haciendo POST", "error", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("Error on response", "Status", resp.StatusCode, "error", err)
+		slog.Error("Error en la respuesta", "Status", resp.StatusCode)
 		return
 	}
 

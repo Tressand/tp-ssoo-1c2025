@@ -182,6 +182,8 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 
 		var ioConnection *globals.IOConnection = getIO(name, ip, port)
 
+		slog.Info("Recibiendo IO", "name", name, "ip", ip, "port", port)
+
 		if ioConnection == nil {
 			// If the IO is not available, we create a new IOConnection
 			slog.Info("New IO connection", "name", name, "ip", ip, "port", port)
@@ -235,6 +237,8 @@ func handleIOFinished() http.HandlerFunc {
 			return
 		}
 
+		slog.Info("Handling IO finished")
+
 		query := r.URL.Query()
 
 		ip := query.Get("ip")
@@ -280,11 +284,20 @@ func handleIOFinished() http.HandlerFunc {
 		}
 
 		if io := getIO(name, ip, port); io != nil {
+			slog.Info("IO found", "name", name, "ip", ip, "port", port)
 			globals.AvIOmu.Lock()
 			io.Disp = true
 			globals.AvIOmu.Unlock()
 		} else {
-			http.Error(w, "invalid IO. This IO was never connected.", http.StatusBadRequest)
+			slog.Error("IO not found", "name", name, "ip", ip, "port", port)
+
+			//imprimo las IOs disponibles
+			slog.Info("Available IOs:", "count", len(globals.AvailableIOs))
+			for _, io := range globals.AvailableIOs {
+				slog.Info("IO", "name", io.Name, "ip", io.IP, "port", io.Port, "disp", io.Disp)
+			}
+
+			http.Error(w, "IO not found", http.StatusNotFound)
 			return
 		}
 
@@ -311,7 +324,7 @@ func handleIOFinished() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(fmt.Sprintf("IO finished for PID %s", pid)))
+		w.Write([]byte(fmt.Sprintf("IO finished for PID %d", pid)))
 	}
 }
 
