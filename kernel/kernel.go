@@ -182,8 +182,6 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 
 		var ioConnection *globals.IOConnection = getIO(name, ip, port)
 
-		slog.Info("Recibiendo IO", "name", name, "ip", ip, "port", port)
-
 		if ioConnection == nil {
 			// If the IO is not available, we create a new IOConnection
 			slog.Info("New IO connection", "name", name, "ip", ip, "port", port)
@@ -284,15 +282,10 @@ func handleIOFinished() http.HandlerFunc {
 		}
 
 		if io := getIO(name, ip, port); io != nil {
-			slog.Info("IO found", "name", name, "ip", ip, "port", port)
 			globals.AvIOmu.Lock()
 			io.Disp = true
 			globals.AvIOmu.Unlock()
 		} else {
-			slog.Error("IO not found", "name", name, "ip", ip, "port", port)
-
-			//imprimo las IOs disponibles
-			slog.Info("Available IOs:", "count", len(globals.AvailableIOs))
 			for _, io := range globals.AvailableIOs {
 				slog.Info("IO", "name", io.Name, "ip", io.IP, "port", io.Port, "disp", io.Disp)
 			}
@@ -315,11 +308,12 @@ func handleIOFinished() http.HandlerFunc {
 		if process.PCB.GetState() == pcb.SUSP_BLOCKED {
 			queues.RemoveByPID(pcb.SUSP_BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.SUSP_READY, process)
-			slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a SUSP_READY", process.PCB.GetPID()))
+
+			//slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a SUSP_READY", process.PCB.GetPID()))
 		} else {
 			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)
-			slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a READY", process.PCB.GetPID()))
+			//slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a READY", process.PCB.GetPID()))
 		}
 
 		w.WriteHeader(http.StatusOK)

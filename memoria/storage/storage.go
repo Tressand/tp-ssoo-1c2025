@@ -64,6 +64,7 @@ func (p process_data) Deallocate() error {
 			systemMemory[i] = systemMemory[len(systemMemory)-1]
 			systemMemory = systemMemory[:len(systemMemory)-1]
 			systemMemoryMutex.Unlock()
+			break
 		}
 	}
 	m := p.metrics

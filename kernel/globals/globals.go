@@ -109,6 +109,8 @@ type Process struct {
 	TimerStarted   bool      // si se ha iniciado el timer en mts
 }
 
+var ReadySuspended = false
+
 func (p Process) GetPath() string { return config.Values.CodeFolder + "/" + p.Path }
 
 func SendIORequest(pid uint, timer int, io *IOConnection) {

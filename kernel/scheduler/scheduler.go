@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os"
 	"ssoo-kernel/config"
-	globals "ssoo-kernel/globals"
+	"ssoo-kernel/globals"
 	"ssoo-kernel/queues"
-	shared "ssoo-kernel/shared"
+	"ssoo-kernel/shared"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
@@ -55,9 +55,14 @@ func LTS() {
 			continue
 		}
 
-		slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID(), "queue", queue)
-
-		shared.InititializeProcess(process)
+		if !globals.ReadySuspended {
+			slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID(), "queue", queue)
+			shared.InititializeProcess(process)
+		} else {
+			slog.Debug("ReadySuspended activo: proceso pasa directamente a READY", "pid", process.PCB.GetPID())
+			queues.Enqueue(pcb.READY, process)
+		}
+		
 	}
 }
 
