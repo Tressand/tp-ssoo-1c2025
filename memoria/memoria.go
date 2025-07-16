@@ -294,7 +294,6 @@ var suspendProcessRequestHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
-			fmt.Printf("Kernel solicita bajar PID %v a SWAP\n", r.URL.Query().Get("pid"))
 			err := storage.SuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())
@@ -308,7 +307,6 @@ var unsuspendProcessRequestHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
-			fmt.Printf("Kernel solicita subir PID %v de SWAP\n", r.URL.Query().Get("pid"))
 			err := storage.UnSuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())
