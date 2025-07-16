@@ -7,7 +7,7 @@ import (
 	"os"
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
-	queue "ssoo-kernel/queues"
+	"ssoo-kernel/queues"
 	"ssoo-utils/httputils"
 	logger "ssoo-utils/logger"
 	"ssoo-utils/pcb"
@@ -20,7 +20,7 @@ func CreateProcess(path string, size int) {
 
 	slog.Info("Se crea el proceso", "pid", process.PCB.GetPID(), "path", path, "size", size)
 
-	HandleNewProcess(process) // ????
+	HandleNewProcess(process)
 }
 
 func UpdateBurstEstimation(process *globals.Process) {
@@ -83,7 +83,7 @@ func TryInititializeProcess(process *globals.Process) bool {
 	if err == nil {
 		slog.Info("Se inicializo en memoria el proceso", "pid", process.PCB.GetPID(), "path", process.GetPath(), "size", process.Size)
 
-		queue.Enqueue(pcb.READY, process)
+		queues.Enqueue(pcb.READY, process)
 
 		select {
 		case globals.STSEmpty <- struct{}{}:
@@ -104,16 +104,16 @@ func TryInititializeProcess(process *globals.Process) bool {
 	return false
 }
 
-func InititializeProcess(process *globals.Process) bool {
+func InititializeProcess(process *globals.Process) {
 	initialized := TryInititializeProcess(process)
 
-	if globals.WaitingForRetry || initialized {
-		return initialized
+	if initialized {
+		return
 	}
 
 	for {
 		slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "pid", process.PCB.GetPID())
-		<-globals.RetryInitialization // TODO: buffer
+		<-globals.RetryInitialization
 
 		initialized = TryInititializeProcess(process)
 
@@ -131,7 +131,7 @@ func InititializeProcess(process *globals.Process) bool {
 	default:
 	}
 
-	return true
+	return
 }
 
 func isSmallerThanAll(process *globals.Process) bool {
@@ -148,23 +148,15 @@ func isSmallerThanAll(process *globals.Process) bool {
 	return true
 }
 
-func SuspReadyIsEmpty() bool {
-	return len(globals.SuspReadyQueue) == 0
-}
-
-func NewIsEmpty() bool {
-	return len(globals.NewQueue) == 0
-}
-
 func HandleNewProcess(process *globals.Process) {
 	initialized := false
 
-	if shouldTryInitialize(process) && SuspReadyIsEmpty() {
-		initialized = InititializeProcess(process)
+	if shouldTryInitialize(process) && queues.IsEmpty(pcb.SUSP_READY) {
+		initialized = TryInititializeProcess(process)
 	}
 
 	if !initialized {
-		queue.Enqueue(pcb.NEW, process)
+		queues.Enqueue(pcb.NEW, process)
 		notifyNewProcessInNew()
 	}
 
@@ -180,12 +172,9 @@ func notifyNewProcessInNew() {
 
 func shouldTryInitialize(process *globals.Process) bool {
 	switch config.Values.ReadyIngressAlgorithm {
-	case "FIFO":
-		return !globals.WaitingForRetry && NewIsEmpty()
 	case "PMCP":
-		return isSmallerThanAll(process)
+		return globals.WaitingForRetry && isSmallerThanAll(process)
 	default:
-		slog.Error("Algoritmo de ingreso a READY no soportado", "algoritmo", config.Values.ReadyIngressAlgorithm)
 		return false
 	}
 }

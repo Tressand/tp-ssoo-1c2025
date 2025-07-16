@@ -20,8 +20,7 @@ import (
 
 func LTS() {
 	<-globals.LTSStopped
-	slog.Info("LTS iniciado")
-	slog.Info("Planificando con ", "algoritmo", config.Values.ReadyIngressAlgorithm)
+	slog.Info("LTS iniciado - Planificando con algoritmo", "algoritmo", config.Values.ReadyIngressAlgorithm)
 
 	var sortBy queues.SortBy
 
@@ -43,9 +42,6 @@ func LTS() {
 
 		var process *globals.Process
 		var queue pcb.STATE = pcb.SUSP_READY
-
-		// Sí vamos a necesitar que Kernel se apague cuando todas las colas esten vacias.
-		// El Dequeue deberia solo darme la referencia al proceso y no quitarlo de la cola.
 
 		process = queues.Dequeue(queue, sortBy)
 
@@ -98,7 +94,7 @@ func STS() {
 
 			slog.Debug("STS encontró un proceso en READY", "pid", process.PCB.GetPID())
 
-			go sendToExecute(process, cpu)
+			sendToExecute(process, cpu)
 			continue
 		}
 
@@ -131,7 +127,7 @@ func STS() {
 					return
 				}
 
-				go sendToExecute(process, cpu)
+				sendToExecute(process, cpu)
 			}
 
 		}
@@ -180,7 +176,6 @@ func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
 }
 
 func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
-	queues.Enqueue(pcb.EXEC, process)
 
 	slog.Debug("Se agrega al proceso a EXEC", "pid", process.PCB.GetPID())
 
