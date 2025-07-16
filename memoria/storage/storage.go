@@ -501,10 +501,16 @@ func removeFromSwap(pid uint) error {
 }
 
 func SuspendProcess(pid uint) error {
+	fmt.Printf("Kernel solicita bajar PID %v a SWAP. ", pid)
 	process_data := GetDataByPID(pid)
 	if process_data == nil {
 		return errors.New("could not find process with pid")
 	}
+	if len(process_data.pageBases) == 0 {
+		fmt.Print("Nada que swapear.\n")
+		return nil
+	}
+	fmt.Print("\n")
 
 	swapMutex.Lock()
 	err := addToSwap(process_data)
@@ -522,10 +528,16 @@ func SuspendProcess(pid uint) error {
 }
 
 func UnSuspendProcess(pid uint) error {
+	fmt.Printf("Kernel solicita subir PID %v de SWAP. ", pid)
 	process_data := GetDataByPID(pid)
 	if process_data == nil {
 		return errors.New("could not find process with pid")
 	}
+	if len(process_data.pageBases) == 0 {
+		fmt.Print("Nada que subir.\n")
+		return nil
+	}
+	fmt.Print("\n")
 
 	swapMutex.Lock()
 	swapBlock, err := getFromSwap(process_data)
@@ -640,6 +652,9 @@ func deallocateMemory(pid uint) error {
 		return errors.New("couldn't find process with id")
 	}
 	slog.Info("deallocating memory", "pid", pid, "size", len(process_data.pageBases)*config.Values.PageSize)
+	if len(process_data.pageBases) == 0 {
+		return nil
+	}
 	for _, pageBase := range process_data.pageBases {
 		reservationBits[pageBase/paginationConfig.PageSize] = false
 	}
