@@ -179,7 +179,7 @@ func notifyIOFinished(pid int) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-finished",
-		Queries:  map[string]string{"pid": strconv.Itoa(pid)},
+		Queries:  map[string]string{"pid": fmt.Sprint(pid)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {

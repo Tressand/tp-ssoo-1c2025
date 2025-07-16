@@ -1,12 +1,12 @@
 {
   "port_memory": 8082,
-  "memory_size": 2048,
-  "page_size": 32,
+  "memory_size": 1024,
+  "page_size": 16,
   "entries_per_page": 4,
-  "number_of_levels": 3,
+  "number_of_levels": 2,
   "memory_delay": 500,
   "swapfile_path": "/swapfile.bin",
-  "swap_delay": 5000,
+  "swap_delay": 3000,
   "dump_path": "/dump_files/",
   "log_level": "DEBUG"
 }

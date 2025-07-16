@@ -103,7 +103,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 				"Valor":            string(value),
 			})
 
-			SavePageInMemory(page,fisicAddr,config.Pcb.PID)
+			SavePageInMemory(page,paginaActual,config.Pcb.PID)
 
 			return true
 		}
@@ -219,7 +219,6 @@ func sum(val []int, mod int) {
 func ReadMemory(logicAddr []int, size int) int{
 
 	base := logicAddr[:len(logicAddr)-1]
-	delta := logicAddr[len(logicAddr)-1]
 	fisicAddr, flag := Traducir(logicAddr)
 	frame := fisicAddr
 
@@ -257,6 +256,8 @@ func ReadMemory(logicAddr []int, size int) int{
 
 	} else {
 
+		delta := logicAddr[len(logicAddr)-1]
+
 		page,flag :=GetPageInMemory(fisicAddr)
 
 		if !flag {
@@ -278,9 +279,18 @@ func ReadMemory(logicAddr []int, size int) int{
 		copy(paginaActual,base)
 
 
-		if bytesRestante <= pageSize - delta{
+		if bytesRestante <= pageSize - delta {
 
-			copy(content[:],page[delta:bytesRestante])
+			// Asegurarse de que el rango sea válido
+			end := delta + bytesRestante
+			if end > pageSize {
+				end = pageSize
+			}
+			if delta < 0 || end > len(page) || delta > end {
+				slog.Error("Error de rango al leer la página", "delta", delta, "end", end, "len(page)", len(page))
+				return -1
+			}
+			copy(content[:end-delta], page[delta:end])
 
 			logger.RequiredLog(false,uint(config.Pcb.PID),"LEER",map[string]string{
 				"Direccion Fisica": fmt.Sprint(fisicAddr),
@@ -292,7 +302,7 @@ func ReadMemory(logicAddr []int, size int) int{
 
 		bytesAleer := pageSize - delta
 
-		copy(content[:],page[delta:bytesAleer])
+		copy(content[:],page[delta:delta+bytesAleer])
 
 		bytesRestante -= bytesAleer
 		bytesAleer = pageSize
@@ -324,7 +334,7 @@ func ReadMemory(logicAddr []int, size int) int{
 				bytesAleer = bytesRestante
 			}
 
-			copy(content[leido:],page[delta:bytesAleer])
+			copy(content[leido:],page[delta:delta+bytesAleer])
 
 			bytesRestante -= bytesAleer
 			leido += bytesAleer

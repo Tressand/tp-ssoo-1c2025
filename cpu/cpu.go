@@ -68,6 +68,9 @@ func main() {
 		_, err = http.Get(kernelPing)
 	}
 
+	fmt.Println("\nPresioná Enter para continuar y conectarte con Memoria...")
+	fmt.Scanln()
+
 	//cargar config de memoria
 	cache.FindMemoryConfig()
 

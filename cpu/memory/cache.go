@@ -5,9 +5,12 @@ import (
 	"log/slog"
 	"ssoo-cpu/config"
 	"ssoo-utils/logger"
+	"time"
 )
 
 func SearchPageInCache(logicAddr []int) ([]byte, bool) {
+
+	time.Sleep(time.Duration(config.Values.CacheDelay)*time.Millisecond)
 
 	for _, entrada := range config.Cache.Entries {
 
@@ -28,6 +31,8 @@ func SearchPageInCache(logicAddr []int) ([]byte, bool) {
 }
 
 func AddEntryCache(logicAddr []int, content []byte) {
+
+	time.Sleep(time.Duration(config.Values.CacheDelay)*time.Millisecond)
 
 	if config.Cache.ReplacementAlg == "CLOCK" {
 		AddEntryCacheClock(logicAddr, content)
