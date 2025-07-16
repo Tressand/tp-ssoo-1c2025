@@ -85,6 +85,7 @@ type Blocked struct {
 	Process *Process
 	Name    string
 	Time    int
+	Working bool
 }
 
 type CPUConnection struct {

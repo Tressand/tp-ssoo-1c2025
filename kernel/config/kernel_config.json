@@ -2,7 +2,7 @@
   "ip_memory": "self",
   "port_memory": 8082,
   "port_kernel": 8001,
-  "scheduler_algorithm": "FIFO",
+  "scheduler_algorithm": "SJF",
   "ready_ingress_algorithm": "FIFO",
   "alpha": 1,
   "suspension_time": 3000,

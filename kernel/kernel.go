@@ -200,13 +200,15 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		// check if there is a process waiting for this IO
 
 		for _, blocked := range globals.MTSQueue {
-			if blocked.Name == name {
+			if blocked.Name == name && !blocked.Working{
 				ioConnection.Disp = false
+				blocked.Working = true
 				slog.Info("Found waiting process for IO", "pid", blocked.Process.PCB.GetPID(), "ioName", name)
 
 				w.WriteHeader(http.StatusOK)
 				w.Header().Set("Content-Type", "text/plain")
 				w.Write([]byte(fmt.Sprintf("%d|%d", blocked.Process.PCB.GetPID(), blocked.Time)))
+				
 				return
 			}
 		}
@@ -238,8 +240,6 @@ func handleIOFinished() http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-
-		slog.Info("Handling IO finished")
 
 		query := r.URL.Query()
 
@@ -298,6 +298,8 @@ func handleIOFinished() http.HandlerFunc {
 			return
 		}
 
+		slog.Info("Handling IO finished", "name", name, "pid", pid," ip", ip, "port", port)
+
 		var process *globals.Process
 
 		for i, blocked := range globals.MTSQueue {
@@ -307,6 +309,12 @@ func handleIOFinished() http.HandlerFunc {
 				globals.MTSQueue = append(globals.MTSQueue[:i], globals.MTSQueue[i+1:]...)
 				globals.MTSQueueMu.Unlock()
 			}
+		}
+
+		if process == nil {
+			slog.Error("No se encontró el proceso en MTSQueue para IO finished", "name", name, "pid", pid)
+			http.Error(w, "Process not found for IO finished", http.StatusNotFound)
+			return
 		}
 
 		if process.PCB.GetState() == pcb.SUSP_BLOCKED {

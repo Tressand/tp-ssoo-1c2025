@@ -9,7 +9,7 @@ import (
 	"ssoo-kernel/globals"
 	"ssoo-kernel/queues"
 	"ssoo-utils/httputils"
-	logger "ssoo-utils/logger"
+	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	"time"
 )

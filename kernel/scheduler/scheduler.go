@@ -178,8 +178,6 @@ func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
 
 func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
-	slog.Debug("Se agrega al proceso a EXEC", "pid", process.PCB.GetPID())
-
 	queues.Enqueue(pcb.EXEC, process)
 
 	slog.Debug("Se asocia el proceso a la CPU", "pid", process.PCB.GetPID(), "cpuID", cpu.ID)

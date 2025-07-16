@@ -197,27 +197,38 @@ func RecieveSyscall() http.HandlerFunc {
 			device := instruction.Args[0]
 			timeMs, _ := strconv.Atoi(instruction.Args[1])
 
-			var selectedIO *globals.IOConnection
+			
+			iosConNombre := make([]*globals.IOConnection, 0)
 
 			for _, io := range globals.AvailableIOs {
 				if io.Name == device {
-					selectedIO = io
-					break
+					iosConNombre = append(iosConNombre, io)
 				}
 			}
 
-			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
-			shared.FreeCPU(process)
-			shared.UpdateBurstEstimation(process)
-
-			if selectedIO == nil {
+			if len(iosConNombre) == 0 {
 				queues.Enqueue(pcb.EXIT, process)
 				shared.TerminateProcess(process)
-
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Dispositivo IO no existe - process terminado"))
 				return
 			}
+
+			// Buscar una IO disponible
+			selectedIO := (*globals.IOConnection)(nil)
+			globals.AvIOmu.Lock()
+			for _, io := range iosConNombre {
+				if io.Disp {
+					selectedIO = io
+					io.Disp = false
+					break
+				}
+			}
+			globals.AvIOmu.Unlock()
+			
+			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			shared.FreeCPU(process)
+			shared.UpdateBurstEstimation(process)
 
 			queues.Enqueue(pcb.BLOCKED, process)
 			blocked := CreateBlocked(process, device, timeMs)
@@ -225,16 +236,16 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.MTSQueueMu.Lock()
 			globals.MTSQueue = append(globals.MTSQueue, blocked)
 			globals.MTSQueueMu.Unlock()
-
 			UnlockMTS()
 
-			if selectedIO.Disp {
-				globals.AvIOmu.Lock()
-				selectedIO.Disp = false
-				globals.AvIOmu.Unlock()
-
-				globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
+			if selectedIO != nil {
+				blocked.Working = true
+			}else {
+				return
 			}
+
+			globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
+			
 		case codeutils.INIT_PROC:
 			codePath := instruction.Args[0]
 			size, _ := strconv.Atoi(instruction.Args[1])
@@ -264,6 +275,7 @@ func CreateBlocked(process *globals.Process, name string, time int) *globals.Blo
 	blocked.Process.TimerStarted = false
 	blocked.Name = name
 	blocked.Time = time
+	blocked.Working = false
 	return blocked
 }
 

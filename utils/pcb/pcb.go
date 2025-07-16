@@ -62,7 +62,13 @@ func (pcb *PCB) SetState(newState STATE) {
 	metrics := &pcb.k_metrics
 	metrics.Sequence_list = append(metrics.Sequence_list, newState)
 	metrics.Instants_list = append(metrics.Instants_list, time.Now())
-	metrics.Frequency[newState]++
+
+	if pcb.state == NEW {
+		metrics.Frequency[newState] = 1
+	}else{
+		metrics.Frequency[newState]++
+	}
+	
 	if len(metrics.Instants_list) > 1 {
 		lastDuration := metrics.Instants_list[len(metrics.Instants_list)-1].Sub(metrics.Instants_list[len(metrics.Instants_list)-2])
 		metrics.Time_spent[newState] += lastDuration
