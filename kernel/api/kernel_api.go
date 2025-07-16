@@ -8,7 +8,7 @@ import (
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
 	"ssoo-kernel/queues"
-	process_shared "ssoo-kernel/shared"
+	"ssoo-kernel/shared"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
@@ -73,8 +73,8 @@ func HandleReason(pid uint, pc int, reason string) {
 		return
 	}
 
-	process_shared.FreeCPU(process)
-	process_shared.UpdateBurstEstimation(process)
+	shared.FreeCPU(process)
+	shared.UpdateBurstEstimation(process)
 
 	switch reason {
 	case "Interrupt":
@@ -83,7 +83,7 @@ func HandleReason(pid uint, pc int, reason string) {
 	case "Exit":
 		logger.Instance.Info(fmt.Sprintf("El proceso con el pid %d fue finalizado por la CPU", pid))
 		queues.Enqueue(pcb.EXIT, process)
-		process_shared.TerminateProcess(process)
+		shared.TerminateProcess(process)
 	}
 }
 
@@ -121,7 +121,7 @@ func ReceivePidPcReason() http.HandlerFunc {
 			return
 		}
 
-		HandleReason(pidUint, pcInt, reason) // ????
+		HandleReason(pidUint, pcInt, reason)
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Reason received successfully"))
@@ -170,7 +170,6 @@ func RecieveSyscall() http.HandlerFunc {
 			device := instruction.Args[0]
 			timeMs, _ := strconv.Atoi(instruction.Args[1])
 
-			/* Ahora mismo, si esta ocupado, sigue con la ejecución, pero se bloquea si la envia.*/
 			var selectedIO *globals.IOConnection
 
 			for _, io := range globals.AvailableIOs {
@@ -181,11 +180,12 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 
 			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
-			process_shared.FreeCPU(process)
+			shared.FreeCPU(process)
+			shared.UpdateBurstEstimation(process)
 
 			if selectedIO == nil {
 				queues.Enqueue(pcb.EXIT, process)
-				process_shared.TerminateProcess(process)
+				shared.TerminateProcess(process)
 
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Dispositivo IO no existe - process terminado"))
@@ -193,10 +193,10 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 
 			queues.Enqueue(pcb.BLOCKED, process)
-			blockedByIO := CreateBlockedByIO(process, device, timeMs)
+			blocked := CreateBlocked(process, device, timeMs)
 
 			globals.MTSQueueMu.Lock()
-			globals.MTSQueue = append(globals.MTSQueue, blockedByIO)
+			globals.MTSQueue = append(globals.MTSQueue, blocked)
 			globals.MTSQueueMu.Unlock()
 
 			UnlockMTS()
@@ -211,7 +211,7 @@ func RecieveSyscall() http.HandlerFunc {
 		case codeutils.INIT_PROC:
 			codePath := instruction.Args[0]
 			size, _ := strconv.Atoi(instruction.Args[1])
-			process_shared.CreateProcess(codePath, size)
+			shared.CreateProcess(codePath, size)
 
 		case codeutils.DUMP_MEMORY:
 			DUMP_MEMORY(process)
@@ -219,8 +219,8 @@ func RecieveSyscall() http.HandlerFunc {
 		case codeutils.EXIT:
 			process := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 			queues.Enqueue(pcb.EXIT, process)
-			process_shared.TerminateProcess(process)
-			process_shared.FreeCPU(process) // Liberar el CPU asociado al proceso
+			shared.TerminateProcess(process)
+			shared.FreeCPU(process)
 		default:
 			http.Error(w, "Opcode no reconocido", http.StatusBadRequest)
 			return
@@ -231,13 +231,13 @@ func RecieveSyscall() http.HandlerFunc {
 	}
 }
 
-func CreateBlockedByIO(process *globals.Process, name string, time int) *globals.BlockedByIO {
-	blockedByIO := new(globals.BlockedByIO)
-	blockedByIO.Process = process
-	blockedByIO.Name = name
-	blockedByIO.Time = time
-	blockedByIO.TimerStarted = false
-	return blockedByIO
+func CreateBlocked(process *globals.Process, name string, time int) *globals.Blocked {
+	blocked := new(globals.Blocked)
+	blocked.Process = process
+	blocked.Process.TimerStarted = false
+	blocked.Name = name
+	blocked.Time = time
+	return blocked
 }
 
 func UnlockMTS() {
@@ -256,6 +256,9 @@ func DUMP_MEMORY(process *globals.Process) {
 	}
 
 	queues.Enqueue(pcb.BLOCKED, process)
+
+	shared.FreeCPU(process)
+	shared.UpdateBurstEstimation(process)
 
 	go func(p *globals.Process) {
 		success := HandleDumpMemory(p)
@@ -280,7 +283,7 @@ func DUMP_MEMORY(process *globals.Process) {
 			}
 
 			queues.Enqueue(pcb.EXIT, p)
-			process_shared.TerminateProcess(p)
+			shared.TerminateProcess(p)
 		}
 	}(process)
 }

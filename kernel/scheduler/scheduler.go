@@ -251,10 +251,10 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
 	return nil
 }
 
-func withoutTimerStarted() []*globals.BlockedByIO {
-	list := make([]*globals.BlockedByIO, 0)
+func withoutTimerStarted() []*globals.Blocked {
+	list := make([]*globals.Blocked, 0)
 	for _, elem := range globals.MTSQueue {
-		if !elem.TimerStarted {
+		if !elem.Process.TimerStarted {
 			list = append(list, elem)
 		}
 	}
@@ -271,26 +271,30 @@ func MTS() {
 		}
 
 		for _, blocked := range forInitTimer {
-			blocked.TimerStarted = true
+			blocked.Process.TimerStarted = true
 			go sendToWait(blocked)
 		}
 	}
 }
 
-func sendToWait(blocked *globals.BlockedByIO) {
+func sendToWait(blocked *globals.Blocked) {
 	slog.Debug("Se inicia el timer para el proceso bloqueado por IO", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 	time.Sleep(time.Duration(config.Values.SuspensionTime) * time.Millisecond)
 	slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 
-	process := removeProcess(blocked)
+	if blocked.Process.PCB.GetState() != pcb.BLOCKED {
+		return
+	}
+
+	process := queues.RemoveByPID(blocked.Process.PCB.GetState(), blocked.Process.PCB.GetPID())
+
+	if process == nil {
+		return
+	}
 
 	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
 	requestSuspend(process)
-}
-
-func removeProcess(waiting *globals.BlockedByIO) *globals.Process {
-	return queues.RemoveByPID(waiting.Process.PCB.GetState(), waiting.Process.PCB.GetPID())
 }
 
 func requestSuspend(process *globals.Process) error {

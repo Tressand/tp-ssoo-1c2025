@@ -44,7 +44,7 @@ func newProcess(path string, size int) *globals.Process {
 	process.Size = size
 	process.LastRealBurst = 0
 	process.EstimatedBurst = float64(config.Values.InitialEstimate) / 1000.0
-
+	process.TimerStarted = false
 	return process
 }
 
@@ -91,12 +91,6 @@ func TryInititializeProcess(process *globals.Process) bool {
 		default:
 		}
 
-		select {
-		case globals.NewProcessInReadySignal <- struct{}{}:
-			slog.Debug("Replanificando STS")
-		default:
-		}
-
 		return true
 	}
 
@@ -130,8 +124,6 @@ func InititializeProcess(process *globals.Process) {
 		slog.Debug("Se desbloquea LTS que estaba bloqueado porque habia un proceso esperando para inicializarse")
 	default:
 	}
-
-	return
 }
 
 func isSmallerThanAll(process *globals.Process) bool {
