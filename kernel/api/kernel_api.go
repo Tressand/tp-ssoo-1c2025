@@ -34,7 +34,7 @@ func ReceiveCPU() http.HandlerFunc {
 			return
 		}
 
-		slog.Info("New CPU connected", "id", id, "ip", ip, "port", port)
+		slog.Info("Recibiendo CPU", "name", id, "ip", ip, "port", port)
 
 		cpu := new(globals.CPUConnection)
 		cpu.ID = id
