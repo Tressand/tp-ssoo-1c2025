@@ -45,20 +45,8 @@ func main() {
 	log := logger.Instance
 	log.Info("Arranca Kernel")
 
-	memoryPing := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "/ping",
-	})
-	_, err = http.Get(memoryPing)
-	if err != nil {
-		fmt.Println("Esperando a Memoria")
-	}
-	for err != nil {
-		time.Sleep(1 * time.Second)
-		_, err = http.Get(memoryPing)
-	}
-
+	var initialProcessFilename string
+	var initialProcessSize int
 	if len(os.Args) > 1 {
 		if len(os.Args) < 3 {
 			fmt.Println("Faltan argumentos! Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso] [...args]")
@@ -69,23 +57,21 @@ func main() {
 			fmt.Printf("El archivo de pseudocódigo '%s' no existe.\n", AbsolutepathFile)
 			return
 		}
-		pathFile := os.Args[1]
+		initialProcessFilename = os.Args[1]
 
+		var err error
 		processSizeStr := os.Args[2]
-		processSize, processSizeErr := strconv.Atoi(processSizeStr)
+		initialProcessSize, err = strconv.Atoi(processSizeStr)
 
-		if processSizeErr != nil {
-			fmt.Printf("Error al convertir el tamaño del proceso '%s' a entero: %v\n", processSizeStr, processSizeErr)
+		if err != nil {
+			fmt.Printf("Error al convertir el tamaño del proceso '%s' a entero: %v\n", processSizeStr, err)
 			return
 		}
-
-		shared.CreateProcess(pathFile, processSize)
 	} else {
 		slog.Info("Activando funcionamiento por defecto.")
-		shared.CreateProcess("helloworld", 300)
+		initialProcessFilename = "helloworld"
+		initialProcessSize = 1024
 	}
-
-	// #endregion
 
 	// #region CREATE SERVER
 
@@ -107,6 +93,24 @@ func main() {
 
 	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortKernel, mux, globals.ShutdownSignal)
 
+	// #endregion
+
+	memoryPing := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "/ping",
+	})
+	_, err = http.Get(memoryPing)
+	if err != nil {
+		fmt.Println("Esperando a Memoria")
+	}
+	for err != nil {
+		time.Sleep(1 * time.Second)
+		_, err = http.Get(memoryPing)
+	}
+
+	// #endregion
+
 	force_kill_chan := make(chan os.Signal, 1)
 	signal.Notify(force_kill_chan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -116,13 +120,13 @@ func main() {
 		globals.ClearAndExit()
 	}()
 
-	// #endregion
+	shared.CreateProcess(initialProcessFilename, initialProcessSize)
 
 	go scheduler.LTS()
 	go scheduler.STS()
 	go scheduler.MTS()
 
-	fmt.Println("Presione enter para iniciar el planificador de largo plazo...")
+	fmt.Print("\nPresione enter para iniciar el planificador de largo plazo...\n\n")
 	bufio.NewReader(os.Stdin).ReadString('\n')
 
 	globals.LTSStopped <- struct{}{}
@@ -184,7 +188,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 
 		if ioConnection == nil {
 			// If the IO is not available, we create a new IOConnection
-			slog.Info("New IO connection", "name", name, "ip", ip, "port", port)
+			slog.Info("Creada nueva instancia", "name", name)
 
 			ioConnection = CreateIOConnection(name, ip, port)
 

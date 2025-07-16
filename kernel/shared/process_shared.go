@@ -84,27 +84,23 @@ func sendToInitializeInMemory(pid uint, codePath string, size int) error {
 
 func TryInititializeProcess(process *globals.Process) bool {
 	err := sendToInitializeInMemory(process.PCB.GetPID(), process.GetPath(), process.Size)
-
-	if err == nil {
-		slog.Info("Se inicializo en memoria el proceso", "pid", process.PCB.GetPID(), "path", process.GetPath(), "size", process.Size)
-
-		queues.Enqueue(pcb.READY, process)
-
-		select {
-		case globals.STSEmpty <- struct{}{}:
-			slog.Debug("Desbloqueando STS porque hay procesos en READY")
-		default:
-		}
-
-		return true
+	if err != nil {
+		return false
 	}
 
-	slog.Info("No se pudo inicializar el proceso en Memoria", "pid", process.PCB.GetPID(), "error", err.Error())
-	return false
+	queues.Enqueue(pcb.READY, process)
+
+	select {
+	case globals.STSEmpty <- struct{}{}:
+	default:
+	}
+
+	return true
 }
 
 func InititializeProcess(process *globals.Process) {
 	initialized := TryInititializeProcess(process)
+	logger.RequiredLog(true, process.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": "NEW"})
 
 	if initialized {
 		return
@@ -154,16 +150,11 @@ func HandleNewProcess(process *globals.Process) {
 
 	if !initialized {
 		queues.Enqueue(pcb.NEW, process)
-		notifyNewProcessInNew()
-	}
-
-}
-
-func notifyNewProcessInNew() {
-	select {
-	case globals.LTSEmpty <- struct{}{}:
-		slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
-	default:
+		select {
+		case globals.LTSEmpty <- struct{}{}:
+			slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
+		default:
+		}
 	}
 }
 

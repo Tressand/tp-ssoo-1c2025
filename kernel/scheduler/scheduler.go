@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
 	"ssoo-kernel/queues"
@@ -20,8 +19,6 @@ import (
 
 func LTS() {
 	<-globals.LTSStopped
-	slog.Info("LTS iniciado - Planificando con algoritmo", "algoritmo", config.Values.ReadyIngressAlgorithm)
-
 	var sortBy queues.SortBy
 
 	switch config.Values.ReadyIngressAlgorithm {
@@ -30,8 +27,7 @@ func LTS() {
 	case "PMCP":
 		sortBy = queues.Size
 	default:
-		fmt.Fprintf(os.Stderr, "Algorithm not supported - %s\n", config.Values.ReadyIngressAlgorithm)
-		return
+		panic("algoritmo de largo plazo inválido")
 	}
 
 	for {
@@ -41,13 +37,11 @@ func LTS() {
 		}
 
 		var process *globals.Process
-		var queue pcb.STATE = pcb.SUSP_READY
 
-		process = queues.Dequeue(queue, sortBy)
+		process = queues.Dequeue(pcb.SUSP_READY, sortBy)
 
 		if process == nil {
-			queue = pcb.NEW
-			process = queues.Dequeue(queue, sortBy)
+			process = queues.Dequeue(pcb.NEW, sortBy)
 		}
 		if process == nil {
 			slog.Info("No hay procesos pendientes. Se bloquea hasta que se agregen procesos nuevos")
@@ -55,14 +49,12 @@ func LTS() {
 			continue
 		}
 
-		if queue == pcb.NEW {
-			slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID(), "queue", queue)
+		if process.PCB.GetState() == pcb.NEW {
+			slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID())
 			shared.InititializeProcess(process)
 		} else {
 
 			Unsuspend(process)
-
-			slog.Debug("ReadySuspended activo: proceso pasa directamente a READY", "pid", process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)
 			unlockSTS()
 		}
