@@ -2,10 +2,11 @@
   "ip_memory": "self",
   "port_memory": 8082,
   "port_kernel": 8081,
+  "log_level": "DEBUG",
+  
   "scheduler_algorithm": "FIFO",
   "ready_ingress_algorithm": "FIFO",
   "alpha": 1,
   "suspension_time": 1000,
-  "log_level": "DEBUG",
   "initial_estimate": 10000
 }
