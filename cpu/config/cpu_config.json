@@ -1,9 +1,9 @@
 {
-  "port_cpu": 8084,
+  "port_cpu": 8054,
   "ip_memory": "self",
   "port_memory": 8082,
   "ip_kernel": "self",
-  "port_kernel": 8001,
+  "port_kernel": 8081,
   "tlb_entries": 4,
   "tlb_replacement": "LRU",
   "cache_entries": 2,

@@ -170,3 +170,18 @@ func RemoveByPID(state pcb.STATE, pid uint) *globals.Process {
 	slog.Error("No hay proceso con pid en cola", "pid", pid, "queue", state)
 	return nil
 }
+
+
+func MostrarLasColas(){
+
+	states := []pcb.STATE{pcb.NEW, pcb.READY, pcb.BLOCKED, pcb.EXEC, pcb.SUSP_READY, pcb.SUSP_BLOCKED, pcb.EXIT}
+	for _, state := range states {
+		queue, _ := getQueueAndMutex(state)
+		pids := make([]uint, 0, len(*queue))
+		for _, proc := range *queue {
+			pids = append(pids, proc.PCB.GetPID())
+		}
+		slog.Info("Lista","Nombre",state.String(), "PIDs", pids)
+	}
+
+}

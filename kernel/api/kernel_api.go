@@ -312,6 +312,7 @@ func DUMP_MEMORY(process *globals.Process) {
 			}
 
 			queues.Enqueue(pcb.READY, p)
+			p.InMemory = false
 		} else {
 			slog.Info("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
 
@@ -351,5 +352,71 @@ func HandleDumpMemory(process *globals.Process) bool {
 	}
 
 	slog.Info("DUMP_MEMORY completado", "pid", pid)
+	return true
+}
+
+
+func RequestSuspend(process *globals.Process) error {
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "suspend",
+		Queries: map[string]string{
+			"pid": strconv.Itoa(int(process.PCB.GetPID())),
+		},
+	})
+
+	resp, err := http.Post(url, "text/plain", nil)
+
+	if err != nil {
+		logger.Instance.Error("Error al enviar solicitud de swap", "pid", process.PCB.GetPID(), "error", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Instance.Error("Swap rechazó la solicitud", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
+		return fmt.Errorf("swap request failed with status code %d", resp.StatusCode)
+	}
+
+	select {
+	case globals.RetryInitialization <- struct{}{}:
+		slog.Debug("Se desbloquea RetryInitialization porque se realizó un swap exitoso")
+	default:
+	}
+
+	process.InMemory = false
+
+	return nil
+}
+
+func Unsuspend(process *globals.Process) bool{
+
+	slog.Debug("Desbloqueando proceso", "pid", process.PCB.GetPID())
+
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "unsuspend",
+		Queries: map[string]string{
+			"pid": strconv.Itoa(int(process.PCB.GetPID())),
+		},
+	})
+
+	resp, err := http.Post(url, "text/plain", nil)
+	if err != nil {
+		logger.Instance.Error("Error al enviar solicitud de unsuspend", "pid", process.PCB.GetPID(), "error", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Instance.Error("Memoria rechazó la solicitud de unsuspend", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
+		return false 
+	}
+
+	process.InMemory = true
+	slog.Info("Solicitud de unsuspend enviada correctamente", "pid", process.PCB.GetPID())
+
 	return true
 }

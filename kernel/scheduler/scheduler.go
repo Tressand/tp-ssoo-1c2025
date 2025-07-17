@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"ssoo-kernel/api"
 	"ssoo-kernel/config"
 	"ssoo-kernel/globals"
 	"ssoo-kernel/queues"
@@ -13,7 +14,6 @@ import (
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
-	"strconv"
 	"time"
 )
 
@@ -57,7 +57,7 @@ func LTS() {
 			shared.InititializeProcess(process)
 		} else {
 
-			Unsuspend(process)
+			kernel_api.Unsuspend(process)
 			queues.Enqueue(pcb.READY, process)
 			unlockSTS()
 		}
@@ -300,67 +300,7 @@ func sendToWait(blocked *globals.Blocked) {
 
 	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
-	requestSuspend(process)
-}
-
-func requestSuspend(process *globals.Process) error {
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "suspend",
-		Queries: map[string]string{
-			"pid": strconv.Itoa(int(process.PCB.GetPID())),
-		},
-	})
-
-	resp, err := http.Post(url, "text/plain", nil)
-
-	if err != nil {
-		logger.Instance.Error("Error al enviar solicitud de swap", "pid", process.PCB.GetPID(), "error", err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Instance.Error("Swap rechazó la solicitud", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
-		return fmt.Errorf("swap request failed with status code %d", resp.StatusCode)
-	}
-
-	select {
-	case globals.RetryInitialization <- struct{}{}:
-		slog.Debug("Se desbloquea RetryInitialization porque se realizó un swap exitoso")
-	default:
-	}
-
-	return nil
-}
-
-func Unsuspend(process *globals.Process){
-
-	slog.Debug("Desbloqueando proceso", "pid", process.PCB.GetPID())
-
-	url := httputils.BuildUrl(httputils.URLData{
-		Ip:       config.Values.IpMemory,
-		Port:     config.Values.PortMemory,
-		Endpoint: "unsuspend",
-		Queries: map[string]string{
-			"pid": strconv.Itoa(int(process.PCB.GetPID())),
-		},
-	})
-
-	resp, err := http.Post(url, "text/plain", nil)
-	if err != nil {
-		logger.Instance.Error("Error al enviar solicitud de unsuspend", "pid", process.PCB.GetPID(), "error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Instance.Error("Memoria rechazó la solicitud de unsuspend", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
-		return
-	}
-
-	slog.Info("Solicitud de unsuspend enviada correctamente", "pid", process.PCB.GetPID())
+	kernel_api.RequestSuspend(process)
 }
 
 func unlockSTS() {

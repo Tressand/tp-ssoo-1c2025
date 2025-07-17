@@ -108,6 +108,7 @@ type Process struct {
 	LastRealBurst  float64   // en segundos
 	EstimatedBurst float64   // estimación actual
 	TimerStarted   bool      // si se ha iniciado el timer en mts
+	InMemory bool // si el proceso está en memoria
 }
 
 var ReadySuspended = false
