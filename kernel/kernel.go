@@ -381,7 +381,6 @@ func handleIODisconnected() http.HandlerFunc {
 		}
 
 		if found {
-
 			w.WriteHeader(http.StatusOK)
 			w.Header().Set("Content-Type", "text/plain")
 			w.Write([]byte("Handling Disconnection!"))
@@ -408,15 +407,6 @@ func handleIODisconnected() http.HandlerFunc {
 				queues.Enqueue(pcb.EXIT, process)
 				shared.TerminateProcess(process)
 				slog.Info(fmt.Sprintf("Removed process %d from MTS queue due to IO disconnection", process.PCB.GetPID()))
-			}
-
-			indexDisconnected := slices.Index(globals.AvailableIOs, ioConnection)
-			if indexDisconnected != -1 {
-				globals.AvIOmu.Lock()
-				globals.AvailableIOs = append(globals.AvailableIOs[:indexDisconnected], globals.AvailableIOs[indexDisconnected+1:]...)
-				globals.AvIOmu.Unlock()
-			} else {
-				slog.Warn("No se encontró la IO para eliminar en AvailableIOs", "name", ioConnection.Name)
 			}
 		}()
 
