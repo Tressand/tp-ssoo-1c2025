@@ -381,7 +381,7 @@ func RequestSuspend(process *globals.Process) error {
 
 	select {
 	case globals.MTSEmpty <- struct{}{}:
-		slog.Debug("Se desbloquea RetryInitialization porque se realizó un swap exitoso")
+		slog.Debug("Se desbloquea MTS porque se realizó un swap exitoso")
 	default:
 	}
 

@@ -38,6 +38,11 @@ func LTS() {
 		
 		if process == nil {
 			slog.Info("No hay procesos pendientes. Se bloquea hasta que se agregen procesos nuevos")
+			select{
+				case globals.STSEmpty <- struct{}{}:
+					slog.Debug("Se desbloquea STS porque hay nuevos procesos en READY")
+				default:
+			}
 			<-globals.LTSEmpty
 			continue
 		}
@@ -273,14 +278,15 @@ func MTS() {
 			process := queues.Dequeue(pcb.SUSP_READY, sortBy)
 
 			if process == nil {
-				slog.Info("No hay procesos pendientes en SUSP_READY. Se bloquea MTS hasta que haya procesos en SUSP_BLOCKED")
+				slog.Info("No hay procesos pendientes en SUSP_READY. Se bloquea MTS")
 				break
 			}
 
 			if kernel_api.Unsuspend(process){
+				globals.RemoveBlockedByPID(process.PCB.GetPID())
 				queues.RemoveByPID(pcb.SUSP_READY, process.PCB.GetPID())
 				queues.Enqueue(pcb.READY, process)
-				unlockSTS()	
+				globals.UnlockSTS()	
 			} else{
 				noMemory = true
 				break
@@ -324,19 +330,4 @@ func sendToWait(blocked *globals.Blocked) {
 	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
 	kernel_api.RequestSuspend(process)
-}
-
-func unlockSTS() {
-	select {
-	case globals.STSEmpty <- struct{}{}:
-		slog.Debug("Desbloqueando STS porque hay procesos en READY")
-	default:
-		slog.Debug("STS ya desbloqueado, no se envía señal")
-	}
-	select {
-	case globals.CpuAvailableSignal <- struct{}{}:
-		slog.Debug("Desbloqueando STS porque hay procesos en READY")
-	default:
-		slog.Debug("STS ya desbloqueado, no se envía señal")
-	}
 }

@@ -2,6 +2,7 @@ package globals
 
 import (
 	"context"
+	"log/slog"
 	"fmt"
 	"net/http"
 	"os"
@@ -197,4 +198,31 @@ func MenorTiempoRestanteDeRafaga(procesos []*Process) *Process {
 	}
 
 	return maxProcess
+}
+
+func UnlockSTS() {
+	select {
+	case STSEmpty <- struct{}{}:
+		slog.Debug("Desbloqueando STS porque hay procesos en READY")
+	default:
+		slog.Debug("STS ya desbloqueado, no se envía señal")
+	}
+	select {
+	case CpuAvailableSignal <- struct{}{}:
+		slog.Debug("Desbloqueando STS porque hay procesos en READY")
+	default:
+		slog.Debug("STS ya desbloqueado, no se envía señal")
+	}
+}
+
+// removeBlockedByPID removes a blocked process from globals.MTSQueue by PID.
+func RemoveBlockedByPID(pid uint) {
+	for i, blocked := range MTSQueue {
+		if blocked.Process.PCB.GetPID() == pid {
+			MTSQueueMu.Lock()
+			MTSQueue = append(MTSQueue[:i], MTSQueue[i+1:]...)
+			MTSQueueMu.Unlock()
+			return
+		}
+	}
 }

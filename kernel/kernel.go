@@ -325,6 +325,7 @@ func handleIOFinished() http.HandlerFunc {
 		} else {
 			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)
+			globals.UnlockSTS()
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -370,6 +371,18 @@ func handleIODisconnected() http.HandlerFunc {
 			return
 		}
 
+		pidStr := query.Get("pid")
+		if pidStr == "" {
+			http.Error(w, "PID is required", http.StatusBadRequest)
+			return
+		}
+		pid,err := strconv.Atoi(pidStr)
+
+		if err != nil {
+			http.Error(w, "Invalid PID", http.StatusBadRequest)
+			return
+		}
+
 		var ioConnection *globals.IOConnection = getIO(name, ip, port)
 
 		if ioConnection == nil {
@@ -377,11 +390,46 @@ func handleIODisconnected() http.HandlerFunc {
 			return
 		}
 
-		go func() {
-			var indexesToKill []int
 
+		for _, blocked := range globals.MTSQueue {
+			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
+				
+				process := blocked.Process
+				globals.RemoveBlockedByPID(blocked.Process.PCB.GetPID())
+				queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+				queues.Enqueue(pcb.EXIT, process)
+				shared.TerminateProcess(process)
+				slog.Info(fmt.Sprintf("Removed process %d from MTS queue due to IO disconnection", process.PCB.GetPID()))
+				break
+			} 
+		}
+
+		indexDisconnected := slices.Index(globals.AvailableIOs, ioConnection)
+		globals.AvIOmu.Lock()
+		globals.AvailableIOs = append(globals.AvailableIOs[:indexDisconnected], globals.AvailableIOs[indexDisconnected+1:]...)
+		globals.AvIOmu.Unlock()
+		
+		found := false
+
+		for _, instance := range globals.AvailableIOs {
+			if instance.Name == name {
+				found = true
+			}
+		}
+
+		if found {
+
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte("Handling Disconnection!"))
+			return
+		}
+
+
+		go func() {
+			indexesToKill := make([]int, 0)
 			for index, blocked := range globals.MTSQueue {
-				if blocked.Name == ioConnection.Name {
+				if blocked.Name == ioConnection.Name{
 					indexesToKill = append(indexesToKill, index)
 					break
 				}
@@ -401,9 +449,13 @@ func handleIODisconnected() http.HandlerFunc {
 			}
 
 			indexDisconnected := slices.Index(globals.AvailableIOs, ioConnection)
-			globals.AvIOmu.Lock()
-			globals.AvailableIOs = append(globals.AvailableIOs[:indexDisconnected], globals.AvailableIOs[indexDisconnected+1:]...)
-			globals.AvIOmu.Unlock()
+			if indexDisconnected != -1 {
+				globals.AvIOmu.Lock()
+				globals.AvailableIOs = append(globals.AvailableIOs[:indexDisconnected], globals.AvailableIOs[indexDisconnected+1:]...)
+				globals.AvIOmu.Unlock()
+			} else {
+				slog.Warn("No se encontró la IO para eliminar en AvailableIOs", "name", ioConnection.Name)
+			}
 		}()
 
 		w.WriteHeader(http.StatusOK)

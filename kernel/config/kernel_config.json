@@ -5,7 +5,7 @@
   "scheduler_algorithm": "FIFO",
   "ready_ingress_algorithm": "FIFO",
   "alpha": 1,
-  "suspension_time": 3000,
+  "suspension_time": 120000,
   "log_level": "DEBUG",
-  "initial_estimate": 10000
+  "initial_estimate": 1000
 }
