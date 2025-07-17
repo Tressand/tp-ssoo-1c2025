@@ -1,0 +1,13 @@
+{
+  "port_memory": 8082,
+  "swapfile_path": "/swapfile.bin",
+  "dump_path": "/dump_files/",
+  "log_level": "INFO",
+  
+  "memory_size": 2048,
+  "page_size": 32,
+  "entries_per_page": 4,
+  "number_of_levels": 3,
+  "memory_delay": 500,
+  "swap_delay": 5000
+}

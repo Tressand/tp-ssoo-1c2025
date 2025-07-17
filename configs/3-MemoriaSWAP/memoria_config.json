@@ -1,8 +1,8 @@
 {
   "port_memory": 8082,
-  "dump_path": "/dump_files/",
   "swapfile_path": "/swapfile.bin",
-  "log_level": "DEBUG",
+  "dump_path": "/dump_files/",
+  "log_level": "INFO",
   
   "memory_size": 512,
   "page_size": 32,

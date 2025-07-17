@@ -1,6 +1,5 @@
 {
   "ip_kernel": "self",
   "port_kernel": 8081,
-  "log_level": "DEBUG",
-  "show_menu": false
+  "log_level": "DEBUG"
 }
