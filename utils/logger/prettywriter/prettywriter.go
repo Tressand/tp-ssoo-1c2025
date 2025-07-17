@@ -41,14 +41,19 @@ func (cw *PrettyWriter) Write(p []byte) (n int, err error) {
 }
 
 func prettyfy(entry map[string]any) string {
-	time, err := time.Parse("2006-01-02T15:04:05.999999999-07:00", fmt.Sprint(entry["time"]))
+	var logTime time.Time
+	var err error
+	logTime, err = time.Parse("2006-01-02T15:04:05.999999999Z", fmt.Sprint(entry["time"]))
 	if err != nil {
-		fmt.Println("time conversion failed!")
-		fmt.Println(fmt.Sprint(entry["time"]))
-		fmt.Println(err.Error())
+		logTime, err = time.Parse("2006-01-02T15:04:05.999999999-07:00", fmt.Sprint(entry["time"]))
+		if err != nil {
+			fmt.Println("time conversion failed!")
+			fmt.Println(fmt.Sprint(entry["time"]))
+			fmt.Println(err.Error())
+		}
 	}
 	var str string
-	str += fmt.Sprintf("[%s]", time.Format("15:04:05.9999"))
+	str += fmt.Sprintf("[%s]", logTime.Format("15:04:05.9999"))
 	if name, ok := entry["name"]; ok {
 		str += fmt.Sprintf(" (%v)", name)
 		delete(entry, "name")
