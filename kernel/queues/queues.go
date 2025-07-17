@@ -151,7 +151,7 @@ func RemoveByPID(state pcb.STATE, pid uint) *globals.Process {
 			return proc
 		}
 	}
-	slog.Error("No hay proceso con pid en cola", "pid", pid, "queue", state)
+	slog.Error("No hay proceso con pid en cola", "pid", pid, "queue", state.String())
 	return nil
 }
 

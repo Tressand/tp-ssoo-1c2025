@@ -87,6 +87,7 @@ type Blocked struct {
 	Name    string
 	Time    int
 	Working bool
+	DUMP_MEMORY bool // si se debe hacer DUMP_MEMORY al desbloquear
 }
 
 type CPUConnection struct {

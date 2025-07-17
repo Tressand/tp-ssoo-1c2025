@@ -39,8 +39,10 @@ func UpdateBurstEstimation(process *globals.Process) {
 	process.LastRealBurst = realBurst
 	process.EstimatedBurst = newEstimate
 
-	slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
+	if config.Values.SchedulerAlgorithm == "SJF" || config.Values.SchedulerAlgorithm == "SRT" {
+		slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
 		process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
+	}
 }
 
 func newProcess(path string, size int) *globals.Process {

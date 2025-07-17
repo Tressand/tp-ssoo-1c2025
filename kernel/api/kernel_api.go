@@ -142,8 +142,13 @@ func RecieveSyscall() http.HandlerFunc {
 
 		cpuID := r.URL.Query().Get("id")
 
+		fmt.Println(" ")
+		fmt.Println("Recibiendo syscall de CPU:", cpuID)
+		fmt.Println(" ")
+
 		if cpuID == "" {
 			http.Error(w, "Parámetro 'id' requerido", http.StatusBadRequest)
+			slog.Error("Parámetro 'id' requerido en Syscall")
 			return
 		}
 
@@ -151,11 +156,13 @@ func RecieveSyscall() http.HandlerFunc {
 
 		if processPC == "" {
 			http.Error(w, "Parámetro 'pc' requerido", http.StatusBadRequest)
+			slog.Error("Parámetro 'pc' requerido en Syscall")
 			return
 		}
 		processPCInt, err := strconv.Atoi(processPC)
 		if err != nil {
 			http.Error(w, "Parámetro 'pc' inválido", http.StatusBadRequest)
+			slog.Error("Parámetro 'pc' inválido en Syscall", "error", err)
 			return
 		}
 
@@ -170,6 +177,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 		if process == nil {
 			http.Error(w, "No se encontró el proceso asociado al CPU", http.StatusBadRequest)
+			slog.Error("No se encontró el proceso asociado al CPU", "cpuID", cpuID)
 			return
 		}
 		
@@ -179,6 +187,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 		if err := json.NewDecoder(r.Body).Decode(&instruction); err != nil {
 			http.Error(w, "Error al parsear JSON de instrucción: "+err.Error(), http.StatusBadRequest)
+			slog.Error("Error al parsear JSON de instrucción", "error", err)
 			return
 		}
 
@@ -252,6 +261,19 @@ func RecieveSyscall() http.HandlerFunc {
 			shared.CreateProcess(codePath, size)
 
 		case codeutils.DUMP_MEMORY:
+
+			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+			shared.FreeCPU(process)
+			shared.UpdateBurstEstimation(process)
+
+			queues.Enqueue(pcb.BLOCKED, process)
+			blocked := CreateBlocked(process, "", 0)
+			blocked.Working = true
+
+			globals.MTSQueueMu.Lock()
+			globals.MTSQueue = append(globals.MTSQueue, blocked)
+			globals.MTSQueueMu.Unlock()
+
 			DUMP_MEMORY(process)
 
 		case codeutils.EXIT:
@@ -276,6 +298,7 @@ func CreateBlocked(process *globals.Process, name string, time int) *globals.Blo
 	blocked.Name = name
 	blocked.Time = time
 	blocked.Working = false
+	blocked.DUMP_MEMORY = false //variable para saber si se hace DUMP_MEMORY sobre el proceso
 	return blocked
 }
 
@@ -288,16 +311,6 @@ func UnlockMTS() {
 }
 
 func DUMP_MEMORY(process *globals.Process) {
-	removedProcess := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
-
-	if removedProcess == nil {
-		return
-	}
-
-	queues.Enqueue(pcb.BLOCKED, process)
-
-	shared.FreeCPU(process)
-	shared.UpdateBurstEstimation(process)
 
 	go func(p *globals.Process) {
 		success := HandleDumpMemory(p)
@@ -305,18 +318,33 @@ func DUMP_MEMORY(process *globals.Process) {
 		if success {
 			slog.Info("Proceso desbloqueado tras syscall DUMP_MEMORY exitosa", "pid", p.PCB.GetPID())
 
-			removedProcess = queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+			removedProcess := queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
 
 			if removedProcess == nil {
 				return
 			}
+			
+			for i, blocked := range globals.MTSQueue {
+				if blocked.Process.PCB.GetPID() == p.PCB.GetPID() {
+					globals.MTSQueueMu.Lock()
+					globals.MTSQueue = append(globals.MTSQueue[:i], globals.MTSQueue[i+1:]...)
+					globals.MTSQueueMu.Unlock()
+					break
+				}
+			}
 
 			queues.Enqueue(pcb.READY, p)
-			p.InMemory = false
+
+			for _,process := range globals.ReadyQueue{
+				slog.Debug("Proceso en READY tras DUMP_MEMORY", "pid", process.PCB.GetPID())
+			}
+
+
+			UnlockMTS()
 		} else {
 			slog.Info("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
 
-			removedProcess = queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
+			removedProcess := queues.RemoveByPID(p.PCB.GetState(), p.PCB.GetPID())
 
 			if removedProcess == nil {
 				return

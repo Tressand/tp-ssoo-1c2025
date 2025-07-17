@@ -76,6 +76,8 @@ func STS() {
 
 	for {
 		if shared.IsCPUAvailable() {
+
+			slog.Info("CPU disponible, asignando proceso")
 			cpu := shared.GetAvailableCPU()
 			process := queues.Dequeue(pcb.READY, sortBy)
 
@@ -84,12 +86,16 @@ func STS() {
 				<-globals.STSEmpty
 				continue
 			}
+			slog.Info("Proceso encontrado en READY", "pid", process.PCB.GetPID())
 
 			sendToExecute(process, cpu)
 			continue
 		}
 
 		if ShouldTryInterrupt() {
+
+			slog.Info("Se analiza Interrupción de CPU")
+
 			process := queues.Search(pcb.READY, sortBy)
 
 			if process == nil {
@@ -175,12 +181,16 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		return
 	}
 
+	fmt.Println()
 	logger.RequiredLog(true, process.PCB.GetPID(),
 		fmt.Sprintf("Pasa del estado %s al estado %s",pcb.READY.String(), pcb.EXEC.String()),
 		map[string]string{
 			"CPU": cpu.ID,
 		},
 	)
+	for _,exec := range globals.ExecQueue{
+		slog.Debug("Ejecutando proceso en CPU", "pid", exec.PCB.GetPID())
+	}
 
 	queues.Enqueue(pcb.EXEC, process)
 
@@ -268,7 +278,7 @@ func MTS() {
 
 		for _, blocked := range globals.MTSQueue {
 
-			if !blocked.Process.TimerStarted {
+			if !blocked.Process.TimerStarted  && !blocked.DUMP_MEMORY{//evitar que se inicie el timer si ya se hizo DUMP_MEMORY
 				blocked.Process.TimerStarted = true
 				go sendToWait(blocked)
 			}
