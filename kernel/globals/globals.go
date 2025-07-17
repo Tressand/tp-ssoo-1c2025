@@ -141,3 +141,59 @@ func ClearAndExit() {
 	<-ShutdownSignal
 	os.Exit(0)
 }
+
+
+func TiempoRestanteDeRafaga(process *Process) float64 {
+
+	start := process.StartTime
+	estimado := process.EstimatedBurst
+	real := process.LastRealBurst
+	alpha := config.Values.InitialEstimate
+
+	siguiente := alpha*real + (1-alpha)*estimado
+
+	restante := siguiente - float64(time.Since(start).Milliseconds()) //cuanto le resta
+
+	if restante < 0 {
+		return 0
+	}
+	return restante
+}
+
+func MayorTiempoRestanteDeRafaga(procesos []*Process) *Process {
+	if len(procesos) == 0 {
+		return nil
+	}
+
+	maxProcess := procesos[0]
+	maxTime := TiempoRestanteDeRafaga(maxProcess)
+
+	for _, process := range procesos[1:] {
+		tiempoRestante := TiempoRestanteDeRafaga(process)
+		if tiempoRestante > maxTime {
+			maxTime = tiempoRestante
+			maxProcess = process
+		}
+	}
+
+	return maxProcess
+}
+
+func MenorTiempoRestanteDeRafaga(procesos []*Process) *Process {
+	if len(procesos) == 0 {
+		return nil
+	}
+
+	maxProcess := procesos[0]
+	maxTime := TiempoRestanteDeRafaga(maxProcess)
+
+	for _, process := range procesos[1:] {
+		tiempoRestante := TiempoRestanteDeRafaga(process)
+		if tiempoRestante > maxTime {
+			maxTime = tiempoRestante
+			maxProcess = process
+		}
+	}
+
+	return maxProcess
+}

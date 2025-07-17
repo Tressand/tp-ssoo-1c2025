@@ -1,6 +1,6 @@
 {
   "port_memory": 8082,
-  "memory_size": 1024,
+  "memory_size": 256,
   "page_size": 16,
   "entries_per_page": 4,
   "number_of_levels": 2,

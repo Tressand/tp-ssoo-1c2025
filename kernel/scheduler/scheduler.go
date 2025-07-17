@@ -32,6 +32,9 @@ func LTS() {
 
 	for {
 		if globals.WaitingForRetry {
+			fmt.Println("")
+			slog.Info("BLOQUEADO POR MEMORIA")
+			fmt.Println("")
 			<-globals.BlockedForMemory
 			continue
 		}
@@ -109,13 +112,13 @@ func STS() {
 				continue
 			}
 
-			cpu := GetCPUWithShortestBurst()
+			cpu := GetCPUWithLonguesBurst()
 
-			interrupt := cpu != nil && cpu.Process.EstimatedBurst > process.EstimatedBurst
+			interrupt := cpu != nil && globals.TiempoRestanteDeRafaga(cpu.Process) > process.EstimatedBurst
 
 			if interrupt {
 				err := interruptCPU(cpu, cpu.Process.PCB.GetPID())
-
+				
 				if err != nil {
 					slog.Error("Error al interrumpir proceso", "pid", cpu.Process.PCB.GetPID(), "error", err)
 					queues.Enqueue(pcb.READY, process)
@@ -143,14 +146,15 @@ func ShouldTryInterrupt() bool {
 	return config.Values.SchedulerAlgorithm == "SRT" && len(globals.AvailableCPUs) != 0
 }
 
-func GetCPUWithShortestBurst() *globals.CPUConnection {
-	minCPU := globals.AvailableCPUs[0]
+func GetCPUWithLonguesBurst() *globals.CPUConnection {
+
+	maxCPU := globals.AvailableCPUs[0]
 	for _, cpu := range globals.AvailableCPUs {
-		if cpu.Process != nil && cpu.Process.EstimatedBurst < minCPU.Process.EstimatedBurst {
-			minCPU = cpu
+		if cpu.Process != nil && globals.TiempoRestanteDeRafaga(cpu.Process) > globals.TiempoRestanteDeRafaga(maxCPU.Process) {
+			maxCPU = cpu
 		}
 	}
-	return minCPU
+	return maxCPU
 }
 
 func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
@@ -192,6 +196,8 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 	}
 
 	slog.Debug("Se envia a ejecutar el proceso", "PID", process.PCB.GetPID(), "CPU", cpu.ID)
+
+	process.StartTime = time.Now()
 
 	err := sendToWork(*cpu, request)
 
@@ -279,11 +285,12 @@ func MTS() {
 func sendToWait(blocked *globals.Blocked) {
 	slog.Debug("Se inicia el timer para el proceso bloqueado por IO", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 	time.Sleep(time.Duration(config.Values.SuspensionTime) * time.Millisecond)
-	slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 
 	if blocked.Process.PCB.GetState() != pcb.BLOCKED {
 		return
 	}
+
+	slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 
 	process := queues.RemoveByPID(blocked.Process.PCB.GetState(), blocked.Process.PCB.GetPID())
 
@@ -359,6 +366,12 @@ func Unsuspend(process *globals.Process){
 func unlockSTS() {
 	select {
 	case globals.STSEmpty <- struct{}{}:
+		slog.Debug("Desbloqueando STS porque hay procesos en READY")
+	default:
+		slog.Debug("STS ya desbloqueado, no se envía señal")
+	}
+	select {
+	case globals.CpuAvailableSignal <- struct{}{}:
 		slog.Debug("Desbloqueando STS porque hay procesos en READY")
 	default:
 		slog.Debug("STS ya desbloqueado, no se envía señal")

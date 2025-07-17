@@ -197,11 +197,14 @@ func TerminateProcess(process *globals.Process) {
 	defer resp.Body.Close()
 
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
-
+	
 	select {
+	case globals.LTSEmpty <- struct{}{}:
+		slog.Debug("Se libera memoria y hay procesos esperando para planificar. Se envia signal de desbloqueo de LTS")
 	case globals.RetryInitialization <- struct{}{}:
 		slog.Debug("Se libera memoria y hay procesos esperando para inicializarse. Se envia signal de reintento")
 	default:
+		slog.Debug("No hay procesos esperando para inicializarse, ni tampoco en Suspendido Ready.")
 	}
 }
 

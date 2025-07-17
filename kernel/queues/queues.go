@@ -57,7 +57,7 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 	for _, proc := range *queue {
 		pids = append(pids, proc.PCB.GetPID())
 	}
-	slog.Info("Lista SUSP_READY", "PIDs", pids)
+	slog.Info("Lista","Nombre",state.String(), "PIDs", pids)
 
 	mutex.Lock()
 	*queue = append(*queue, process)
@@ -77,6 +77,16 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 		default:
 		}
 	}
+	if actualState.String() == "EXIT" {
+
+		// Desbloquear el planificador LTS si está esperando
+		select {
+		case globals.LTSEmpty <- struct{}{}:
+			slog.Debug("Se desbloquea LTS porque se agregó un proceso a EXIT")
+			globals.ReadySuspended = true
+		default:
+		}
+	}
 }
 
 func Search(state pcb.STATE, sortBy SortBy) *globals.Process {
@@ -90,15 +100,15 @@ func Search(state pcb.STATE, sortBy SortBy) *globals.Process {
 	}
 
 	switch sortBy {
-	case Size:
-		sort.Slice(*queue, func(i, j int) bool {
-			return (*queue)[i].Size < (*queue)[j].Size
-		})
-	case EstimatedBurst:
-		sort.Slice(*queue, func(i, j int) bool {
-			return (*queue)[i].EstimatedBurst < (*queue)[j].EstimatedBurst
-		})
-	case NoSort:
+		case Size:
+			sort.Slice(*queue, func(i, j int) bool {
+				return (*queue)[i].Size < (*queue)[j].Size
+			})
+		case EstimatedBurst:
+			sort.Slice(*queue, func(i, j int) bool {
+				return (*queue)[i].EstimatedBurst < (*queue)[j].EstimatedBurst
+			})
+		case NoSort:
 	}
 
 	return (*queue)[0]
