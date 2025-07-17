@@ -320,7 +320,8 @@ func handleIOFinished() http.HandlerFunc {
 		if process.PCB.GetState() == pcb.SUSP_BLOCKED {
 			queues.RemoveByPID(pcb.SUSP_BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.SUSP_READY, process)
-
+			kernel_api.UnlockMTS()
+			
 		} else {
 			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)

@@ -63,30 +63,14 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 	*queue = append(*queue, process)
 	mutex.Unlock()
 
-	logger.RequiredLog(true, process.PCB.GetPID(),
-		fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
-		map[string]string{},
-	)
-	if actualState.String() == "SUSP_READY" {
-
-		// Desbloquear el planificador LTS si está esperando
-		select {
-		case globals.LTSEmpty <- struct{}{}:
-			slog.Debug("Se desbloquea LTS porque se agregó un proceso a SUSP_READY")
-			globals.ReadySuspended = true
-		default:
-		}
+	if state != pcb.EXEC{
+		logger.RequiredLog(true, process.PCB.GetPID(),
+			fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
+			map[string]string{},
+		)
 	}
-	if actualState.String() == "EXIT" {
 
-		// Desbloquear el planificador LTS si está esperando
-		select {
-		case globals.LTSEmpty <- struct{}{}:
-			slog.Debug("Se desbloquea LTS porque se agregó un proceso a EXIT")
-			globals.ReadySuspended = true
-		default:
-		}
-	}
+	
 }
 
 func Search(state pcb.STATE, sortBy SortBy) *globals.Process {

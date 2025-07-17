@@ -17,6 +17,8 @@ import (
 	"time"
 )
 
+//#region LTS
+
 func LTS() {
 	<-globals.LTSStopped
 	var sortBy queues.SortBy
@@ -31,39 +33,22 @@ func LTS() {
 	}
 
 	for {
-		if globals.WaitingForRetry {
-			fmt.Println("")
-			slog.Info("BLOQUEADO POR MEMORIA")
-			fmt.Println("")
-			<-globals.BlockedForMemory
-			continue
-		}
 
-		var process *globals.Process
-
-		process = queues.Dequeue(pcb.SUSP_READY, sortBy)
-
-		if process == nil {
-			process = queues.Dequeue(pcb.NEW, sortBy)
-		}
+		var process = queues.Dequeue(pcb.NEW, sortBy)
+		
 		if process == nil {
 			slog.Info("No hay procesos pendientes. Se bloquea hasta que se agregen procesos nuevos")
 			<-globals.LTSEmpty
 			continue
 		}
-
-		if process.PCB.GetState() == pcb.NEW {
-			slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID())
-			shared.InititializeProcess(process)
-		} else {
-
-			kernel_api.Unsuspend(process)
-			queues.Enqueue(pcb.READY, process)
-			unlockSTS()
-		}
 		
+		slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID())
+		shared.InititializeProcess(process)
 	}
 }
+
+//#endregion
+//#region STS
 
 func STS() {
 	slog.Info("STS iniciado")
@@ -92,11 +77,8 @@ func STS() {
 			if process == nil {
 				slog.Info("Se bloquea STS porque no hay procesos en READY")
 				<-globals.STSEmpty
-				slog.Info("Se desbloquea STS porque hay nuevos procesos en READY")
 				continue
 			}
-
-			slog.Debug("STS encontró un proceso en READY", "pid", process.PCB.GetPID())
 
 			sendToExecute(process, cpu)
 			continue
@@ -108,7 +90,6 @@ func STS() {
 			if process == nil {
 				slog.Info("Se bloquea STS porque no hay procesos en READY")
 				<-globals.STSEmpty
-				slog.Info("Se desbloquea STS porque hay nuevos procesos en READY")
 				continue
 			}
 
@@ -141,6 +122,8 @@ func STS() {
 		slog.Debug("Se desbloquea STS porque hay CPUs disponibles")
 	}
 }
+
+//#endregion
 
 func ShouldTryInterrupt() bool {
 	return config.Values.SchedulerAlgorithm == "SRT" && len(globals.AvailableCPUs) != 0
@@ -182,9 +165,19 @@ func interruptCPU(cpu *globals.CPUConnection, pid uint) error {
 
 func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
-	queues.Enqueue(pcb.EXEC, process)
+	if process.PCB.GetState() == pcb.EXIT {
+		slog.Error("Intento de asignar proceso en EXIT a CPU", "pid", process.PCB.GetPID())
+		return
+	}
 
-	slog.Debug("Se asocia el proceso a la CPU", "pid", process.PCB.GetPID(), "cpuID", cpu.ID)
+	logger.RequiredLog(true, process.PCB.GetPID(),
+		fmt.Sprintf("Pasa del estado %s al estado %s",pcb.READY.String(), pcb.EXEC.String()),
+		map[string]string{
+			"CPU": cpu.ID,
+		},
+	)
+
+	queues.Enqueue(pcb.EXEC, process)
 
 	globals.AvCPUmu.Lock()
 	cpu.Process = process
@@ -195,13 +188,9 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		PC:  process.PCB.GetPC(),
 	}
 
-	slog.Debug("Se envia a ejecutar el proceso", "PID", process.PCB.GetPID(), "CPU", cpu.ID)
-
 	process.StartTime = time.Now()
 
 	err := sendToWork(*cpu, request)
-
-	slog.Debug("La CPU %d termino de trabajar con el proceso con el pid %d", cpu.ID, process.PCB.GetPID())
 
 	if err != nil {
 		slog.Debug(err.Error())
@@ -220,8 +209,6 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 		slog.Error("Error al enviar el proceso a la CPU", "error", err)
 		return
 	}
-
-	slog.Info("Proceso enviado a la CPU correctamente", "pid", process.PCB.GetPID(), "cpuID", cpu.ID)
 }
 
 func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
@@ -256,31 +243,67 @@ func sendToWork(cpu globals.CPUConnection, request globals.CPURequest) error {
 	return nil
 }
 
-func withoutTimerStarted() []*globals.Blocked {
-	list := make([]*globals.Blocked, 0)
-	for _, elem := range globals.MTSQueue {
-		if !elem.Process.TimerStarted {
-			list = append(list, elem)
-		}
-	}
-	return list
-}
+//#region MTS
 
 func MTS() {
+
+	var sortBy queues.SortBy
+	var noMemory = false
+
+	switch config.Values.ReadyIngressAlgorithm {
+	case "FIFO":
+		sortBy = queues.NoSort
+	case "PMCP":
+		sortBy = queues.Size
+	default:
+		panic("algoritmo de largo plazo inválido")
+	}
+
 	for {
-		forInitTimer := withoutTimerStarted()
 
-		if len(forInitTimer) == 0 {
-			<-globals.MTSEmpty
-			continue
+		for _, blocked := range globals.MTSQueue {
+
+			if !blocked.Process.TimerStarted {
+				blocked.Process.TimerStarted = true
+				go sendToWait(blocked)
+			}
 		}
 
-		for _, blocked := range forInitTimer {
-			blocked.Process.TimerStarted = true
-			go sendToWait(blocked)
+		for {
+			process := queues.Dequeue(pcb.SUSP_READY, sortBy)
+
+			if process == nil {
+				slog.Info("No hay procesos pendientes en SUSP_READY. Se bloquea MTS hasta que haya procesos en SUSP_BLOCKED")
+				break
+			}
+
+			if kernel_api.Unsuspend(process){
+				queues.RemoveByPID(pcb.SUSP_READY, process.PCB.GetPID())
+				queues.Enqueue(pcb.READY, process)
+				unlockSTS()	
+			} else{
+				noMemory = true
+				break
+			}
 		}
+
+		if !noMemory {
+			select {
+				case globals.RetryInitialization <- struct{}{}:
+					slog.Debug("Se desbloquea LTS porque hay procesos en NEW")
+				case globals.LTSEmpty <- struct{}{}:
+					slog.Debug("Se desbloquea LTS porque hay procesos en SUSP_READY")
+				default:
+			}
+
+		} else {
+			noMemory = false
+		}
+
+		<-globals.MTSEmpty
 	}
 }
+//#endregion
 
 func sendToWait(blocked *globals.Blocked) {
 	slog.Debug("Se inicia el timer para el proceso bloqueado por IO", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)

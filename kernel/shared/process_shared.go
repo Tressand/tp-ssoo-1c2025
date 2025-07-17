@@ -200,37 +200,9 @@ func TerminateProcess(process *globals.Process) {
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
 	queues.MostrarLasColas()
 
-	// Revisar SUSP_READY y traer procesos a memoria real si es posible
-	procesosTraidos := 0
-	for _, p := range globals.SuspReadyQueue {
-		// Suponiendo que hay un flag en Process para saber si está en memoria real
-		if !p.InMemory {
-			
-			valido := Unsuspend(p)
-			if valido{
-				p.InMemory = true
-				queues.Enqueue(pcb.READY, p)
-				procesosTraidos++
-				slog.Info("Proceso traído de swap a memoria real y puesto en READY", "pid", p.PCB.GetPID())
-			} else {
-				slog.Info("No se pudo traer proceso de swap a memoria real", "pid", p.PCB.GetPID())
-			}
-		}
-	}
-
-	if procesosTraidos > 0 {
-		slog.Info("Se trajeron procesos de SUSP_READY a memoria real y READY", "cantidad", procesosTraidos)
-		select {
-		case globals.STSEmpty <- struct{}{}:
-		default:
-		}
-	}
-
 	select {
-	case globals.LTSEmpty <- struct{}{}:
+	case globals.MTSEmpty <- struct{}{}:
 		slog.Debug("Se libera memoria y hay procesos esperando para planificar. Se envia signal de desbloqueo de LTS")
-	case globals.RetryInitialization <- struct{}{}:
-		slog.Debug("Se libera memoria y hay procesos esperando para inicializarse. Se envia signal de reintento")
 	default:
 		slog.Debug("No hay procesos esperando para inicializarse, ni tampoco en Suspendido Ready.")
 	}
