@@ -138,9 +138,9 @@ func main() {
 
 // #region SECTION: HANDLE IO CONNECTIONS
 
-func getIO(name string, ip string, port int) *globals.IOConnection {
+func getIO(name string, ip string, id string) *globals.IOConnection {
 	for _, io := range globals.AvailableIOs {
-		if io.Name == name && io.IP == ip && io.Port == port {
+		if io.Name == name && io.IP == ip && io.ID == id {
 			return io
 		}
 	}
@@ -163,19 +163,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		portStr := query.Get("port")
-
-		if portStr == "" {
-			http.Error(w, "Port is required", http.StatusBadRequest)
-			return
-		}
-
-		port, err := strconv.Atoi(portStr)
-
-		if err != nil {
-			http.Error(w, "Invalid port", http.StatusBadRequest)
-			return
-		}
+		id := query.Get("id")
 
 		name := query.Get("name")
 
@@ -184,13 +172,13 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		var ioConnection *globals.IOConnection = getIO(name, ip, port)
+		var ioConnection *globals.IOConnection = getIO(name, ip, id)
 
 		if ioConnection == nil {
 			// If the IO is not available, we create a new IOConnection
 			slog.Info("Creada nueva instancia", "name", name)
 
-			ioConnection = CreateIOConnection(name, ip, port)
+			ioConnection = CreateIOConnection(name, ip, id)
 
 			globals.AvIOmu.Lock()
 			globals.AvailableIOs = append(globals.AvailableIOs, ioConnection)
@@ -200,7 +188,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 		// check if there is a process waiting for this IO
 
 		for _, blocked := range globals.MTSQueue {
-			if blocked.Name == name && !blocked.Working{
+			if blocked.Name == name && !blocked.Working {
 				ioConnection.Disp = false
 				blocked.Working = true
 				slog.Info("Found waiting process for IO", "pid", blocked.Process.PCB.GetPID(), "ioName", name)
@@ -208,7 +196,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 				w.WriteHeader(http.StatusOK)
 				w.Header().Set("Content-Type", "text/plain")
 				w.Write([]byte(fmt.Sprintf("%d|%d", blocked.Process.PCB.GetPID(), blocked.Time)))
-				
+
 				return
 			}
 		}
@@ -224,11 +212,11 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 	}
 }
 
-func CreateIOConnection(name string, ip string, port int) *globals.IOConnection {
+func CreateIOConnection(name string, ip string, id string) *globals.IOConnection {
 	ioConnection := new(globals.IOConnection)
 	ioConnection.Name = name
 	ioConnection.IP = ip
-	ioConnection.Port = port
+	ioConnection.ID = id
 	ioConnection.Handler = make(chan globals.IORequest)
 	ioConnection.Disp = true
 	return ioConnection
@@ -250,19 +238,7 @@ func handleIOFinished() http.HandlerFunc {
 			return
 		}
 
-		portStr := query.Get("port")
-
-		if portStr == "" {
-			http.Error(w, "Port is required", http.StatusBadRequest)
-			return
-		}
-
-		port, err := strconv.Atoi(portStr)
-
-		if err != nil {
-			http.Error(w, "Invalid port", http.StatusBadRequest)
-			return
-		}
+		id := query.Get("id")
 
 		name := query.Get("name")
 
@@ -285,20 +261,20 @@ func handleIOFinished() http.HandlerFunc {
 			return
 		}
 
-		if io := getIO(name, ip, port); io != nil {
+		if io := getIO(name, ip, id); io != nil {
 			globals.AvIOmu.Lock()
 			io.Disp = true
 			globals.AvIOmu.Unlock()
 		} else {
 			for _, io := range globals.AvailableIOs {
-				slog.Info("IO", "name", io.Name, "ip", io.IP, "port", io.Port, "disp", io.Disp)
+				slog.Info("IO", "name", io.Name, "ip", io.IP, "id", io.ID, "disp", io.Disp)
 			}
 
 			http.Error(w, "IO not found", http.StatusNotFound)
 			return
 		}
 
-		slog.Info("Handling IO finished", "name", name, "pid", pid," ip", ip, "port", port)
+		slog.Info("Handling IO finished", "name", name, "pid", pid, " ip", ip, "id", id)
 
 		var process *globals.Process
 
@@ -321,7 +297,7 @@ func handleIOFinished() http.HandlerFunc {
 			queues.RemoveByPID(pcb.SUSP_BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.SUSP_READY, process)
 			kernel_api.UnlockMTS()
-			
+
 		} else {
 			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)
@@ -350,19 +326,7 @@ func handleIODisconnected() http.HandlerFunc {
 			return
 		}
 
-		str_port := query.Get("port")
-
-		if str_port == "" {
-			http.Error(w, "Port is required", http.StatusBadRequest)
-			return
-		}
-
-		port, err := strconv.Atoi(str_port)
-
-		if err != nil {
-			http.Error(w, "Invalid Port", http.StatusBadRequest)
-			return
-		}
+		id := query.Get("id")
 
 		name := query.Get("name")
 
@@ -376,24 +340,23 @@ func handleIODisconnected() http.HandlerFunc {
 			http.Error(w, "PID is required", http.StatusBadRequest)
 			return
 		}
-		pid,err := strconv.Atoi(pidStr)
+		pid, err := strconv.Atoi(pidStr)
 
 		if err != nil {
 			http.Error(w, "Invalid PID", http.StatusBadRequest)
 			return
 		}
 
-		var ioConnection *globals.IOConnection = getIO(name, ip, port)
+		var ioConnection *globals.IOConnection = getIO(name, ip, id)
 
 		if ioConnection == nil {
 			http.Error(w, "IO connection not found, this IO was never connected", http.StatusNotFound)
 			return
 		}
 
-
 		for _, blocked := range globals.MTSQueue {
 			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
-				
+
 				process := blocked.Process
 				globals.RemoveBlockedByPID(blocked.Process.PCB.GetPID())
 				queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
@@ -401,14 +364,14 @@ func handleIODisconnected() http.HandlerFunc {
 				shared.TerminateProcess(process)
 				slog.Info(fmt.Sprintf("Removed process %d from MTS queue due to IO disconnection", process.PCB.GetPID()))
 				break
-			} 
+			}
 		}
 
 		indexDisconnected := slices.Index(globals.AvailableIOs, ioConnection)
 		globals.AvIOmu.Lock()
 		globals.AvailableIOs = append(globals.AvailableIOs[:indexDisconnected], globals.AvailableIOs[indexDisconnected+1:]...)
 		globals.AvIOmu.Unlock()
-		
+
 		found := false
 
 		for _, instance := range globals.AvailableIOs {
@@ -425,11 +388,10 @@ func handleIODisconnected() http.HandlerFunc {
 			return
 		}
 
-
 		go func() {
 			indexesToKill := make([]int, 0)
 			for index, blocked := range globals.MTSQueue {
-				if blocked.Name == ioConnection.Name{
+				if blocked.Name == ioConnection.Name {
 					indexesToKill = append(indexesToKill, index)
 					break
 				}

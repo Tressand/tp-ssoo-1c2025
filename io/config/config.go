@@ -9,7 +9,6 @@ import (
 type IOConfig struct {
 	IpKernel   string     `json:"ip_kernel"`
 	PortKernel int        `json:"port_kernel"`
-	PortIO     int        `json:"port_io"`
 	LogLevel   slog.Level `json:"log_level"`
 	ShowMenu   bool       `json:"show_menu"`
 }

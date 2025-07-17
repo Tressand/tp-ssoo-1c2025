@@ -27,7 +27,16 @@ var instances []struct {
 	pidptr *uint
 }
 
+var id string
+
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Faltan parámetros. Uso: ./io <identificador> ...[nombre]")
+		return
+	}
+	id := os.Args[1]
+	fmt.Println("Identificador recibido: ", id)
+
 	// #region SETUP
 
 	config.Load()
@@ -47,7 +56,7 @@ func main() {
 	var names []string
 	var count = -1
 	if len(os.Args) > 1 {
-		names = append(names, os.Args[1:]...)
+		names = append(names, os.Args[2:]...)
 		count = len(names)
 	}
 
@@ -138,7 +147,7 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 		Endpoint: "io-notify",
 		Queries: map[string]string{
 			"ip":   ip,
-			"port": fmt.Sprint(config.Values.PortIO),
+			"id":   id,
 			"name": fmt.Sprint(name), // NO TOCAR NUNCA
 			"pid":  fmt.Sprint(*pidptr)},
 	})
@@ -184,7 +193,7 @@ func notifyIOFinished(name string, pid int) {
 		Endpoint: "io-finished",
 		Queries: map[string]string{
 			"ip":   fmt.Sprint(httputils.GetOutboundIP()),
-			"port": fmt.Sprint(config.Values.PortIO),
+			"id":   id,
 			"name": name,
 			"pid":  fmt.Sprint(pid)},
 	})
@@ -219,7 +228,7 @@ func notifyIODisconnected(name string, pidptr *uint) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-disconnected",
-		Queries:  map[string]string{"ip": ip, "port": fmt.Sprint(config.Values.PortIO), "name": name, "pid": fmt.Sprint(*pidptr)},
+		Queries:  map[string]string{"ip": ip, "id": id, "name": name, "pid": fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {

@@ -2,8 +2,8 @@ package globals
 
 import (
 	"context"
-	"log/slog"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"ssoo-kernel/config"
@@ -72,7 +72,7 @@ var (
 type IOConnection struct {
 	Name    string
 	IP      string
-	Port    int
+	ID      string
 	Handler chan IORequest
 	Disp    bool
 }
@@ -83,10 +83,10 @@ type IORequest struct {
 }
 
 type Blocked struct {
-	Process *Process
-	Name    string
-	Time    int
-	Working bool
+	Process     *Process
+	Name        string
+	Time        int
+	Working     bool
 	DUMP_MEMORY bool // si se debe hacer DUMP_MEMORY al desbloquear
 }
 
@@ -110,7 +110,7 @@ type Process struct {
 	LastRealBurst  float64   // en segundos
 	EstimatedBurst float64   // estimación actual
 	TimerStarted   bool      // si se ha iniciado el timer en mts
-	InMemory bool // si el proceso está en memoria
+	InMemory       bool      // si el proceso está en memoria
 }
 
 var ReadySuspended = false
@@ -144,7 +144,6 @@ func ClearAndExit() {
 	<-ShutdownSignal
 	os.Exit(0)
 }
-
 
 func TiempoRestanteDeRafaga(process *Process) float64 {
 

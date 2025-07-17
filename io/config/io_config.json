@@ -1,7 +1,6 @@
 {
   "ip_kernel": "self",
   "port_kernel": 8081,
-  "port_io": 8075,
   "log_level": "DEBUG",
   "show_menu": false
 }
