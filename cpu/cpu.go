@@ -11,7 +11,6 @@ import (
 	"ssoo-cpu/config"
 	cache "ssoo-cpu/memory"
 	"ssoo-utils/codeutils"
-	"ssoo-utils/configManager"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/parsers"
@@ -45,9 +44,7 @@ func main() {
 	//cargar config
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
-	if !configManager.IsCompiledEnv() {
-		config.Values.PortCPU += identificador
-	}
+	config.Values.PortCPU += identificador
 
 	if config.Values.CacheEntries != 0 {
 		config.CacheEnable = true
@@ -253,13 +250,12 @@ func exec() int {
 	default:
 
 	}
-	
 
-	if status == -1{
+	if status == -1 {
 		return status
-	} else if !bloqueante{
+	} else if !bloqueante {
 		config.Pcb.PC++
-	}else{
+	} else {
 		bloqueante = false // Reseteamos el flag de bloqueante
 	}
 	return 0
@@ -290,7 +286,7 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 		Port:     config.Values.PortKernel,
 		Endpoint: endpoint,
 		Queries: map[string]string{
-			"id": fmt.Sprint(config.Identificador),
+			"id":  fmt.Sprint(config.Identificador),
 			"pid": fmt.Sprint(config.Pcb.PID),
 			"pc":  fmt.Sprint(config.Pcb.PC),
 		},
@@ -312,7 +308,7 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 
 func sendIO() int {
 
-	config.Pcb.PC++ // Incrementar PC antes de enviar la syscall
+	config.Pcb.PC++   // Incrementar PC antes de enviar la syscall
 	bloqueante = true // Indicar que la syscall es bloqueante
 
 	resp, err := sendSyscall("syscall", instruction)
@@ -366,10 +362,10 @@ func initProcess() int {
 }
 
 func dumpMemory() int {
-	
-	config.Pcb.PC++ // Incrementar PC antes de enviar la syscall
+
+	config.Pcb.PC++   // Incrementar PC antes de enviar la syscall
 	bloqueante = true // Indicar que la syscall es bloqueante
-	
+
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para dump memory.", "error", err)

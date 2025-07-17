@@ -1,0 +1,7 @@
+{
+  "ip_kernel": "self",
+  "port_kernel": 8081,
+  "port_io": 8071,
+  "log_level": "INFO",
+  "show_menu": false
+}

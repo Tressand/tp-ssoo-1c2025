@@ -39,9 +39,5 @@ func Load() {
 		Values.IpMemory = httputils.GetOutboundIP()
 	}
 
-	if configManager.IsCompiledEnv() {
-		Values.CodeFolder, _ = filepath.Abs(configManager.GetDefaultExePath() + "/code")
-	} else {
-		Values.CodeFolder, _ = filepath.Abs(configManager.GetDefaultExePath() + "/../code")
-	}
+	Values.CodeFolder, _ = filepath.Abs(configManager.GetDefaultExePath() + "/../code")
 }

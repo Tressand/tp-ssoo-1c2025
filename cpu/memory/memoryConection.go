@@ -10,6 +10,7 @@ import (
 	"ssoo-cpu/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
+	"ssoo-utils/parsers"
 	"strconv"
 	"strings"
 )
@@ -91,7 +92,7 @@ func FindMemoryConfig() bool {
 		return false
 	}
 
-	slog.Info("Configuración de memoria obtenida", "config", memoryConfig)
+	fmt.Println("Configuración de memoria obtenida:\n", parsers.Struct(config.Values))
 	config.MemoryConf = memoryConfig
 
 	return true
@@ -128,13 +129,13 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 		return nil, false
 	}
 
-	logicAddr,_ :=findLogigAddress(fisicAddr)
+	logicAddr, _ := findLogigAddress(fisicAddr)
 
-	logger.RequiredLog(false,uint(config.Pcb.PID),"OBTENER MARCO",map[string]string{
+	logger.RequiredLog(false, uint(config.Pcb.PID), "OBTENER MARCO", map[string]string{
 		"Pagina": fmt.Sprint(logicAddr),
-		"Marco": fmt.Sprint(fisicAddr[0]),
+		"Marco":  fmt.Sprint(fisicAddr[0]),
 	})
-	
+
 	return page, true
 }
 
@@ -167,9 +168,9 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 		return err
 	}
 
-	logger.RequiredLog(false,uint(config.Pcb.PID),"Memory Update",map[string]string{
+	logger.RequiredLog(false, uint(config.Pcb.PID), "Memory Update", map[string]string{
 		"Pagina": fmt.Sprint(addr[:len(addr)-1]),
-		"Frame": fmt.Sprint(frame_str[0]),
+		"Frame":  fmt.Sprint(frame_str[0]),
 	})
 
 	return nil

@@ -132,17 +132,15 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 
 	ip := httputils.GetOutboundIP()
 
-	port := strconv.Itoa(config.Values.PortKernel)
-
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-notify",
-		Queries:  map[string]string{
-			"ip": ip,
-			 "port": port,
-			  "name": fmt.Sprintf(name), // NO TOCAR NUNCA
-			   "pid": fmt.Sprint(*pidptr)},
+		Queries: map[string]string{
+			"ip":   ip,
+			"port": fmt.Sprint(config.Values.PortIO),
+			"name": fmt.Sprint(name), // NO TOCAR NUNCA
+			"pid":  fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
@@ -160,7 +158,7 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 			return false, nil
 		}
 		log.Error("Error on response", "Status", resp.StatusCode, "error", err)
-		return true, fmt.Errorf("response error: %w", err)
+		return false, fmt.Errorf("response error: %w", err)
 	}
 
 	data, _ := io.ReadAll(resp.Body)
@@ -184,11 +182,11 @@ func notifyIOFinished(name string, pid int) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-finished",
-		Queries:  map[string]string{
-			"ip": fmt.Sprint(httputils.GetOutboundIP()),
-			"port": fmt.Sprint(config.Values.PortKernel),
+		Queries: map[string]string{
+			"ip":   fmt.Sprint(httputils.GetOutboundIP()),
+			"port": fmt.Sprint(config.Values.PortIO),
 			"name": name,
-			"pid": fmt.Sprint(pid)},
+			"pid":  fmt.Sprint(pid)},
 	})
 	req, err := http.NewRequest(http.MethodPost, url, nil) // nil == no body
 	if err != nil {
@@ -217,13 +215,11 @@ func notifyIODisconnected(name string, pidptr *uint) {
 
 	ip := httputils.GetOutboundIP()
 
-	port := strconv.Itoa(config.Values.PortKernel)
-
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-disconnected",
-		Queries:  map[string]string{"ip": ip, "port": port, "name": name, "pid": fmt.Sprint(*pidptr)},
+		Queries:  map[string]string{"ip": ip, "port": fmt.Sprint(config.Values.PortIO), "name": name, "pid": fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
