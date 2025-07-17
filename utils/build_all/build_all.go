@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"ssoo-utils/configManager"
+	"strings"
 	"sync"
 	"time"
 )
@@ -15,7 +16,7 @@ type Module struct {
 	name            string
 	sourceDir       string
 	outputFile      string
-	configFile      string
+	configDir       string
 	startTimestamp  time.Time
 	finishTimestamp time.Time
 }
@@ -63,10 +64,10 @@ func main() {
 
 	// Define modules and their configurations
 	modules := []Module{
-		{"kernel", "ssoo-kernel", "kernel.exe", "kernel/config/kernel_config.json", time.Now(), time.Now()},
-		{"cpu", "ssoo-cpu", "cpu.exe", "cpu/config/cpu_config.json", time.Now(), time.Now()},
-		{"io", "ssoo-io", "io.exe", "io/config/io_config.json", time.Now(), time.Now()},
-		{"memoria", "ssoo-memoria", "memoria.exe", "memoria/config/memoria_config.json", time.Now(), time.Now()},
+		{"kernel", "ssoo-kernel", "kernel.exe", "kernel/config", time.Now(), time.Now()},
+		{"cpu", "ssoo-cpu", "cpu.exe", "cpu/config", time.Now(), time.Now()},
+		{"io", "ssoo-io", "io.exe", "io/config", time.Now(), time.Now()},
+		{"memoria", "ssoo-memoria", "memoria.exe", "memoria/config", time.Now(), time.Now()},
 	}
 	initialTimestamp := time.Now()
 
@@ -99,8 +100,8 @@ func buildModule(module *Module) {
 	module.startTimestamp = time.Now()
 
 	outputPath := filepath.Join(buildsDir, module.outputFile)
-	configSource := filepath.Join(scriptDir, module.configFile)
-	configDest := filepath.Join(configsDir, filepath.Base(module.configFile))
+	configSource := filepath.Join(scriptDir, module.configDir)
+	configDest := filepath.Join(buildsDir, "/config")
 
 	// Build the module
 	fmt.Printf("Building %s...\n", module.name)
@@ -122,13 +123,21 @@ func buildModule(module *Module) {
 
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
-	input, err := os.ReadFile(src)
+	dirs, err := os.ReadDir(src)
 	if err != nil {
 		return fmt.Errorf("failed to read source file: %w", err)
 	}
+	for _, dir := range dirs {
+		if strings.Contains(dir.Name(), ".json") {
+			input, err := os.ReadFile(src + "/" + dir.Name())
+			if err != nil {
+				return fmt.Errorf("failed to read source file: %w", err)
+			}
 
-	if err := os.WriteFile(dst, input, 0644); err != nil {
-		return fmt.Errorf("failed to write destination file: %w", err)
+			if err := os.WriteFile(dst+"/"+dir.Name(), input, 0644); err != nil {
+				return fmt.Errorf("failed to write destination file: %w", err)
+			}
+		}
 	}
 
 	return nil

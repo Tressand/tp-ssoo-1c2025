@@ -1,0 +1,14 @@
+{
+  "port_cpu": 8050,
+  "ip_memory": "self",
+  "port_memory": 8082,
+  "ip_kernel": "self",
+  "port_kernel": 8081,
+  "log_level": "INFO",
+
+  "tlb_entries": 4,
+  "tlb_replacement": "FIFO",
+  "cache_entries": 2,
+  "cache_replacement": "CLOCK",
+  "cache_delay": 50
+}

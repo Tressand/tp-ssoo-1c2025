@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"ssoo-utils/codeutils"
 	"ssoo-utils/configManager"
@@ -100,7 +101,7 @@ var Exec_values = Exec_valuesS{
 }
 var Instruccion string
 var Identificador int
-var configFilePath string = "/config/cpu_config.json"
+var configFilePath string = "/config"
 var (
 	InterruptChan = make(chan struct{}, 1) // Buffer para 1 señal
 	ExitChan      = make(chan struct{}, 1)
@@ -118,7 +119,7 @@ func SetFilePath(path string) {
 }
 
 func Load() {
-	configFilePath = configManager.GetDefaultExePath() + configFilePath
+	configFilePath = configManager.GetDefaultExePath() + configFilePath + "/cpu" + fmt.Sprint(Identificador) + "_config.json"
 
 	err := configManager.LoadConfig(configFilePath, &Values)
 	if err != nil {
