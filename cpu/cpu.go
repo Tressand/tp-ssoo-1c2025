@@ -366,6 +366,10 @@ func initProcess() int {
 }
 
 func dumpMemory() int {
+	
+	config.Pcb.PC++ // Incrementar PC antes de enviar la syscall
+	bloqueante = true // Indicar que la syscall es bloqueante
+	
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Fallo la solicitud para dump memory.", "error", err)
@@ -378,6 +382,7 @@ func dumpMemory() int {
 		return -1
 	}
 
+	config.InterruptChan <- struct{}{} // Interrupción al proceso
 	return 0
 }
 
