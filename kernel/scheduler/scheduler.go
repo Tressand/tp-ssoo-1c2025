@@ -344,7 +344,7 @@ func sendToWait(blocked *globals.Blocked) {
 	slog.Debug("Se inicia el timer para el proceso bloqueado por IO", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 
 	timer := time.After(time.Duration(config.Values.SuspensionTime) * time.Millisecond)
-	
+
 	select {
 	case <-timer:
 		slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)

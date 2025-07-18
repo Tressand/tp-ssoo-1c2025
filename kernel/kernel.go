@@ -283,6 +283,7 @@ func handleIOFinished() http.HandlerFunc {
 			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
 				process = blocked.Process
 
+				
 				if process.TimerRunning {
 					slog.Info("Se envia una señal para cancelar el timer...", "pid", pid)
 					blocked.CancelTimer <- struct{}{}
