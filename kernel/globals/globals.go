@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"ssoo-kernel/config"
@@ -106,8 +107,8 @@ type Process struct {
 	Path           string
 	Size           int
 	StartTime      time.Time // cuando entra a RUNNING
-	LastRealBurst  float64   // en segundos
-	EstimatedBurst float64   // estimación actual
+	LastRealBurst  int64   // en segundos
+	EstimatedBurst int64   // estimación actual
 	TimerRunning   bool      // si se ha iniciado el timer en mts
 	InMemory       bool      // si el proceso está en memoria
 }
@@ -144,16 +145,31 @@ func ClearAndExit() {
 	os.Exit(0)
 }
 
-func TiempoRestanteDeRafaga(process *Process) float64 {
+func UpdateBurstEstimation(process *Process) {
+
+	realBurst := time.Since(process.StartTime).Milliseconds()
+	previousEstimate := process.EstimatedBurst
+	alpha := config.Values.Alpha
+
+	newEstimatefloat := alpha*float64(realBurst) + (1-alpha)*float64(previousEstimate)
+	newEstimate := int64(math.Ceil(newEstimatefloat)) // redondeo hacia arriba
+
+	process.LastRealBurst = realBurst
+	process.EstimatedBurst = newEstimate
+
+	if config.Values.SchedulerAlgorithm == "SJF" || config.Values.SchedulerAlgorithm == "SRT" {
+
+		slog.Info(fmt.Sprintf("PID %d - Burst real: %dms - Estimada previa: %dms - Nueva estimación: %dms",
+			process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
+	} 
+}
+
+func TiempoRestanteDeRafaga(process *Process) int64 {
 
 	start := process.StartTime
 	estimado := process.EstimatedBurst
-	real := process.LastRealBurst
-	alpha := config.Values.InitialEstimate
 
-	siguiente := alpha*real + (1-alpha)*estimado
-
-	restante := siguiente - float64(time.Since(start).Milliseconds()) //cuanto le resta
+	restante := estimado - time.Since(start).Milliseconds() //cuanto le resta
 
 	if restante < 0 {
 		return 0

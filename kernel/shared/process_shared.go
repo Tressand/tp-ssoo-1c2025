@@ -12,7 +12,6 @@ import (
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
 	"strconv"
-	"time"
 )
 
 func CreateProcess(path string, size int) {
@@ -29,29 +28,13 @@ func CreateProcess(path string, size int) {
 	HandleNewProcess(process)
 }
 
-func UpdateBurstEstimation(process *globals.Process) {
-
-	realBurst := time.Since(process.StartTime).Seconds()
-	previousEstimate := process.EstimatedBurst
-
-	newEstimate := config.Values.Alpha*realBurst + (1-config.Values.Alpha)*previousEstimate
-
-	process.LastRealBurst = realBurst
-	process.EstimatedBurst = newEstimate
-
-	if config.Values.SchedulerAlgorithm == "SJF" || config.Values.SchedulerAlgorithm == "SRT" {
-		slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
-			process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
-	}
-}
-
 func newProcess(path string, size int) *globals.Process {
 	process := new(globals.Process)
 	process.PCB = pcb.Create(getNextPID(), path)
 	process.Path = path
 	process.Size = size
 	process.LastRealBurst = 0
-	process.EstimatedBurst = float64(config.Values.InitialEstimate) / 1000.0
+	process.EstimatedBurst = config.Values.InitialEstimate
 	process.TimerRunning = false
 	return process
 }

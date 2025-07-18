@@ -4,10 +4,10 @@
   "swapfile_path": "/swapfile.bin",
   "log_level": "DEBUG",
   
-  "memory_size": 512,
-  "page_size": 32,
-  "entries_per_page": 32,
-  "number_of_levels": 1,
+  "memory_size": 4096,
+  "page_size": 64,
+  "entries_per_page": 4,
+  "number_of_levels": 2,
   "memory_delay": 500,
-  "swap_delay": 2500
+  "swap_delay": 15000
 }

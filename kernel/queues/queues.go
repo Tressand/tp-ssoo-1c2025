@@ -63,12 +63,12 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 	*queue = append(*queue, process)
 	mutex.Unlock()
 
-	if state != pcb.EXEC {
-		logger.RequiredLog(true, process.PCB.GetPID(),
-			fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
-			map[string]string{},
-		)
-	}
+	fmt.Println()
+	logger.RequiredLog(true, process.PCB.GetPID(),"Pasa del estado",map[string]string{
+		"Estado Anterior": lastState.String(),
+		"Estado Actual":   actualState.String(),
+	})
+	fmt.Println()
 
 }
 
@@ -161,7 +161,7 @@ func MostrarLasColas(lugar string) {
 		queue, _ := getQueueAndMutex(state)
 		processes := make([]string, 0, len(*queue))
 		for _, proc := range *queue {
-			processes = append(processes, fmt.Sprintf("PID:%d(Burst:%.2f)", proc.PCB.GetPID(), proc.EstimatedBurst))
+			processes = append(processes, fmt.Sprintf("PID:%d(Burst:%d)", proc.PCB.GetPID(), proc.EstimatedBurst))
 		}
 		slog.Info("Lista", "Nombre", state.String(), "Procesos", processes)
 	}

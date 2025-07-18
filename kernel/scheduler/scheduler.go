@@ -122,6 +122,10 @@ func STS() {
 			interrupt := cpu != nil && cpu.Process != nil && globals.TiempoRestanteDeRafaga(cpu.Process) > process.EstimatedBurst
 
 			if interrupt {
+
+				slog.Debug("Se interrumpirá el proceso en EXEC", "pid", cpu.Process.PCB.GetPID(), "tiempo restante de rafaga", globals.TiempoRestanteDeRafaga(cpu.Process))
+				slog.Debug("Se enviará interrupción al proceso", "pid", process.PCB.GetPID(), "tiempo estimado de rafaga", process.EstimatedBurst)
+
 				err := interruptCPU(cpu, cpu.Process.PCB.GetPID())
 
 				if err != nil {

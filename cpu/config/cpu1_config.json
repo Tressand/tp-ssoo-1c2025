@@ -7,8 +7,8 @@
   "log_level": "INFO",
 
   "tlb_entries": 4,
-  "tlb_replacement": "FIFO",
+  "tlb_replacement": "LRU",
   "cache_entries": 2,
   "cache_replacement": "CLOCK",
-  "cache_delay": 50
+  "cache_delay": 250
 }

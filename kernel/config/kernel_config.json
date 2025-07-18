@@ -4,9 +4,9 @@
   "port_kernel": 8081,
   "log_level": "DEBUG",
   
-  "scheduler_algorithm": "FIFO",
+  "scheduler_algorithm": "SRT",
   "ready_ingress_algorithm": "FIFO",
   "alpha": 1,
   "suspension_time": 1000,
-  "initial_estimate": 10000
+  "initial_estimate": 120000
 }

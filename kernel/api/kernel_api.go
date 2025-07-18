@@ -80,7 +80,7 @@ func HandleReason(pid uint, pc int, reason string) {
 
 	process.PCB.SetPC(pc)
 	shared.FreeCPU(process)
-	shared.UpdateBurstEstimation(process)
+	globals.UpdateBurstEstimation(process)
 
 	switch reason {
 	case "Interrupt":
@@ -235,7 +235,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 			shared.FreeCPU(process)
-			shared.UpdateBurstEstimation(process)
+			globals.UpdateBurstEstimation(process)
 
 			queues.Enqueue(pcb.BLOCKED, process)
 			blocked := CreateBlocked(process, device, timeMs)
@@ -262,7 +262,7 @@ func RecieveSyscall() http.HandlerFunc {
 
 			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 			shared.FreeCPU(process)
-			shared.UpdateBurstEstimation(process)
+			globals.UpdateBurstEstimation(process)
 
 			queues.Enqueue(pcb.BLOCKED, process)
 			blocked := CreateBlocked(process, "", 0)
