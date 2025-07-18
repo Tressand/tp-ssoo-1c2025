@@ -410,6 +410,7 @@ func getFromSwap(data *process_data) (string, error) {
 
 	swapFile, err := os.OpenFile(config.Values.SwapfilePath, os.O_RDONLY, 0666)
 	if err != nil {
+		slog.Error(err.Error())
 		return "", err
 	}
 	defer swapFile.Close()
@@ -419,26 +420,31 @@ func getFromSwap(data *process_data) (string, error) {
 	for {
 		// Get pid from swap block
 		h_pid, err := numberFromReader(reader, '|')
+		slog.Info("get pid", "pid", h_pid)
 		if err != nil {
+			if err != io.EOF {
+				slog.Error(err.Error())
+			}
+			return "", err
+		}
+
+		data, err := reader.ReadString('~')
+		if err != nil {
+			if err != io.EOF {
+				slog.Error(err.Error())
+			}
 			return "", err
 		}
 
 		// Check if block pid is target pid
 		if uint(h_pid) == pid {
-			// Return swap block
-			data, err := reader.ReadString('~')
 			return data, err
 		}
-
-		// Skip until next block
-		h_pagecount, err := numberFromReader(reader, '\n')
+		_, err = reader.Discard(1)
 		if err != nil {
-			return "", err
-		}
-		// Discard brackets and endline "[]\n"(3), values and commas (pageSize * 2 - 1) for each page
-		// + discard page separator ~ and last \n (2)
-		_, err = reader.Discard((2+config.Values.PageSize*2)*h_pagecount + 2)
-		if err != nil {
+			if err != io.EOF {
+				slog.Error(err.Error())
+			}
 			return "", err
 		}
 	}
@@ -501,7 +507,7 @@ func removeFromSwap(pid uint) error {
 }
 
 func SuspendProcess(pid uint) error {
-	fmt.Printf("Kernel solicita bajar PID %v a SWAP. ", pid)
+	slog.Info(fmt.Sprintf("Kernel solicita bajar PID %v a SWAP. ", pid))
 	process_data := GetDataByPID(pid)
 	if process_data == nil {
 		return errors.New("could not find process with pid")
@@ -528,7 +534,7 @@ func SuspendProcess(pid uint) error {
 }
 
 func UnSuspendProcess(pid uint) error {
-	fmt.Printf("Kernel solicita subir PID %v de SWAP. ", pid)
+	slog.Info(fmt.Sprintf("Kernel solicita subir PID %v de SWAP. ", pid))
 	process_data := GetDataByPID(pid)
 	if process_data == nil {
 		return errors.New("could not find process with pid")
@@ -542,6 +548,7 @@ func UnSuspendProcess(pid uint) error {
 	swapMutex.Lock()
 	swapBlock, err := getFromSwap(process_data)
 	swapMutex.Unlock()
+
 	if err != nil {
 		if err == io.EOF {
 			return errors.New("could not find process in swapfile. is it even suspended?")
@@ -563,6 +570,7 @@ func UnSuspendProcess(pid uint) error {
 	swapMutex.Lock()
 	err = removeFromSwap(pid)
 	swapMutex.Unlock()
+
 	if err != nil {
 		return err
 	}
