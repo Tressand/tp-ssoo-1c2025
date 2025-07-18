@@ -506,16 +506,16 @@ func removeFromSwap(pid uint) error {
 }
 
 func SuspendProcess(pid uint) error {
-	slog.Info(fmt.Sprintf("Kernel solicita bajar PID %v a SWAP. ", pid))
+	log_msg := fmt.Sprintf("Kernel solicita bajar PID %v a SWAP. ", pid)
 	process_data := GetDataByPID(pid)
 	if process_data == nil {
 		return errors.New("could not find process with pid")
 	}
 	if len(process_data.pageBases) == 0 {
-		fmt.Print("Nada que swapear.\n")
+		slog.Info(log_msg + "Nada que swapear.")
 		return nil
 	}
-	fmt.Print("\n")
+	slog.Info(log_msg)
 
 	swapMutex.Lock()
 	err := addToSwap(process_data)
@@ -533,16 +533,16 @@ func SuspendProcess(pid uint) error {
 }
 
 func UnSuspendProcess(pid uint) error {
-	slog.Info(fmt.Sprintf("Kernel solicita subir PID %v de SWAP. ", pid))
+	log_msg := fmt.Sprintf("Kernel solicita subir PID %v de SWAP. ", pid)
 	process_data := GetDataByPID(pid)
 	if process_data == nil {
 		return errors.New("could not find process with pid")
 	}
 	if len(process_data.pageBases) == 0 {
-		fmt.Print("Nada que subir.\n")
+		slog.Info(log_msg + "Nada que subir.")
 		return nil
 	}
-	fmt.Print("\n")
+	slog.Info(log_msg)
 
 	swapMutex.Lock()
 	swapBlock, err := getFromSwap(process_data)
@@ -554,7 +554,6 @@ func UnSuspendProcess(pid uint) error {
 		}
 		return err
 	}
-	
 	chunks := strings.Split(swapBlock, "\n")
 	page_count, _ := strconv.Atoi(chunks[0])
 	pageBases, err := allocateMemory(config.Values.PageSize * page_count)
