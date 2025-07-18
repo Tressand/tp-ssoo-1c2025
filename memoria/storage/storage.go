@@ -546,6 +546,8 @@ func UnSuspendProcess(pid uint) error {
 		return err
 	}
 
+	slog.Info("SWAP Block", "pid", pid, "block", swapBlock)
+
 	chunks := strings.Split(swapBlock, "\n")
 	page_count, _ := strconv.Atoi(chunks[0])
 	pageBases, err := allocateMemory(config.Values.PageSize * page_count)

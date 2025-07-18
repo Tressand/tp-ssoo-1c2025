@@ -52,22 +52,28 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 
 	queue, mutex := getQueueAndMutex(state)
 
-	//mostrar la cola antes de agregar el proceso
-	pids := make([]uint, 0, len(*queue))
-	for _, proc := range *queue {
-		pids = append(pids, proc.PCB.GetPID())
-	}
-	slog.Info("Lista", "Nombre", state.String(), "PIDs", pids)
 
 	mutex.Lock()
 	*queue = append(*queue, process)
 	mutex.Unlock()
 
 	fmt.Println()
-	logger.RequiredLog(true, process.PCB.GetPID(),"Pasa del estado",map[string]string{
-		"Estado Anterior": lastState.String(),
-		"Estado Actual":   actualState.String(),
-	})
+	if !(actualState == lastState){
+		logger.RequiredLog(true, process.PCB.GetPID(),"Pasa del estado",map[string]string{
+			"Estado Anterior": lastState.String(),
+			"Estado Actual":   actualState.String(),
+		})
+	} else {
+		logger.RequiredLog(true, process.PCB.GetPID(),"Sigue en el estado",map[string]string{
+			"Estado:": lastState.String(),
+		})
+	}
+	//mostrar la cola antes de agregar el proceso
+	pids := make([]uint, 0, len(*queue))
+	for _, proc := range *queue {
+		pids = append(pids, proc.PCB.GetPID())
+	}
+	slog.Info("Lista", "Nombre", state.String(), "PIDs", pids)
 	fmt.Println()
 
 }

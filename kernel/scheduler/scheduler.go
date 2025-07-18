@@ -312,11 +312,11 @@ func MTS() {
 
 			if kernel_api.Unsuspend(process) {
 				globals.RemoveBlockedByPID(process.PCB.GetPID())
-				queues.RemoveByPID(pcb.SUSP_READY, process.PCB.GetPID())
 				queues.Enqueue(pcb.READY, process)
 				globals.UnlockSTS()
 			} else {
 				noMemory = true
+				queues.Enqueue(pcb.SUSP_READY, process)
 				break
 			}
 		}

@@ -2,11 +2,11 @@
   "ip_memory": "self",
   "port_memory": 8082,
   "port_kernel": 8081,
-  "log_level": "DEBUG",
+  "log_level": "INFO",
   
   "scheduler_algorithm": "SRT",
-  "ready_ingress_algorithm": "FIFO",
-  "alpha": 1,
-  "suspension_time": 1000,
-  "initial_estimate": 120000
+  "ready_ingress_algorithm": "PMCP",
+  "alpha": 0.75,
+  "initial_estimate": 100,
+  "suspension_time": 3000
 }

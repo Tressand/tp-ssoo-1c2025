@@ -86,9 +86,9 @@ func TryInititializeProcess(process *globals.Process) bool {
 
 func InititializeProcess(process *globals.Process) {
 	initialized := TryInititializeProcess(process)
-	logger.RequiredLog(true, process.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": "NEW"})
 
 	if initialized {
+		logger.RequiredLog(true, process.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": "NEW"})
 		return
 	}
 
@@ -131,6 +131,8 @@ func HandleNewProcess(process *globals.Process) {
 	if !initialized {
 		queues.Enqueue(pcb.NEW, process)
 		select {
+		case globals.RetryInitialization <- struct{}{}:
+			slog.Debug("Intentando inicializar proceso bloqueado por falta de memoria...")
 		case globals.LTSEmpty <- struct{}{}:
 			slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
 		default:
