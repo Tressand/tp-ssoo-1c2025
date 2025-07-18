@@ -97,6 +97,7 @@ func GetInstruction(pid uint, pc int) (instruction, error) {
 		return instruction{}, errors.New("out of scope program counter")
 	}
 	targetProcess.metrics.Instructions_requested++
+	time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 
 	inst := targetProcess.code[pc]
 	logger.RequiredLog(true, pid, "Obtener Instrucción: "+fmt.Sprint(pc), map[string]string{
@@ -198,6 +199,7 @@ func GetFromMemory(pid uint, base int, delta int) (byte, error) {
 		return 0, errors.New("out of bounds page memory access")
 	}
 	GetDataByPID(pid).metrics.Reads++
+	time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 	return userMemory[base+delta], nil
 }
 
@@ -208,8 +210,9 @@ func WriteToMemory(pid uint, base int, delta int, value byte) error {
 	userMemoryMutex.Lock()
 	userMemory[base+delta] = value
 	userMemoryMutex.Unlock()
-	GetDataByPID(pid).metrics.Writes++
 
+	GetDataByPID(pid).metrics.Writes++
+	time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 	return nil
 }
 
@@ -296,6 +299,7 @@ func LogicAddressToFrame(pid uint, address []int) (base int, err error) {
 			return
 		}
 		processPageIndex += num * int(math.Pow(f_pageTableSize, f_levels-1-float64(i)))
+		time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 		process.metrics.Page_table_accesses++
 	}
 
@@ -529,6 +533,8 @@ func SuspendProcess(pid uint) error {
 		return err
 	}
 
+	time.Sleep(time.Duration(config.Values.SwapDelay) * time.Millisecond)
+	process_data.metrics.Suspensions++
 	return err
 }
 
@@ -585,6 +591,9 @@ func UnSuspendProcess(pid uint) error {
 		}
 		WritePage(pid, base, bytes)
 	}
+
+	process_data.metrics.Unsuspensions++
+	time.Sleep(time.Duration(config.Values.SwapDelay) * time.Millisecond)
 	return nil
 }
 
