@@ -92,8 +92,8 @@ func FindMemoryConfig() bool {
 		return false
 	}
 
-	fmt.Println("Configuración de memoria obtenida:\n", parsers.Struct(memoryConfig))
 	config.MemoryConf = memoryConfig
+	fmt.Println("Configuración de memoria obtenida:\n", parsers.Struct(config.MemoryConf))
 
 	return true
 }
@@ -124,15 +124,10 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 	}
 
 	defer resp.Body.Close()
+	page, err := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("respuesta no exitosa", "respuesta", resp.Status, "error", err)
-		return nil, false
-	}
-
-	page, err := io.ReadAll(resp.Body)
-	if err != nil {
-		slog.Error("error al leer la respuesta. ", "error", err)
 		return nil, false
 	}
 

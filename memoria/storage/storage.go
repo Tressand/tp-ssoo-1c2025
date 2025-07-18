@@ -91,10 +91,10 @@ func GetDataByPID(pid uint) *process_data {
 func GetInstruction(pid uint, pc int) (instruction, error) {
 	targetProcess := GetDataByPID(pid)
 	if targetProcess == nil {
-		return instruction{}, errors.New("process pid=" + fmt.Sprint(pid) + " does not exist")
+		return instruction{Opcode: codeutils.EXIT}, errors.New("process pid=" + fmt.Sprint(pid) + " does not exist")
 	}
 	if pc >= len(targetProcess.code) {
-		return instruction{}, errors.New("out of scope program counter")
+		return instruction{Opcode: codeutils.EXIT}, errors.New("out of scope program counter")
 	}
 	targetProcess.metrics.Instructions_requested++
 

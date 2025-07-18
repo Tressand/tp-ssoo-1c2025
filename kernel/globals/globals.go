@@ -141,7 +141,7 @@ func ClearAndExit() {
 		http.Get(kill_url(cpu.IP, cpu.Port))
 	}
 	for _, io := range AvailableIOs {
-		http.Get(io.IP + ":" + io.Port + "/shutdown")
+		http.Get("http://"+io.IP + ":" + io.Port + "/shutdown")
 	}
 
 	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
