@@ -287,7 +287,7 @@ func handleIOFinished() http.HandlerFunc {
 					slog.Info("Se envia una señal para cancelar el timer...", "pid", pid)
 					blocked.CancelTimer <- struct{}{}
 				}
-
+				
 				globals.MTSQueueMu.Lock()
 				globals.MTSQueue = append(globals.MTSQueue[:i], globals.MTSQueue[i+1:]...)
 				globals.MTSQueueMu.Unlock()

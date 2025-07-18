@@ -232,7 +232,7 @@ func notifyIODisconnected(name string, pidptr *uint) {
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {
-		slog.Error("Error making POST request", "error", err)
+		slog.Info("No se pudo notificar a Kernel de desconección, es posible que se haya desconectado")
 		return
 	}
 	defer resp.Body.Close()
