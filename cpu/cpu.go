@@ -136,7 +136,6 @@ func ciclo() {
 
 		//execute
 		status := exec()
-		slog.Info("Ejecutando instrucción", "pid", config.Pcb.PID, "pc", config.Pcb.PC, "instrucción", config.Instruccion)
 
 		select {
 		case <-config.InterruptChan:
@@ -151,6 +150,8 @@ func ciclo() {
 		if status == -1 {
 			return
 		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

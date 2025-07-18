@@ -486,8 +486,8 @@ func WriteCache(logicAddr []int, value []byte) bool {
 				return false
 			}
 
-			GetPageInMemory(frame)
-			page, flag = SearchPageInCache(paginaActual)
+			page,_ = GetPageInMemory(frame)
+			AddEntryCache(paginaActual, page)
 			if !flag {
 				slog.Error("Error en escribir", " No se encontro la pagina: ", fmt.Sprint(paginaActual))
 				return false

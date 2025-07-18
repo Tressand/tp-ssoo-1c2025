@@ -131,15 +131,14 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 		return nil, false
 	}
 
-	logger.RequiredLog(false, uint(config.Pcb.PID), "MARCO OBTENIDO", map[string]string{
-		"Pagina": fmt.Sprint(logicAddr),
-		"Marco":  fmt.Sprint(fisicAddr[0]),
-	})
-
 	return page, true
 }
 
 func SavePageInMemory(page []byte, addr []int, pid int) error {
+
+	if pid == -1{
+		return nil
+	}
 
 	addr = append(addr, 0)
 
