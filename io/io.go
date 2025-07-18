@@ -36,14 +36,13 @@ func main() {
 		fmt.Println("Faltan parámetros. Uso: ./io <identificador> ...[nombre]")
 		return
 	}
-	fmt.Println("Identificador recibido: ", port)
 	id := os.Args[1]
+	fmt.Println("Identificador recibido: ", id)
 	id_int, err := strconv.Atoi(id)
 	if err != nil {
 		fmt.Printf("Error al convertir el identificador '%s' a entero: %v\n", id, err)
 		return
 	}
-	port = fmt.Sprint(config.Values.PortIO + id_int)
 
 	// #region SETUP
 
@@ -56,6 +55,7 @@ func main() {
 		return
 	}
 	slog.Info("Arranca IO")
+	port = fmt.Sprint(config.Values.PortIO + id_int)
 
 	// #endregion
 

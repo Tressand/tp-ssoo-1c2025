@@ -10,7 +10,6 @@ import (
 	"ssoo-kernel/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -139,8 +138,7 @@ func ClearAndExit() {
 		http.Get(kill_url(cpu.IP, cpu.Port))
 	}
 	for _, io := range AvailableIOs {
-		port_int, _ := strconv.Atoi(io.Port)
-		http.Get(kill_url(io.IP, port_int))
+		http.Get(io.IP + ":" + io.Port + "/shutdown")
 	}
 
 	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
