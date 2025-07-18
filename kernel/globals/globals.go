@@ -62,6 +62,9 @@ var (
 	WaitingForRetryMu     sync.Mutex
 	TotalProcessesCreated int = 0
 
+	unsuspendMutex sync.Mutex
+
+
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
 	ShutdownSignal     chan any = make(chan any)

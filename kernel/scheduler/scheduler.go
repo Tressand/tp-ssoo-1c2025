@@ -353,10 +353,6 @@ func sendToWait(blocked *globals.Blocked) {
 	}
 	slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 
-	if !blocked.Working {
-		return
-	}
-
 	process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 	if process == nil {
@@ -366,6 +362,6 @@ func sendToWait(blocked *globals.Blocked) {
 	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
 	blocked.Process.TimerRunning = false
-
+	
 	kernel_api.RequestSuspend(process)
 }
