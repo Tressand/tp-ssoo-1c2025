@@ -543,6 +543,9 @@ func UnSuspendProcess(pid uint) error {
 	swapBlock, err := getFromSwap(process_data)
 	swapMutex.Unlock()
 	if err != nil {
+		if err == io.EOF {
+			return errors.New("could not find process in swapfile. is it even suspended?")
+		}
 		return err
 	}
 
@@ -567,7 +570,8 @@ func UnSuspendProcess(pid uint) error {
 
 	var bytes []byte = make([]byte, config.Values.PageSize)
 	for i_chunk, base := range pageBases {
-		s_page := strings.Split(chunks[i_chunk][1:len(chunks)-1], " ")
+		var page_str string = chunks[i_chunk]
+		s_page := strings.Split(page_str[1:len(page_str)-1], " ")
 		for i_byte, char := range s_page {
 			char_int, _ := strconv.Atoi(char)
 			bytes[i_byte] = byte(char_int)
