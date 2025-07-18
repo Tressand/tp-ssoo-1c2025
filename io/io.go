@@ -27,7 +27,7 @@ var instances []struct {
 	pidptr *uint
 }
 
-var id string
+var port string
 
 var shutdownSignal = make(chan any)
 
@@ -36,13 +36,14 @@ func main() {
 		fmt.Println("Faltan parámetros. Uso: ./io <identificador> ...[nombre]")
 		return
 	}
-	fmt.Println("Identificador recibido: ", id)
+	fmt.Println("Identificador recibido: ", port)
 	id := os.Args[1]
 	id_int, err := strconv.Atoi(id)
 	if err != nil {
 		fmt.Printf("Error al convertir el identificador '%s' a entero: %v\n", id, err)
 		return
 	}
+	port = fmt.Sprint(config.Values.PortIO + id_int)
 
 	// #region SETUP
 
@@ -169,7 +170,7 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 		Endpoint: "io-notify",
 		Queries: map[string]string{
 			"ip":   ip,
-			"id":   id,
+			"port": port,
 			"name": fmt.Sprint(name), // NO TOCAR NUNCA
 			"pid":  fmt.Sprint(*pidptr)},
 	})
@@ -215,7 +216,7 @@ func notifyIOFinished(name string, pid int) {
 		Endpoint: "io-finished",
 		Queries: map[string]string{
 			"ip":   fmt.Sprint(httputils.GetOutboundIP()),
-			"id":   id,
+			"port": port,
 			"name": name,
 			"pid":  fmt.Sprint(pid)},
 	})
@@ -250,7 +251,7 @@ func notifyIODisconnected(name string, pidptr *uint) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-disconnected",
-		Queries:  map[string]string{"ip": ip, "id": id, "name": name, "pid": fmt.Sprint(*pidptr)},
+		Queries:  map[string]string{"ip": ip, "port": port, "name": name, "pid": fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {

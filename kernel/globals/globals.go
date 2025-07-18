@@ -10,6 +10,7 @@ import (
 	"ssoo-kernel/config"
 	"ssoo-utils/httputils"
 	"ssoo-utils/pcb"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -71,7 +72,7 @@ var (
 type IOConnection struct {
 	Name    string
 	IP      string
-	ID      string
+	Port    string
 	Handler chan IORequest
 	Disp    bool
 }
@@ -107,8 +108,8 @@ type Process struct {
 	Path           string
 	Size           int
 	StartTime      time.Time // cuando entra a RUNNING
-	LastRealBurst  int64   // en segundos
-	EstimatedBurst int64   // estimación actual
+	LastRealBurst  int64     // en segundos
+	EstimatedBurst int64     // estimación actual
 	TimerRunning   bool      // si se ha iniciado el timer en mts
 	InMemory       bool      // si el proceso está en memoria
 }
@@ -137,6 +138,10 @@ func ClearAndExit() {
 	for _, cpu := range AvailableCPUs {
 		http.Get(kill_url(cpu.IP, cpu.Port))
 	}
+	for _, io := range AvailableIOs {
+		port_int, _ := strconv.Atoi(io.Port)
+		http.Get(kill_url(io.IP, port_int))
+	}
 
 	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))
 
@@ -161,7 +166,7 @@ func UpdateBurstEstimation(process *Process) {
 
 		slog.Info(fmt.Sprintf("PID %d - Burst real: %dms - Estimada previa: %dms - Nueva estimación: %dms",
 			process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
-	} 
+	}
 }
 
 func TiempoRestanteDeRafaga(process *Process) int64 {
