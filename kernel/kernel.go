@@ -282,12 +282,6 @@ func handleIOFinished() http.HandlerFunc {
 		for i, blocked := range globals.MTSQueue {
 			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
 				process = blocked.Process
-
-				
-				if process.TimerRunning {
-					slog.Info("Se envia una señal para cancelar el timer...", "pid", pid)
-					blocked.CancelTimer <- struct{}{}
-				}
 				
 				globals.MTSQueueMu.Lock()
 				globals.MTSQueue = append(globals.MTSQueue[:i], globals.MTSQueue[i+1:]...)
@@ -305,7 +299,7 @@ func handleIOFinished() http.HandlerFunc {
 			queues.RemoveByPID(pcb.SUSP_BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.SUSP_READY, process)
 			globals.UnlockMTS()
-		} else {
+		} else if process.PCB.GetState() == pcb.BLOCKED {
 			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)
 			globals.UnlockSTS()
