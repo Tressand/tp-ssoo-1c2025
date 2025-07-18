@@ -420,7 +420,6 @@ func getFromSwap(data *process_data) (string, error) {
 	for {
 		// Get pid from swap block
 		h_pid, err := numberFromReader(reader, '|')
-		slog.Info("get pid", "pid", h_pid)
 		if err != nil {
 			if err != io.EOF {
 				slog.Error(err.Error())
@@ -555,10 +554,6 @@ func UnSuspendProcess(pid uint) error {
 		}
 		return err
 	}
-
-	fmt.Println()
-	slog.Info("SWAP Block", "pid", pid, "block", swapBlock)
-	fmt.Println()
 	
 	chunks := strings.Split(swapBlock, "\n")
 	page_count, _ := strconv.Atoi(chunks[0])

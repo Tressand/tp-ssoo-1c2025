@@ -92,13 +92,20 @@ func FindMemoryConfig() bool {
 		return false
 	}
 
-	fmt.Println("Configuración de memoria obtenida:\n", parsers.Struct(config.Values))
+	fmt.Println("Configuración de memoria obtenida:\n", parsers.Struct(memoryConfig))
 	config.MemoryConf = memoryConfig
 
 	return true
 }
 
 func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
+
+	logicAddr, _ := findLogigAddress(fisicAddr)
+
+	logger.RequiredLog(false, uint(config.Pcb.PID), "OBTENER MARCO", map[string]string{
+		"Pagina": fmt.Sprint(logicAddr),
+		"Marco":  fmt.Sprint(fisicAddr[0]),
+	})
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -119,7 +126,7 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
+		slog.Error("respuesta no exitosa", "respuesta", resp.Status, "error", err)
 		return nil, false
 	}
 
@@ -129,9 +136,7 @@ func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
 		return nil, false
 	}
 
-	logicAddr, _ := findLogigAddress(fisicAddr)
-
-	logger.RequiredLog(false, uint(config.Pcb.PID), "OBTENER MARCO", map[string]string{
+	logger.RequiredLog(false, uint(config.Pcb.PID), "MARCO OBTENIDO", map[string]string{
 		"Pagina": fmt.Sprint(logicAddr),
 		"Marco":  fmt.Sprint(fisicAddr[0]),
 	})

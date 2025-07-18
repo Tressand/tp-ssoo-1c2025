@@ -71,14 +71,13 @@ func main() {
 	cache.FindMemoryConfig()
 
 	//crear logger
-	err = logger.SetupDefault("cpu", config.Values.LogLevel)
+	err = logger.SetupDefault("cpu"+ identificadorStr, config.Values.LogLevel)
 	defer logger.Close()
 	if err != nil {
 		fmt.Printf("Error setting up logger: %v\n", err)
 		return
 	}
-	log := logger.Instance
-	log.Info("Arranca CPU")
+	slog.Info("Arranca CPU")
 
 	//iniciar tlb
 	cache.InitTLB(config.Values.TLBEntries, config.Values.TLBReplacement)

@@ -27,6 +27,9 @@ func SearchPageInCache(logicAddr []int) ([]byte, bool) {
 		}
 	}
 
+	logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Miss", map[string]string{
+		"Pagina": fmt.Sprint(logicAddr),
+	})
 	return nil, false
 }
 
@@ -262,6 +265,7 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 		count++
 	}
 
+	slog.Error("No se pudo agregar la entrada a la cache, CLOCK-M")
 }
 
 func NoUsedAndNoModifiedCache() bool {
@@ -464,8 +468,8 @@ func WriteCache(logicAddr []int, value []byte) bool {
 			return false
 		}
 		
-		GetPageInMemory(frame)
-		page, _ = SearchPageInCache(base)
+		page,_ = GetPageInMemory(frame)
+		AddEntryCache(base, page)
 	}
 
 	pageSize := config.MemoryConf.PageSize

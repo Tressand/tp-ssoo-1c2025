@@ -63,7 +63,7 @@ var (
 	WaitingForRetryMu     sync.Mutex
 	TotalProcessesCreated int = 0
 
-	unsuspendMutex sync.Mutex
+	UnsuspendMutex sync.Mutex
 
 
 	// Sending anything to this channel will shutdown the server.
