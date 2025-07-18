@@ -47,8 +47,6 @@ var (
 	NextPID  uint = 1
 	PIDMutex sync.Mutex
 
-	BlockedForMemory = make(chan struct{})
-
 	LTSEmpty = make(chan struct{})
 	STSEmpty = make(chan struct{})
 	MTSEmpty = make(chan struct{})
@@ -87,7 +85,8 @@ type Blocked struct {
 	Name        string
 	Time        int
 	Working     bool
-	DUMP_MEMORY bool // si se debe hacer DUMP_MEMORY al desbloquear
+	DUMP_MEMORY bool          // si se debe hacer DUMP_MEMORY al desbloquear
+	CancelTimer chan struct{} // canal para cancelar el timer
 }
 
 type CPUConnection struct {
@@ -109,7 +108,7 @@ type Process struct {
 	StartTime      time.Time // cuando entra a RUNNING
 	LastRealBurst  float64   // en segundos
 	EstimatedBurst float64   // estimación actual
-	TimerStarted   bool      // si se ha iniciado el timer en mts
+	TimerRunning   bool      // si se ha iniciado el timer en mts
 	InMemory       bool      // si el proceso está en memoria
 }
 
@@ -212,6 +211,24 @@ func UnlockSTS() {
 		slog.Debug("Desbloqueando STS porque hay procesos en READY")
 	default:
 		slog.Debug("STS ya desbloqueado, no se envía señal")
+	}
+}
+
+func UnlockLTS() {
+	select {
+	case LTSEmpty <- struct{}{}:
+		slog.Debug("Desbloqueando LTS...")
+	case RetryInitialization <- struct{}{}:
+		slog.Debug("Intentando inicializar proceso bloqueado por falta de memoria...")
+	default:
+	}
+}
+
+func UnlockMTS() {
+	select {
+	case MTSEmpty <- struct{}{}:
+		slog.Debug("Desbloqueando MTS...")
+	default:
 	}
 }
 

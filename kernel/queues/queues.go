@@ -57,20 +57,19 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 	for _, proc := range *queue {
 		pids = append(pids, proc.PCB.GetPID())
 	}
-	slog.Info("Lista","Nombre",state.String(), "PIDs", pids)
+	slog.Info("Lista", "Nombre", state.String(), "PIDs", pids)
 
 	mutex.Lock()
 	*queue = append(*queue, process)
 	mutex.Unlock()
 
-	if state != pcb.EXEC{
+	if state != pcb.EXEC {
 		logger.RequiredLog(true, process.PCB.GetPID(),
 			fmt.Sprintf("Pasa del estado %s al estado %s", lastState.String(), actualState.String()),
 			map[string]string{},
 		)
 	}
 
-	
 }
 
 func Search(state pcb.STATE, sortBy SortBy) *globals.Process {
@@ -84,15 +83,15 @@ func Search(state pcb.STATE, sortBy SortBy) *globals.Process {
 	}
 
 	switch sortBy {
-		case Size:
-			sort.Slice(*queue, func(i, j int) bool {
-				return (*queue)[i].Size < (*queue)[j].Size
-			})
-		case EstimatedBurst:
-			sort.Slice(*queue, func(i, j int) bool {
-				return (*queue)[i].EstimatedBurst < (*queue)[j].EstimatedBurst
-			})
-		case NoSort:
+	case Size:
+		sort.Slice(*queue, func(i, j int) bool {
+			return (*queue)[i].Size < (*queue)[j].Size
+		})
+	case EstimatedBurst:
+		sort.Slice(*queue, func(i, j int) bool {
+			return (*queue)[i].EstimatedBurst < (*queue)[j].EstimatedBurst
+		})
+	case NoSort:
 	}
 
 	return (*queue)[0]
@@ -155,17 +154,15 @@ func RemoveByPID(state pcb.STATE, pid uint) *globals.Process {
 	return nil
 }
 
-
-func MostrarLasColas(){
-
+func MostrarLasColas(lugar string) {
+	slog.Info("MostrarColas en ", "Lugar", lugar)
 	states := []pcb.STATE{pcb.NEW, pcb.READY, pcb.BLOCKED, pcb.EXEC, pcb.SUSP_READY, pcb.SUSP_BLOCKED, pcb.EXIT}
 	for _, state := range states {
 		queue, _ := getQueueAndMutex(state)
-		pids := make([]uint, 0, len(*queue))
+		processes := make([]string, 0, len(*queue))
 		for _, proc := range *queue {
-			pids = append(pids, proc.PCB.GetPID())
+			processes = append(processes, fmt.Sprintf("PID:%d(Burst:%.2f)", proc.PCB.GetPID(), proc.EstimatedBurst))
 		}
-		slog.Info("Lista","Nombre",state.String(), "PIDs", pids)
+		slog.Info("Lista", "Nombre", state.String(), "Procesos", processes)
 	}
-
 }

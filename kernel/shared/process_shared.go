@@ -11,15 +11,15 @@ import (
 	"ssoo-utils/httputils"
 	"ssoo-utils/logger"
 	"ssoo-utils/pcb"
-	"time"
 	"strconv"
+	"time"
 )
 
 func CreateProcess(path string, size int) {
 	process := newProcess(path, size)
 	globals.TotalProcessesCreated++
 
-	logger.RequiredLog(true,process.PCB.GetPID(),"Se crea el proceso",
+	logger.RequiredLog(true, process.PCB.GetPID(), "Se crea el proceso",
 		map[string]string{
 			"Estado": "NEW",
 			"Path":   path,
@@ -41,7 +41,7 @@ func UpdateBurstEstimation(process *globals.Process) {
 
 	if config.Values.SchedulerAlgorithm == "SJF" || config.Values.SchedulerAlgorithm == "SRT" {
 		slog.Info(fmt.Sprintf("PID %d - Burst real: %.2fs - Estimada previa: %.2f - Nueva estimación: %.2f",
-		process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
+			process.PCB.GetPID(), realBurst, previousEstimate, newEstimate))
 	}
 }
 
@@ -52,7 +52,7 @@ func newProcess(path string, size int) *globals.Process {
 	process.Size = size
 	process.LastRealBurst = 0
 	process.EstimatedBurst = float64(config.Values.InitialEstimate) / 1000.0
-	process.TimerStarted = false
+	process.TimerRunning = false
 	return process
 }
 
@@ -121,12 +121,6 @@ func InititializeProcess(process *globals.Process) {
 			globals.WaitingForRetryMu.Unlock()
 			break
 		}
-	}
-
-	select {
-	case globals.BlockedForMemory <- struct{}{}:
-		slog.Debug("Se desbloquea LTS que estaba bloqueado porque habia un proceso esperando para inicializarse")
-	default:
 	}
 }
 
@@ -200,7 +194,7 @@ func TerminateProcess(process *globals.Process) {
 	defer resp.Body.Close()
 
 	logger.RequiredLog(true, pid, "", map[string]string{"Métricas de estado:": process.PCB.GetKernelMetrics().String()})
-	queues.MostrarLasColas()
+	queues.MostrarLasColas("TerminateProcess")
 
 	select {
 	case globals.MTSEmpty <- struct{}{}:
@@ -218,7 +212,7 @@ func getNextPID() uint {
 	return pid
 }
 
-func Unsuspend(process *globals.Process) bool{
+func Unsuspend(process *globals.Process) bool {
 
 	slog.Debug("Desbloqueando proceso", "pid", process.PCB.GetPID())
 
@@ -240,7 +234,7 @@ func Unsuspend(process *globals.Process) bool{
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Instance.Error("Memoria rechazó la solicitud de unsuspend", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
-		return false 
+		return false
 	}
 
 	process.InMemory = true

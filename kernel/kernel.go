@@ -116,6 +116,7 @@ func main() {
 
 	go func() {
 		sig := <-force_kill_chan
+		queues.MostrarLasColas("Finalizacion de Kernel")
 		fmt.Println(sig)
 		globals.ClearAndExit()
 	}()
@@ -281,6 +282,12 @@ func handleIOFinished() http.HandlerFunc {
 		for i, blocked := range globals.MTSQueue {
 			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
 				process = blocked.Process
+
+				if process.TimerRunning {
+					slog.Info("Se envia una señal para cancelar el timer...", "pid", pid)
+					blocked.CancelTimer <- struct{}{}
+				}
+
 				globals.MTSQueueMu.Lock()
 				globals.MTSQueue = append(globals.MTSQueue[:i], globals.MTSQueue[i+1:]...)
 				globals.MTSQueueMu.Unlock()
@@ -296,8 +303,7 @@ func handleIOFinished() http.HandlerFunc {
 		if process.PCB.GetState() == pcb.SUSP_BLOCKED {
 			queues.RemoveByPID(pcb.SUSP_BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.SUSP_READY, process)
-			kernel_api.UnlockMTS()
-
+			globals.UnlockMTS()
 		} else {
 			queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 			queues.Enqueue(pcb.READY, process)

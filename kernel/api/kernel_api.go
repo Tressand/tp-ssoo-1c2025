@@ -180,7 +180,7 @@ func RecieveSyscall() http.HandlerFunc {
 			slog.Error("No se encontró el proceso asociado al CPU", "cpuID", cpuID)
 			return
 		}
-		
+
 		process.PCB.SetPC(processPCInt)
 
 		var instruction codeutils.Instruction
@@ -199,14 +199,12 @@ func RecieveSyscall() http.HandlerFunc {
 				"syscall": codeutils.OpcodeStrings[opcode],
 				"args":    fmt.Sprintf("%v", instruction.Args),
 			})
-		
 
 		switch opcode {
 		case codeutils.IO:
 			device := instruction.Args[0]
 			timeMs, _ := strconv.Atoi(instruction.Args[1])
 
-			
 			iosConNombre := make([]*globals.IOConnection, 0)
 
 			for _, io := range globals.AvailableIOs {
@@ -234,7 +232,7 @@ func RecieveSyscall() http.HandlerFunc {
 				}
 			}
 			globals.AvIOmu.Unlock()
-			
+
 			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 			shared.FreeCPU(process)
 			shared.UpdateBurstEstimation(process)
@@ -245,16 +243,16 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.MTSQueueMu.Lock()
 			globals.MTSQueue = append(globals.MTSQueue, blocked)
 			globals.MTSQueueMu.Unlock()
-			UnlockMTS()
+			globals.UnlockMTS()
 
 			if selectedIO != nil {
 				blocked.Working = true
-			}else {
+			} else {
 				return
 			}
 
 			globals.SendIORequest(process.PCB.GetPID(), timeMs, selectedIO)
-			
+
 		case codeutils.INIT_PROC:
 			codePath := instruction.Args[0]
 			size, _ := strconv.Atoi(instruction.Args[1])
@@ -294,21 +292,15 @@ func RecieveSyscall() http.HandlerFunc {
 func CreateBlocked(process *globals.Process, name string, time int) *globals.Blocked {
 	blocked := new(globals.Blocked)
 	blocked.Process = process
-	blocked.Process.TimerStarted = false
+	blocked.Process.TimerRunning = false
 	blocked.Name = name
 	blocked.Time = time
 	blocked.Working = false
 	blocked.DUMP_MEMORY = false //variable para saber si se hace DUMP_MEMORY sobre el proceso
+	blocked.CancelTimer = make(chan struct{})
 	return blocked
 }
 
-func UnlockMTS() {
-	select {
-	case globals.MTSEmpty <- struct{}{}:
-		slog.Debug("Se desbloquea MTSEmpty")
-	default:
-	}
-}
 
 func DUMP_MEMORY(process *globals.Process) {
 
@@ -323,7 +315,7 @@ func DUMP_MEMORY(process *globals.Process) {
 			if removedProcess == nil {
 				return
 			}
-			
+
 			for i, blocked := range globals.MTSQueue {
 				if blocked.Process.PCB.GetPID() == p.PCB.GetPID() {
 					globals.MTSQueueMu.Lock()
@@ -335,12 +327,11 @@ func DUMP_MEMORY(process *globals.Process) {
 
 			queues.Enqueue(pcb.READY, p)
 
-			for _,process := range globals.ReadyQueue{
+			for _, process := range globals.ReadyQueue {
 				slog.Debug("Proceso en READY tras DUMP_MEMORY", "pid", process.PCB.GetPID())
 			}
 
-
-			UnlockMTS()
+			globals.UnlockMTS()
 		} else {
 			slog.Info("Proceso pasa a EXIT por fallo en DUMP_MEMORY", "pid", p.PCB.GetPID())
 
@@ -383,7 +374,6 @@ func HandleDumpMemory(process *globals.Process) bool {
 	return true
 }
 
-
 func RequestSuspend(process *globals.Process) error {
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -418,7 +408,7 @@ func RequestSuspend(process *globals.Process) error {
 	return nil
 }
 
-func Unsuspend(process *globals.Process) bool{
+func Unsuspend(process *globals.Process) bool {
 
 	slog.Debug("Desbloqueando proceso", "pid", process.PCB.GetPID())
 
@@ -440,7 +430,7 @@ func Unsuspend(process *globals.Process) bool{
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Instance.Error("Memoria rechazó la solicitud de unsuspend", "pid", process.PCB.GetPID(), "status", resp.StatusCode)
-		return false 
+		return false
 	}
 
 	process.InMemory = true
