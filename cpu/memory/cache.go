@@ -27,6 +27,9 @@ func SearchPageInCache(logicAddr []int) ([]byte, bool) {
 		}
 	}
 
+	logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Miss", map[string]string{
+		"Pagina": fmt.Sprint(logicAddr),
+	})
 	return nil, false
 }
 
@@ -119,9 +122,8 @@ func AddEntryCacheClock(logicAddr []int, content []byte) {
 func AddEntryCacheClockM(logicAddr []int, content []byte) {
 
 	position := 0
-	count := 0
 
-	for i := 0; i < len(config.Cache.Entries); i++ {
+	for i := range config.Cache.Entries {
 
 		if config.Cache.Entries[i].Position {
 
@@ -129,38 +131,49 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 			break
 		}
 	}
+	entry := &config.Cache.Entries[position]
 
-	for {
-		entry := &config.Cache.Entries[position]
+	for range 3 {
+		for range config.Cache.Entries{ //busco una entrada de cache que no este usada ni modificada
+			entry = &config.Cache.Entries[position]
 
-		for { //primer ciclo busca no usado ni modificado
+			if !entry.Modified && !entry.Use {
+				SavePageInMemory(entry.Content, entry.Page, entry.Pid)
+
+				nuevoContenido := make([]byte, len(content))
+				copy(nuevoContenido, content)
+
+				nuevoPage := make([]int, len(logicAddr))
+				copy(nuevoPage, logicAddr)
+
+				entry.Content = nuevoContenido
+				entry.Page = nuevoPage
+				entry.Use = true
+				entry.Modified = false
+				entry.Position = false
+				entry.Pid = config.Pcb.PID
+
+				position = (position + 1) % len(config.Cache.Entries)
+				config.Cache.Entries[position].Position = true
+
+
+				logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Add", map[string]string{
+					"Pagina": fmt.Sprint(logicAddr),
+				})
+				return
+			}else {
+
+				entry.Position = false
+				position = (position + 1) % len(config.Cache.Entries)
+				config.Cache.Entries[position].Position = true
+			}
+		}
+		
+
+		for range config.Cache.Entries{ //busco una entrada de cache que no este usada si modificada
 			entry := &config.Cache.Entries[position]
 
-			if entry.Pid == -1 { //cache vacia
-				nuevoContenido := make([]byte, len(content))
-				copy(nuevoContenido, content)
-
-				nuevoPage := make([]int, len(logicAddr))
-				copy(nuevoPage, logicAddr)
-
-				entry.Content = nuevoContenido
-				entry.Page = nuevoPage
-				entry.Use = true
-				entry.Modified = false
-				entry.Position = false
-				entry.Pid = config.Pcb.PID
-
-				position = (position + 1) % len(config.Cache.Entries)
-				config.Cache.Entries[position].Position = true
-
-				logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Add", map[string]string{
-					"Pagina": fmt.Sprint(logicAddr),
-				})
-
-				return
-			}
-
-			if !entry.Use && !entry.Modified {
+			if entry.Modified && !entry.Use {
 				SavePageInMemory(entry.Content, entry.Page, entry.Pid)
 
 				nuevoContenido := make([]byte, len(content))
@@ -179,92 +192,25 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
 
+
 				logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Add", map[string]string{
 					"Pagina": fmt.Sprint(logicAddr),
 				})
-
 				return
-			}
+			}else {
 
-			if count == len(config.Cache.Entries) {
-				break
-			}
-			count++
-		}
-		//no fue usado --> busco uso 0 y modificado 1
-		if !entry.Use {
-
-			//no esta usado
-
-			if !entry.Modified {
-				SavePageInMemory(entry.Content, entry.Page, entry.Pid)
-				nuevoContenido := make([]byte, len(content))
-				copy(nuevoContenido, content)
-
-				nuevoPage := make([]int, len(logicAddr))
-				copy(nuevoPage, logicAddr)
-
-				entry.Content = nuevoContenido
-				entry.Page = nuevoPage
-				entry.Use = true
-				entry.Modified = false
 				entry.Position = false
-				entry.Pid = config.Pcb.PID
-
+				entry.Use = false
 				position = (position + 1) % len(config.Cache.Entries)
 				config.Cache.Entries[position].Position = true
-
-				logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Add", map[string]string{
-					"Pagina": fmt.Sprint(logicAddr),
-				})
-
-				return
 			}
-		} else {
-			//fue usado --> cambio bit de uso de 1 a 0 y paso al siguiente
-			entry.Use = false
-			entry.Position = false
-
-			position = (position + 1) % len(config.Cache.Entries)
-			config.Cache.Entries[position].Position = true
-		}
-
-		if NoUsedAndNoModifiedCache() { // si la cache quedo no usado y no modificado no haria nada en este ciclo la verdad ya que busca no usado y modificado
-			break
 		}
 	}
-
-	for { //Este ciclo buscara en caso de que todos quedaron no usados y no modificados. Sucede solamente si la cache estaba llena de usados pero no modificados al inicio de la funcion
-		entry := &config.Cache.Entries[position]
-
-		if !entry.Use && !entry.Modified {
-			SavePageInMemory(entry.Content, entry.Page, entry.Pid)
-
-			entry.Content = content
-			entry.Page = logicAddr
-			entry.Use = true
-			entry.Position = false
-			entry.Pid = config.Pcb.PID
-
-			position = (position + 1) % len(config.Cache.Entries)
-			config.Cache.Entries[position].Position = true
-
-			logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Add", map[string]string{
-				"Pagina": fmt.Sprint(logicAddr),
-			})
-
-			return
-		}
-
-		if count == len(config.Cache.Entries) {
-			break
-		}
-		count++
-	}
-
+	slog.Error("No se pudo agregar la entrada a la cache, CLOCK-M")
+	slog.Info("Estado de la cache", "Entries", fmt.Sprint(config.Cache.Entries))
 }
 
-func NoUsedAndNoModifiedCache() bool {
+func NoUsedAndNoModifiedCache() bool { // Verifica si todas las entradas de la cache estan no usadas y no modificadas
 
 	for i := 0; i < len(config.Cache.Entries); i++ {
 
@@ -464,8 +410,8 @@ func WriteCache(logicAddr []int, value []byte) bool {
 			return false
 		}
 		
-		GetPageInMemory(frame)
-		page, _ = SearchPageInCache(base)
+		page,_ = GetPageInMemory(frame)
+		AddEntryCache(base, page)
 	}
 
 	pageSize := config.MemoryConf.PageSize

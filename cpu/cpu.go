@@ -26,6 +26,8 @@ var shutdownSignal = make(chan any)
 
 var bloqueante = false
 
+var status = 0
+
 func main() {
 	//Obtener identificador
 	if len(os.Args) < 2 {
@@ -66,13 +68,26 @@ func main() {
 		time.Sleep(1 * time.Second)
 		_, err = http.Get(kernelPing)
 	}
+	memoryPing := httputils.BuildUrl(httputils.URLData{
+        Ip:       config.Values.IpMemory,
+        Port:     config.Values.PortMemory,
+        Endpoint: "/ping",
+    })
+    _, err = http.Get(memoryPing)
+    if err != nil {
+        fmt.Println("Esperando a Memoria")
+    }
+    for err != nil {
+        time.Sleep(1 * time.Second)
+        _, err = http.Get(memoryPing)
+    }
+
 
 	//cargar config de memoria
 	cache.FindMemoryConfig()
 
 	//crear logger
-	err = logger.SetupDefault("cpu", config.Values.LogLevel)
-	slog.SetDefault(slog.Default().With("name", identificador))
+	err = logger.SetupDefault("cpu"+ identificadorStr, config.Values.LogLevel)
 	defer logger.Close()
 	if err != nil {
 		fmt.Printf("Error setting up logger: %v\n", err)
@@ -121,6 +136,7 @@ func ciclo() {
 
 		//execute
 		status := exec()
+		slog.Info("Ejecutando instrucción", "pid", config.Pcb.PID, "pc", config.Pcb.PC, "instrucción", config.Instruccion)
 
 		select {
 		case <-config.InterruptChan:
@@ -131,9 +147,6 @@ func ciclo() {
 			return
 		default:
 		}
-
-		//pequeña pausa para ver mejor el tema de los logs
-		time.Sleep(1 * time.Second)
 
 		if status == -1 {
 			return
@@ -177,12 +190,14 @@ func sendPidPcToMemory() {
 // #region Execute
 func exec() int {
 
-	status := 0
-	// TODO : Deberiamos mejorar el incremento de PC.
+	status = 0
+	bloqueante = false
+
 	switch config.Instruccion {
 	case "NOOP":
 
 		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
+			"PC": fmt.Sprint(config.Pcb.PC),
 			"Ejecutando": config.Instruccion,
 		})
 
@@ -246,19 +261,17 @@ func exec() int {
 			"Ejecutando": config.Instruccion,
 		})
 		status = DeleteProcess()
-
-	default:
-
 	}
 
 	if status == -1 {
 		return status
-	} else if !bloqueante {
+	}
+	if !bloqueante {
 		config.Pcb.PC++
 	} else {
 		bloqueante = false // Reseteamos el flag de bloqueante
 	}
-	return 0
+	return status
 }
 
 func writeMemory(logicAddr []int, value []byte) int {
@@ -491,7 +504,7 @@ func asign() {
 	switch instruction.Opcode {
 	case codeutils.NOOP:
 		config.Instruccion = "NOOP"
-
+		return
 	case codeutils.WRITE:
 		config.Instruccion = "WRITE"
 		if len(instruction.Args) != 2 {

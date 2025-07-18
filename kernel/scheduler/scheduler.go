@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	
 	"net/http"
 	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
@@ -347,17 +348,16 @@ func sendToWait(blocked *globals.Blocked) {
 	process := blocked.Process
 	
 	<-timer
+
+	globals.UnsuspendMutex.Lock()
+	defer globals.UnsuspendMutex.Unlock()
 	if (process.PCB.GetState() != pcb.BLOCKED) {
-		slog.Debug("El proceso ya no está bloqueado o se está haciendo un DUMP de memoria", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
+		slog.Debug("El proceso ya no está bloqueado", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 		return
 	}
 	slog.Info("Tiempo de espera para IO agotado. Se mueve de memoria principal a swap", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 
-	if !blocked.Working {
-		return
-	}
-
-	process = queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+	process = queues.RemoveByPID(pcb.BLOCKED, process.PCB.GetPID())
 
 	if process == nil {
 		return
@@ -366,6 +366,6 @@ func sendToWait(blocked *globals.Blocked) {
 	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
 	blocked.Process.TimerRunning = false
-
+	
 	kernel_api.RequestSuspend(process)
 }

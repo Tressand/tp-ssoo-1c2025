@@ -9,6 +9,6 @@
   "tlb_entries": 256,
   "tlb_replacement": "FIFO",
   "cache_entries": 256,
-  "cache_replacement": "CLOCK",
+  "cache_replacement": "CLOCK-M",
   "cache_delay": 1
 }

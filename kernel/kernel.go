@@ -279,6 +279,8 @@ func handleIOFinished() http.HandlerFunc {
 
 		var process *globals.Process
 
+		globals.UnsuspendMutex.Lock()
+		defer globals.UnsuspendMutex.Unlock()
 		for i, blocked := range globals.MTSQueue {
 			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
 				process = blocked.Process
