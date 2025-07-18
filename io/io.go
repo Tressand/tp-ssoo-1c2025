@@ -27,21 +27,29 @@ var instances []struct {
 	pidptr *uint
 }
 
-var id string
+var port string
+
+var shutdownSignal = make(chan any)
 
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Faltan parámetros. Uso: ./io <identificador> ...[nombre]")
 		return
 	}
+	fmt.Println("Identificador recibido: ", port)
 	id := os.Args[1]
-	fmt.Println("Identificador recibido: ", id)
+	id_int, err := strconv.Atoi(id)
+	if err != nil {
+		fmt.Printf("Error al convertir el identificador '%s' a entero: %v\n", id, err)
+		return
+	}
+	port = fmt.Sprint(config.Values.PortIO + id_int)
 
 	// #region SETUP
 
 	config.Load()
 	fmt.Printf("Config Loaded:\n%s", parsers.Struct(config.Values))
-	err := logger.SetupDefault("io", config.Values.LogLevel)
+	err = logger.SetupDefault("io", config.Values.LogLevel)
 	defer logger.Close()
 	if err != nil {
 		fmt.Printf("Error setting up logger: %v\n", err)
@@ -50,6 +58,19 @@ func main() {
 	slog.Info("Arranca IO")
 
 	// #endregion
+
+	var mux *http.ServeMux = http.NewServeMux()
+	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+		go func() {
+			fmt.Println("Se solició cierre. o7")
+			shutdownSignal <- struct{}{}
+			<-shutdownSignal
+			os.Exit(0)
+		}()
+	})
+
+	httputils.StartHTTPServer(httputils.GetOutboundIP(), config.Values.PortIO+id_int, mux, shutdownSignal)
 
 	// #region INITIAL THREADS
 
@@ -92,11 +113,13 @@ func main() {
 	signal.Notify(force_kill_chan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		sig := <-force_kill_chan
-		fmt.Println(sig)
+		<-force_kill_chan
+		fmt.Println()
 		for _, instance := range instances {
 			notifyIODisconnected(instance.name, instance.pidptr)
 		}
+		shutdownSignal <- struct{}{}
+		<-shutdownSignal
 		os.Exit(0)
 	}()
 
@@ -147,7 +170,7 @@ func notifyKernel(name string, pidptr *uint) (bool, error) {
 		Endpoint: "io-notify",
 		Queries: map[string]string{
 			"ip":   ip,
-			"id":   id,
+			"port": port,
 			"name": fmt.Sprint(name), // NO TOCAR NUNCA
 			"pid":  fmt.Sprint(*pidptr)},
 	})
@@ -193,7 +216,7 @@ func notifyIOFinished(name string, pid int) {
 		Endpoint: "io-finished",
 		Queries: map[string]string{
 			"ip":   fmt.Sprint(httputils.GetOutboundIP()),
-			"id":   id,
+			"port": port,
 			"name": name,
 			"pid":  fmt.Sprint(pid)},
 	})
@@ -228,7 +251,7 @@ func notifyIODisconnected(name string, pidptr *uint) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "io-disconnected",
-		Queries:  map[string]string{"ip": ip, "id": id, "name": name, "pid": fmt.Sprint(*pidptr)},
+		Queries:  map[string]string{"ip": ip, "port": port, "name": name, "pid": fmt.Sprint(*pidptr)},
 	})
 	resp, err := http.Post(url, http.MethodPost, http.NoBody)
 	if err != nil {

@@ -139,9 +139,9 @@ func main() {
 
 // #region SECTION: HANDLE IO CONNECTIONS
 
-func getIO(name string, ip string, id string) *globals.IOConnection {
+func getIO(name string, ip string, port string) *globals.IOConnection {
 	for _, io := range globals.AvailableIOs {
-		if io.Name == name && io.IP == ip && io.ID == id {
+		if io.Name == name && io.IP == ip && io.Port == port {
 			return io
 		}
 	}
@@ -164,7 +164,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		id := query.Get("id")
+		port := query.Get("port")
 
 		name := query.Get("name")
 
@@ -173,13 +173,13 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		var ioConnection *globals.IOConnection = getIO(name, ip, id)
+		var ioConnection *globals.IOConnection = getIO(name, ip, port)
 
 		if ioConnection == nil {
 			// If the IO is not available, we create a new IOConnection
 			slog.Info("Creada nueva instancia", "name", name)
 
-			ioConnection = CreateIOConnection(name, ip, id)
+			ioConnection = CreateIOConnection(name, ip, port)
 
 			globals.AvIOmu.Lock()
 			globals.AvailableIOs = append(globals.AvailableIOs, ioConnection)
@@ -213,11 +213,11 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 	}
 }
 
-func CreateIOConnection(name string, ip string, id string) *globals.IOConnection {
+func CreateIOConnection(name string, ip string, port string) *globals.IOConnection {
 	ioConnection := new(globals.IOConnection)
 	ioConnection.Name = name
 	ioConnection.IP = ip
-	ioConnection.ID = id
+	ioConnection.Port = port
 	ioConnection.Handler = make(chan globals.IORequest)
 	ioConnection.Disp = true
 	return ioConnection
@@ -239,7 +239,7 @@ func handleIOFinished() http.HandlerFunc {
 			return
 		}
 
-		id := query.Get("id")
+		port := query.Get("port")
 
 		name := query.Get("name")
 
@@ -262,27 +262,27 @@ func handleIOFinished() http.HandlerFunc {
 			return
 		}
 
-		if io := getIO(name, ip, id); io != nil {
+		if io := getIO(name, ip, port); io != nil {
 			globals.AvIOmu.Lock()
 			io.Disp = true
 			globals.AvIOmu.Unlock()
 		} else {
 			for _, io := range globals.AvailableIOs {
-				slog.Info("IO", "name", io.Name, "ip", io.IP, "id", io.ID, "disp", io.Disp)
+				slog.Info("IO", "name", io.Name, "ip", io.IP, "port", io.Port, "disp", io.Disp)
 			}
 
 			http.Error(w, "IO not found", http.StatusNotFound)
 			return
 		}
 
-		slog.Info("Handling IO finished", "name", name, "pid", pid, " ip", ip, "id", id)
+		slog.Info("Handling IO finished", "name", name, "pid", pid, " ip", ip, "port", port)
 
 		var process *globals.Process
 
 		for i, blocked := range globals.MTSQueue {
 			if blocked.Name == name && blocked.Process.PCB.GetPID() == uint(pid) {
 				process = blocked.Process
-				
+
 				globals.MTSQueueMu.Lock()
 				globals.MTSQueue = append(globals.MTSQueue[:i], globals.MTSQueue[i+1:]...)
 				globals.MTSQueueMu.Unlock()
@@ -327,7 +327,7 @@ func handleIODisconnected() http.HandlerFunc {
 			return
 		}
 
-		id := query.Get("id")
+		port := query.Get("port")
 
 		name := query.Get("name")
 
@@ -348,7 +348,7 @@ func handleIODisconnected() http.HandlerFunc {
 			return
 		}
 
-		var ioConnection *globals.IOConnection = getIO(name, ip, id)
+		var ioConnection *globals.IOConnection = getIO(name, ip, port)
 
 		if ioConnection == nil {
 			http.Error(w, "IO connection not found, this IO was never connected", http.StatusNotFound)

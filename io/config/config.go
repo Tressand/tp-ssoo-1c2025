@@ -10,6 +10,7 @@ type IOConfig struct {
 	IpKernel   string     `json:"ip_kernel"`
 	PortKernel int        `json:"port_kernel"`
 	LogLevel   slog.Level `json:"log_level"`
+	PortIO     int        `json:"port_io"`
 }
 
 var Values IOConfig
