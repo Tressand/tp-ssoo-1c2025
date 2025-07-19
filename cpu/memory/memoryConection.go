@@ -150,6 +150,7 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 	if config.CacheEnable{
 		logger.RequiredLog(false,uint(config.Pcb.PID)," Cache Replacement ",map[string]string{
 			"Pagina": fmt.Sprint(addr),
+			"PID": fmt.Sprint(pid),
 		})	
 	}
 

@@ -42,7 +42,7 @@ func Traducir(addr []int,pid int) ([]int,bool) {
 			}
 		}
 
-		AddEntryTLB(page, frame)
+		AddEntryTLB(page, frame,pid)
 	}
 
 	fisicAddr := make([]int, 2)

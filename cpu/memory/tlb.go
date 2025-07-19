@@ -54,7 +54,7 @@ func findFrame(page []int,pid int) (int, bool) {
 	return 0, false
 }
 
-func AddEntryTLB(page []int, frame int) {
+func AddEntryTLB(page []int, frame int,pid int) {
 	if config.Tlb.Capacity == 0 {
 		return
 	}
@@ -84,7 +84,7 @@ func AddEntryTLB(page []int, frame int) {
 		Page:     nuevoPage,
 		Frame:    frame,
 		LastUsed: time.Now().UnixNano(),
-		Pid: config.Pcb.PID,
+		Pid: pid,
 	})
 
 	logger.RequiredLog(false,uint(config.Pcb.PID),"TLB ADD",map[string]string{

@@ -343,6 +343,8 @@ func sendIO() int {
 
 	config.Pcb.PC++   // Incrementar PC antes de enviar la syscall
 
+	cache.EndProcess(config.Pcb.PID)
+
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Error en syscall IO", "error", err)
@@ -395,6 +397,9 @@ func initProcess() int {
 func dumpMemory() int {
 
 	config.Pcb.PC++   // Incrementar PC antes de enviar la syscall
+
+	cache.EndProcess(config.Pcb.PID)
+
 
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
