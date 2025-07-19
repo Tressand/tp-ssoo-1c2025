@@ -13,6 +13,7 @@ import (
 	"ssoo-utils/logger"
 	"ssoo-utils/parsers"
 	"strconv"
+	"time"
 )
 
 // Sending anything to this channel will shutdown the server.
@@ -129,6 +130,7 @@ var processDataReqHandler = GenericRequest{
 	"GET": MethodRequestInfo{
 		ReqParams: []string{"pid", "pc"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 			instruction, err := storage.GetInstruction(
 				uint(numFromQuery(r, "pid")),
 				numFromQuery(r, "pc"),
@@ -146,6 +148,7 @@ var processDataReqHandler = GenericRequest{
 	"POST": MethodRequestInfo{
 		ReqParams: []string{"pid", "size"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 			err := storage.CreateProcess(
 				uint(numFromQuery(r, "pid")),
 				r.Body,
@@ -160,6 +163,7 @@ var processDataReqHandler = GenericRequest{
 	"DELETE": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 			err := storage.DeleteProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
@@ -190,6 +194,7 @@ var userMemoryReqHandler = GenericRequest{
 	"GET": MethodRequestInfo{
 		ReqParams: []string{"pid", "base", "delta"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 			pid, base, delta := uint(numFromQuery(r, "pid")), numFromQuery(r, "base"), numFromQuery(r, "delta")
 			result, err := storage.GetFromMemory(pid, base, delta)
 			if err != nil {
@@ -205,6 +210,7 @@ var userMemoryReqHandler = GenericRequest{
 	"POST": MethodRequestInfo{
 		ReqParams: []string{"pid", "base", "delta"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 			pid, base, delta := uint(numFromQuery(r, "pid")), numFromQuery(r, "base"), numFromQuery(r, "delta")
 			value, _ := io.ReadAll(r.Body)
 			err := storage.WriteToMemory(pid, base, delta, value[0])
@@ -224,6 +230,7 @@ var memoryDumpReqHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay) * time.Millisecond)
 			err := storage.Memory_Dump(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
@@ -249,6 +256,7 @@ var fullPageReqHandler = GenericRequest{
 	"GET": MethodRequestInfo{
 		ReqParams: []string{"pid", "base"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay*config.Values.PageSize) * time.Millisecond)
 			pid, base := uint(numFromQuery(r, "pid")), numFromQuery(r, "base")
 			if ok, err := storage.HasPage(pid, base); !ok {
 				return SimpleResponse{http.StatusBadRequest, []byte(err.Error())}
@@ -267,6 +275,7 @@ var fullPageReqHandler = GenericRequest{
 	"POST": MethodRequestInfo{
 		ReqParams: []string{"pid", "base"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.MemoryDelay*config.Values.PageSize) * time.Millisecond)
 			pid, base := uint(numFromQuery(r, "pid")), numFromQuery(r, "base")
 			value, _ := io.ReadAll(r.Body)
 			err := storage.WritePage(pid, base, value)
@@ -294,6 +303,7 @@ var suspendProcessRequestHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.SwapDelay) * time.Millisecond)
 			err := storage.SuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())
@@ -308,6 +318,7 @@ var unsuspendProcessRequestHandler = GenericRequest{
 	"ANY": MethodRequestInfo{
 		ReqParams: []string{"pid"},
 		Callback: func(w http.ResponseWriter, r *http.Request) SimpleResponse {
+			time.Sleep(time.Duration(config.Values.SwapDelay) * time.Millisecond)
 			err := storage.UnSuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())
