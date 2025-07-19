@@ -52,7 +52,7 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 
 	queue, mutex := getQueueAndMutex(state)
 
-	if len(*queue) >= len(globals.AvailableCPUs) && state == pcb.EXEC{
+	if len(*queue) >= len(globals.AvailableCPUs) && state == pcb.EXEC {
 		panic("Se le asigna a Exec más Procesos que la cantidad de CPUs")
 	}
 
@@ -61,13 +61,13 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 	mutex.Unlock()
 
 	fmt.Println()
-	if !(actualState == lastState){
-		logger.RequiredLog(true, process.PCB.GetPID(),"Pasa del estado",map[string]string{
+	if !(actualState == lastState) {
+		logger.RequiredLog(true, process.PCB.GetPID(), "Pasa del estado", map[string]string{
 			"Estado Anterior": lastState.String(),
 			"Estado Actual":   actualState.String(),
 		})
 	} else {
-		logger.RequiredLog(true, process.PCB.GetPID(),"Sigue en el estado",map[string]string{
+		logger.RequiredLog(true, process.PCB.GetPID(), "Sigue en el estado", map[string]string{
 			"Estado:": lastState.String(),
 		})
 	}
@@ -159,7 +159,7 @@ func RemoveByPID(state pcb.STATE, pid uint) *globals.Process {
 			return proc
 		}
 	}
-	slog.Error("No hay proceso con pid en cola", "pid", pid, "queue", state.String())
+	slog.Info("No hay proceso con pid en cola", "pid", pid, "queue", state.String())
 	return nil
 }
 

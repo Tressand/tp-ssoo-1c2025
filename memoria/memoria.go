@@ -297,6 +297,7 @@ var suspendProcessRequestHandler = GenericRequest{
 			err := storage.SuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())
+				return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
 			}
 			return SimpleResponse{http.StatusOK, []byte{}}
 		},
@@ -310,6 +311,7 @@ var unsuspendProcessRequestHandler = GenericRequest{
 			err := storage.UnSuspendProcess(uint(numFromQuery(r, "pid")))
 			if err != nil {
 				slog.Error(err.Error())
+				return SimpleResponse{http.StatusBadGateway, []byte(err.Error())}
 			}
 			return SimpleResponse{http.StatusOK, []byte{}}
 		},
