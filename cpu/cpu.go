@@ -123,7 +123,6 @@ func main() {
 }
 
 func ciclo() {
-
 	fetch = false
 	config.Instruccion = ""
 
@@ -288,7 +287,7 @@ func exec() int {
 		logger.RequiredLog(true, uint(config.Pcb.PID), "", map[string]string{
 			"Ejecutando": config.Instruccion,
 		})
-		status = DeleteProcess()
+		status = DeleteProcess(config.Pcb.PID)
 	}
 
 	return status
@@ -359,21 +358,9 @@ func sendIO() int {
 	return -1
 }
 
-func DeleteProcess() int {
+func DeleteProcess(pid int) int {
 
-	cache.EndProcess(config.Pcb.PID)
-
-	resp, err := sendSyscall("syscall", instruction)
-	if err != nil {
-		slog.Error("Fallo la solicitud para eliminar proceso.", "error", err)
-		return -1
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("Kernel respondió con error al eliminar el proceso.", "status", resp.StatusCode)
-		return -1
-	}
+	cache.EndProcess(pid)
 
 	config.ExitChan <- struct{}{} // aviso que hay que sacar este proceso
 	return 0

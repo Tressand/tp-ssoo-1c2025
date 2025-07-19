@@ -10,5 +10,5 @@
   "tlb_replacement": "LRU",
   "cache_entries": 2,
   "cache_replacement": "CLOCK",
-  "cache_delay": 500
+  "cache_delay": 250
 }
