@@ -37,7 +37,7 @@ func LTS() {
 		if !queues.IsEmpty(pcb.SUSP_READY) {
 			slog.Debug("Hay procesos en SUSP_READY, se bloquea LTS")
 			globals.UnlockMTS()
-			<-globals.Re
+			<-globals.RetryInitialization
 		}
 
 		var process = queues.Search(pcb.NEW, sortBy)

@@ -87,11 +87,11 @@ func TryInititializeProcess(process *globals.Process) bool {
 
 func HandleNewProcess(process *globals.Process) {
 	queues.Enqueue(pcb.NEW, process)
-	
+
 	select {
-		case globals.LTSEmpty <- struct{}{}:
-			slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
-		default:
+	case globals.LTSEmpty <- struct{}{}:
+		slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
+	default:
 	}
 }
 
