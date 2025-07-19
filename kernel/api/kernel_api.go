@@ -66,11 +66,11 @@ func ReceiveCPU() http.HandlerFunc {
 }
 
 func HandleReason(pid uint, pc int, reason string) {
-	
+
 	process := queues.RemoveByPID(pcb.EXEC, pid)
 
 	if process == nil {
-		slog.Info("Busqueda erronea en HandleReason"," PID",fmt.Sprint(pid)," Razon",reason)
+		slog.Info("Busqueda erronea en HandleReason", " PID", fmt.Sprint(pid), " Razon", reason)
 		return
 	}
 
@@ -215,7 +215,7 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 
 			if len(iosConNombre) == 0 {
-				queues.RemoveByPID(process.PCB.GetState(),process.PCB.GetPID())
+				queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 				queues.Enqueue(pcb.EXIT, process)
 				shared.TerminateProcess(process)
 				w.WriteHeader(http.StatusOK)
@@ -226,9 +226,7 @@ func RecieveSyscall() http.HandlerFunc {
 			// Buscar una IO disponible
 			selectedIO := (*globals.IOConnection)(nil)
 			globals.AvIOmu.Lock()
-			slog.Info("IOs disponibles:")
 			for _, io := range iosConNombre {
-				slog.Info("IOs","Valor", fmt.Sprintf("%+v",*io))
 				if io.Disp {
 					selectedIO = io
 					io.Disp = false
@@ -236,7 +234,6 @@ func RecieveSyscall() http.HandlerFunc {
 				}
 			}
 			globals.AvIOmu.Unlock()
-
 
 			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 			shared.FreeCPU(process)
