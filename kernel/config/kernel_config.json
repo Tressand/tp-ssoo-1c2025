@@ -5,8 +5,8 @@
   "log_level": "INFO",
   
   "scheduler_algorithm": "FIFO",
-  "ready_ingress_algorithm": "PMCP",
+  "ready_ingress_algorithm": "FIFO",
   "alpha": 1,
-  "initial_estimate": 10000,
-  "suspension_time": 3000
+  "initial_estimate": 1000,
+  "suspension_time": 120000
 }
