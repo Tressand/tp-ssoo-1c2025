@@ -58,12 +58,9 @@ var (
 
 	RetryInitialization = make(chan struct{})
 
-	WaitingForRetry       bool = false
-	WaitingForRetryMu     sync.Mutex
 	TotalProcessesCreated int = 0
 
 	UnsuspendMutex sync.Mutex
-
 
 	// Sending anything to this channel will shutdown the server.
 	// The server will respond back on this same channel to confirm closing.
@@ -141,7 +138,7 @@ func ClearAndExit() {
 		http.Get(kill_url(cpu.IP, cpu.Port))
 	}
 	for _, io := range AvailableIOs {
-		http.Get("http://"+io.IP + ":" + io.Port + "/shutdown")
+		http.Get("http://" + io.IP + ":" + io.Port + "/shutdown")
 	}
 
 	http.Get(kill_url(config.Values.IpMemory, config.Values.PortMemory))

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	
+
 	"net/http"
 	kernel_api "ssoo-kernel/api"
 	"ssoo-kernel/config"
@@ -37,10 +37,10 @@ func LTS() {
 		if !queues.IsEmpty(pcb.SUSP_READY) {
 			slog.Debug("Hay procesos en SUSP_READY, se bloquea LTS")
 			globals.UnlockMTS()
-			<-globals.LTSEmpty
+			<-globals.Re
 		}
 
-		var process = queues.Dequeue(pcb.NEW, sortBy)
+		var process = queues.Search(pcb.NEW, sortBy)
 
 		if process == nil {
 			slog.Info("No hay procesos pendientes. Se bloquea LTS")
@@ -54,7 +54,11 @@ func LTS() {
 		}
 
 		slog.Debug("Se encontró un proceso pendiente, inicializando...", "pid", process.PCB.GetPID())
-		shared.InititializeProcess(process)
+		if shared.TryInititializeProcess(process) {
+			logger.RequiredLog(true, process.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": "NEW"})
+		} else {
+			<-globals.RetryInitialization
+		}
 	}
 }
 
@@ -346,12 +350,12 @@ func sendToWait(blocked *globals.Blocked) {
 
 	timer := time.After(time.Duration(config.Values.SuspensionTime) * time.Millisecond)
 	process := blocked.Process
-	
+
 	<-timer
 
 	globals.UnsuspendMutex.Lock()
 	defer globals.UnsuspendMutex.Unlock()
-	if (process.PCB.GetState() != pcb.BLOCKED) {
+	if process.PCB.GetState() != pcb.BLOCKED {
 		slog.Debug("El proceso ya no está bloqueado", "pid", blocked.Process.PCB.GetPID(), "IOName", blocked.Name)
 		return
 	}
@@ -366,6 +370,6 @@ func sendToWait(blocked *globals.Blocked) {
 	queues.Enqueue(pcb.SUSP_BLOCKED, process)
 
 	blocked.Process.TimerRunning = false
-	
+
 	kernel_api.RequestSuspend(process)
 }

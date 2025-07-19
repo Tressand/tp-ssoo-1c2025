@@ -74,6 +74,7 @@ func TryInititializeProcess(process *globals.Process) bool {
 		return false
 	}
 
+	queues.RemoveByPID(pcb.NEW, process.PCB.GetPID())
 	queues.Enqueue(pcb.READY, process)
 
 	select {
@@ -84,68 +85,13 @@ func TryInititializeProcess(process *globals.Process) bool {
 	return true
 }
 
-func InititializeProcess(process *globals.Process) {
-	initialized := TryInititializeProcess(process)
-
-	if initialized {
-		logger.RequiredLog(true, process.PCB.GetPID(), "Se crea el proceso", map[string]string{"Estado": "NEW"})
-		return
-	}
-
-	for {
-		slog.Info("Proceso entra en espera. Memoria no pudo inicializarlo", "pid", process.PCB.GetPID())
-		<-globals.RetryInitialization
-
-		initialized = TryInititializeProcess(process)
-
-		if initialized {
-			globals.WaitingForRetryMu.Lock()
-			globals.WaitingForRetry = true
-			globals.WaitingForRetryMu.Unlock()
-			break
-		}
-	}
-}
-
-func isSmallerThanAll(process *globals.Process) bool {
-	if len(globals.NewQueue) == 0 {
-		slog.Debug("No hay procesos en NEW, se puede inicializar directamente")
-		return true
-	}
-
-	for _, p := range globals.NewQueue {
-		if p.Size < process.Size {
-			return false
-		}
-	}
-	return true
-}
-
 func HandleNewProcess(process *globals.Process) {
-	initialized := false
-
-	if shouldTryInitialize(process) && queues.IsEmpty(pcb.SUSP_READY) {
-		initialized = TryInititializeProcess(process)
-	}
-
-	if !initialized {
-		queues.Enqueue(pcb.NEW, process)
-		select {
-		case globals.RetryInitialization <- struct{}{}:
-			slog.Debug("Intentando inicializar proceso bloqueado por falta de memoria...")
+	queues.Enqueue(pcb.NEW, process)
+	
+	select {
 		case globals.LTSEmpty <- struct{}{}:
 			slog.Debug("se desbloquea LTS que estaba bloqueado por no haber procesos para planificar")
 		default:
-		}
-	}
-}
-
-func shouldTryInitialize(process *globals.Process) bool {
-	switch config.Values.ReadyIngressAlgorithm {
-	case "PMCP":
-		return globals.WaitingForRetry && isSmallerThanAll(process)
-	default:
-		return false
 	}
 }
 
