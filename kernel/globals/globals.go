@@ -45,7 +45,7 @@ var (
 	MTSQueue   []*Blocked = make([]*Blocked, 0)
 	MTSQueueMu sync.Mutex
 
-	NextPID  uint = 1
+	NextPID  uint = 0
 	PIDMutex sync.Mutex
 
 	LTSEmpty = make(chan struct{})
