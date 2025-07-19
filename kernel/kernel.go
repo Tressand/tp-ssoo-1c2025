@@ -180,6 +180,7 @@ func recieveIO(ctx context.Context) http.HandlerFunc {
 			slog.Info("Creada nueva instancia", "name", name)
 
 			ioConnection = CreateIOConnection(name, ip, port)
+			slog.Info("Instancia IO","Contenido",fmt.Sprint(ioConnection),"Puerto",port)
 
 			globals.AvIOmu.Lock()
 			globals.AvailableIOs = append(globals.AvailableIOs, ioConnection)

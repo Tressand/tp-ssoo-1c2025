@@ -226,7 +226,9 @@ func RecieveSyscall() http.HandlerFunc {
 			// Buscar una IO disponible
 			selectedIO := (*globals.IOConnection)(nil)
 			globals.AvIOmu.Lock()
+			slog.Info("IOs disponibles:")
 			for _, io := range iosConNombre {
+				slog.Info("IOs","Valor", fmt.Sprintf("%+v",*io))
 				if io.Disp {
 					selectedIO = io
 					io.Disp = false
@@ -234,6 +236,7 @@ func RecieveSyscall() http.HandlerFunc {
 				}
 			}
 			globals.AvIOmu.Unlock()
+
 
 			queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 			shared.FreeCPU(process)
