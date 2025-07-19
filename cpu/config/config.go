@@ -106,6 +106,7 @@ var configFilePath string = "/config"
 var (
 	InterruptChan = make(chan struct{}, 1) // Buffer para 1 señal
 	ExitChan      = make(chan struct{}, 1)
+	FinishBeforeInterrupt = make(chan struct{}, 1)
 )
 
 var KernelResp KernelResponse

@@ -149,6 +149,7 @@ func ciclo() {
 		select {
 		case <-config.InterruptChan:
 			sendResults(config.Pcb.PID, config.Pcb.PC, "Interrupt")
+			config.FinishBeforeInterrupt<- struct{}{}
 			return
 		case <-config.ExitChan:
 			sendResults(config.Pcb.PID, config.Pcb.PC, "Exit")
@@ -494,6 +495,8 @@ func interrupt() http.HandlerFunc {
 			logger.RequiredLog(true, uint(config.Pcb.PID), "Llega interrupción al puerto Interrupt", nil)
 
 			config.InterruptChan <- struct{}{} // Interrupción al proceso
+			<-config.FinishBeforeInterrupt
+			logger.RequiredLog(false,uint(config.Pcb.PID),"Se termina de atender la interrupción",nil)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Proceso interrumpido."))
 		} else {

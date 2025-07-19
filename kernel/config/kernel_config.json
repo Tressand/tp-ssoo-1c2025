@@ -4,7 +4,7 @@
   "port_kernel": 8081,
   "log_level": "INFO",
   
-  "scheduler_algorithm": "FIFO",
+  "scheduler_algorithm": "SRT",
   "ready_ingress_algorithm": "FIFO",
   "alpha": 1,
   "initial_estimate": 1000,
