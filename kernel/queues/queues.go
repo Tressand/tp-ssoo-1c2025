@@ -52,10 +52,6 @@ func Enqueue(state pcb.STATE, process *globals.Process) {
 
 	queue, mutex := getQueueAndMutex(state)
 
-	if len(*queue) >= len(globals.AvailableCPUs) && state == pcb.EXEC{
-		panic("Se le asigna a Exec más Procesos que la cantidad de CPUs")
-	}
-
 	mutex.Lock()
 	*queue = append(*queue, process)
 	mutex.Unlock()
