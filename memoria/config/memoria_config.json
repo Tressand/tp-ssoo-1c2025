@@ -8,6 +8,6 @@
   "page_size": 64,
   "entries_per_page": 4,
   "number_of_levels": 2,
-  "memory_delay": 5,
+  "memory_delay": 500,
   "swap_delay": 15000
 }
