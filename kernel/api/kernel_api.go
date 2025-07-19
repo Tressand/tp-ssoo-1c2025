@@ -238,6 +238,9 @@ func RecieveSyscall() http.HandlerFunc {
 			globals.UpdateBurstEstimation(process)
 
 			queues.Enqueue(pcb.BLOCKED, process)
+			logger.RequiredLog(true, process.PCB.GetPID(),
+				fmt.Sprintf("## (%d) - Bloqueado por IO: %s", process.PCB.GetPID(), device),
+				nil)
 			blocked := CreateBlocked(process, device, timeMs)
 
 			globals.MTSQueueMu.Lock()
@@ -300,7 +303,6 @@ func CreateBlocked(process *globals.Process, name string, time int) *globals.Blo
 	blocked.CancelTimer = make(chan struct{})
 	return blocked
 }
-
 
 func DUMP_MEMORY(process *globals.Process) {
 

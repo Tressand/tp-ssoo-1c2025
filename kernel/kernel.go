@@ -276,6 +276,8 @@ func handleIOFinished() http.HandlerFunc {
 		}
 
 		slog.Info("Handling IO finished", "name", name, "pid", pid, " ip", ip, "port", port)
+		logger.RequiredLog(true, uint(pid),
+			fmt.Sprintf("## (%d) finalizó IO y pasa a READY", pid), nil)
 
 		var process *globals.Process
 
