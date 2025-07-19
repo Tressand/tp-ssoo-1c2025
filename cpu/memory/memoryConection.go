@@ -98,9 +98,7 @@ func FindMemoryConfig() bool {
 	return true
 }
 
-func GetPageInMemory(fisicAddr []int) ([]byte, bool) {
-
-	logicAddr, _ := findLogigAddress(fisicAddr)
+func GetPageInMemory(fisicAddr []int, logicAddr []int) ([]byte, bool) {
 
 	logger.RequiredLog(false, uint(config.Pcb.PID), "OBTENER MARCO", map[string]string{
 		"Pagina": fmt.Sprint(logicAddr),
@@ -140,6 +138,12 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 		return nil
 	}
 
+	if config.CacheEnable{
+		logger.RequiredLog(false,uint(config.Pcb.PID)," Cache Replacement ",map[string]string{
+			"Pagina": fmt.Sprint(addr),
+		})	
+	}
+
 	addr = append(addr, 0)
 
 	frame_str, _ := Traducir(addr)
@@ -166,11 +170,6 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 		slog.Error("La memoria respondió con error", "status", resp.Status, "err", string(b_err))
 		return err
 	}
-
-	logger.RequiredLog(false, uint(config.Pcb.PID), "Memory Update", map[string]string{
-		"Pagina": fmt.Sprint(addr[:len(addr)-1]),
-		"Frame":  fmt.Sprint(frame_str[0]),
-	})
 
 	return nil
 }

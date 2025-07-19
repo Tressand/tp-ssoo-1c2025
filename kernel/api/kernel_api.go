@@ -66,10 +66,11 @@ func ReceiveCPU() http.HandlerFunc {
 }
 
 func HandleReason(pid uint, pc int, reason string) {
-
+	
 	process := queues.RemoveByPID(pcb.EXEC, pid)
 
 	if process == nil {
+		slog.Info("Busqueda erronea en HandleReason"," PID",fmt.Sprint(pid)," Razon",reason)
 		return
 	}
 
@@ -214,6 +215,7 @@ func RecieveSyscall() http.HandlerFunc {
 			}
 
 			if len(iosConNombre) == 0 {
+				queues.RemoveByPID(process.PCB.GetState(),process.PCB.GetPID())
 				queues.Enqueue(pcb.EXIT, process)
 				shared.TerminateProcess(process)
 				w.WriteHeader(http.StatusOK)

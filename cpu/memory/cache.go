@@ -324,7 +324,7 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 
 	if (!IsInCache(paginaActual)){
 
-		page,flag := GetPageInMemory(frames)
+		page,flag := GetPageInMemory(frames,paginaActual)
 		
 		if !flag{
 			slog.Error("No se pudo obtener la siguiente página")
@@ -340,7 +340,7 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 
 		page, flag := SearchPageInCache(paginaActual)
 		if !flag {
-			page, flag = GetPageInMemory(frames)
+			page, flag = GetPageInMemory(frames,paginaActual)
 
 			if !flag {
 				slog.Error("Error buscando la pagina en cache")
@@ -375,7 +375,7 @@ func ReadCache(logicAddr []int, size int) ([]byte, bool) {
 
 		if !IsInCache(paginaActual) {
 
-			page,flag := GetPageInMemory(frames)
+			page,flag := GetPageInMemory(frames,paginaActual)
 			
 			if !flag{
 				slog.Error("No se pudo obtener la siguiente página")
@@ -410,7 +410,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 			return false
 		}
 		
-		page,_ = GetPageInMemory(frame)
+		page,_ = GetPageInMemory(frame,base)
 		AddEntryCache(base, page)
 	}
 
@@ -464,7 +464,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 
 	if !IsInCache(paginaActual) {
 
-		page, flag := GetPageInMemory(frames)
+		page, flag := GetPageInMemory(frames,paginaActual)
 
 		if !flag {
 			slog.Error("No se pudo obtener la siguiente página")
@@ -479,14 +479,14 @@ func WriteCache(logicAddr []int, value []byte) bool {
 		page, flag := SearchPageInCache(paginaActual) //busco la pagina
 		if !flag {
 
-			frame,flag:= Traducir(logicAddr)
+			frame,flag:= Traducir(paginaActual)
 
 			if !flag {
 				slog.Error("Error buscando la página en cache")
 				return false
 			}
 
-			page,_ = GetPageInMemory(frame)
+			page,_ = GetPageInMemory(frame,paginaActual)
 			AddEntryCache(paginaActual, page)
 			if !flag {
 				slog.Error("Error en escribir", " No se encontro la pagina: ", fmt.Sprint(paginaActual))
@@ -532,7 +532,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 
 		if !IsInCache(paginaActual) {
 
-			page, flag := GetPageInMemory(frames)
+			page, flag := GetPageInMemory(frames,paginaActual)
 
 			if !flag {
 				slog.Error("No se pudo obtener la siguiente página")

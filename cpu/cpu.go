@@ -28,6 +28,8 @@ var bloqueante = false
 
 var status = 0
 
+var fetch = false
+
 func main() {
 	//Obtener identificador
 	if len(os.Args) < 2 {
@@ -122,6 +124,9 @@ func main() {
 
 func ciclo() {
 
+	fetch = false
+	config.Instruccion = ""
+
 	for {
 		fmt.Println()
 		logger.RequiredLog(true, uint(config.Pcb.PID), "FETCH", map[string]string{
@@ -129,7 +134,12 @@ func ciclo() {
 		})
 
 		//fetch
-		sendPidPcToMemory()
+		ok := sendPidPcToMemory(config.Pcb.PC,config.Pcb.PID)
+		if !ok {
+			slog.Warn("No se pudo obtener la instrucción, se reintentará en 100ms")
+			time.Sleep(100 * time.Millisecond)
+			continue 
+		}
 
 		//decode
 		asign()
@@ -157,39 +167,53 @@ func ciclo() {
 
 //#region FETCH
 
-func sendPidPcToMemory() {
+func sendPidPcToMemory(PC int, PID int) bool{
+
+	logger.RequiredLog(false,uint(PID),"Searching Instruction",map[string]string{
+		"PID": fmt.Sprint(PID),
+		"PC": fmt.Sprint(PC),
+	})
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
 		Port:     config.Values.PortMemory,
 		Endpoint: "process",
 		Queries: map[string]string{
-			"pid": fmt.Sprint(config.Pcb.PID),
-			"pc":  fmt.Sprint(config.Pcb.PC),
+			"pid": fmt.Sprint(PID),
+			"pc":  fmt.Sprint(PC),
 		},
 	})
 
 	resp, err := http.Get(url)
 	if err != nil {
-		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
+		slog.Error("error al realizar la solicitud a la memoria ","PC",fmt.Sprint(config.Pcb.PC), "error", err)
+		return false
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
+		slog.Error("respuesta no exitosa","PC",fmt.Sprint(config.Pcb.PC), "respuesta", resp.Status)
+		return false
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(&instruction)
 	if err != nil {
 		slog.Error("error al deserializar la respuesta", "error", err)
+		return false
 	}
+	fetch = true
+	return true
 }
 
 // #endregion
 
 // #region Execute
 func exec() int {
+
+	if !fetch {
+		return -1
+	}
 
 	status = 0
 	bloqueante = false
@@ -201,6 +225,7 @@ func exec() int {
 			"PC": fmt.Sprint(config.Pcb.PC),
 			"Ejecutando": config.Instruccion,
 		})
+		config.Pcb.PC++
 
 	case "WRITE":
 		//write en la direccion del arg1 con el dato en arg2
@@ -210,6 +235,7 @@ func exec() int {
 		})
 
 		status = writeMemory(config.Exec_values.Addr, config.Exec_values.Value)
+		config.Pcb.PC++
 
 	case "READ":
 		//read en la direccion del arg1 con el tamaño en arg2
@@ -218,6 +244,7 @@ func exec() int {
 			"Ejecutando": config.Instruccion + "-" + fmt.Sprint(config.Exec_values.Addr) + "-" + fmt.Sprint(config.Exec_values.Arg1),
 		})
 		status = ReadMemory(config.Exec_values.Addr, config.Exec_values.Arg1)
+		config.Pcb.PC++
 
 	case "GOTO":
 
@@ -226,7 +253,6 @@ func exec() int {
 		})
 
 		config.Pcb.PC = config.Exec_values.Arg1
-		bloqueante = true // No es bloqueante, pero no queremos que se incremente el PC en el siguiente ciclo
 
 	//SYSCALLS
 	case "IO":
@@ -246,6 +272,7 @@ func exec() int {
 		})
 
 		status = initProcess()
+		config.Pcb.PC++
 
 	case "DUMP_MEMORY":
 		//comprueba la memoria
@@ -264,14 +291,6 @@ func exec() int {
 		status = DeleteProcess()
 	}
 
-	if status == -1 {
-		return status
-	}
-	if !bloqueante {
-		config.Pcb.PC++
-	} else {
-		bloqueante = false // Reseteamos el flag de bloqueante
-	}
 	return status
 }
 
@@ -323,7 +342,6 @@ func sendSyscall(endpoint string, syscallInst Instruction) (*http.Response, erro
 func sendIO() int {
 
 	config.Pcb.PC++   // Incrementar PC antes de enviar la syscall
-	bloqueante = true // Indicar que la syscall es bloqueante
 
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
@@ -336,8 +354,7 @@ func sendIO() int {
 		return -1
 	}
 
-	config.InterruptChan <- struct{}{} // Interrupción al proceso
-	return 0
+	return -1
 }
 
 func DeleteProcess() int {
@@ -378,7 +395,6 @@ func initProcess() int {
 func dumpMemory() int {
 
 	config.Pcb.PC++   // Incrementar PC antes de enviar la syscall
-	bloqueante = true // Indicar que la syscall es bloqueante
 
 	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
@@ -392,8 +408,7 @@ func dumpMemory() int {
 		return -1
 	}
 
-	config.InterruptChan <- struct{}{} // Interrupción al proceso
-	return 0
+	return -1
 }
 
 //#endregion
@@ -458,7 +473,6 @@ func receivePIDPC() http.HandlerFunc {
 		// Esperar que el ciclo termine y devuelva el motivo
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Proceso recibido"))
-
 	}
 }
 
@@ -577,6 +591,11 @@ func sendResults(pid int, pc int, motivo string) {
 		Ip:       config.Values.IpKernel,
 		Port:     config.Values.PortKernel,
 		Endpoint: "cpu-results",
+		Queries: map[string]string{
+			"pid": fmt.Sprint(pid),
+			"pc": fmt.Sprint(pc),
+			"reason": motivo,
+		},
 	})
 
 	payload := config.DispatchResponse{

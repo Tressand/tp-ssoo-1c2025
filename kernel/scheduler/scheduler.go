@@ -135,7 +135,6 @@ func STS() {
 
 				if err != nil {
 					slog.Error("Error al interrumpir proceso", "pid", cpu.Process.PCB.GetPID(), "error", err)
-					queues.Enqueue(pcb.READY, process)
 					return
 				}
 
@@ -232,7 +231,7 @@ func sendToExecute(process *globals.Process, cpu *globals.CPUConnection) {
 
 	if err != nil {
 		slog.Debug(err.Error())
-		process := queues.RemoveByPID(pcb.EXEC, process.PCB.GetPID())
+		process := queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
 
 		if process == nil {
 			return

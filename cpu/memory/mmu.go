@@ -26,12 +26,16 @@ func Traducir(addr []int) ([]int,bool) {
 
 	delta := addr[len(addr)-1]
 	page := addr[:len(addr)-1]
+	found := false
+	frame := -1
 
-	frame, condition := findFrame(page) //tlb
+	if config.Tlb.Capacity != 0{
+		frame, found = findFrame(page) //tlb
+	}
 
-	if !condition {
-		frame, condition = findFrameInMemory(page) //memoria
-		if !condition {
+	if !found {
+		frame, found = findFrameInMemory(page) //memoria
+		if !found {
 			frame, _ = findFrameInMemory(page)
 		}
 
@@ -62,7 +66,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 				return false
 			}
 
-			page, flag := GetPageInMemory(fisicAddr) //busco la pagina
+			page, flag := GetPageInMemory(fisicAddr,base) //busco la pagina
 			
 			if !flag{
 				slog.Error("error al conseguir la pagina de memoria. ")
@@ -88,7 +92,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 		copy(paginaActual, base)
 		delta := logicAddr[len(logicAddr)-1]
 
-		page,flag := GetPageInMemory(fisicAddr)
+		page,flag := GetPageInMemory(fisicAddr,paginaActual)
 		
 		if !flag{
 			return false
@@ -132,7 +136,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 
 		for bytesRestantes > 0{
 
-			page,flag := GetPageInMemory(frames)
+			page,flag := GetPageInMemory(frames,paginaActual)
 
 			if !flag {
 				return false
@@ -236,7 +240,7 @@ func ReadMemory(logicAddr []int, size int) int{
 	if config.CacheEnable{
 
 		if !IsInCache(base){
-			page, _ := GetPageInMemory(fisicAddr)
+			page, _ := GetPageInMemory(fisicAddr,base)
 			AddEntryCache(base, page)
 		}
 
@@ -258,11 +262,11 @@ func ReadMemory(logicAddr []int, size int) int{
 
 		delta := logicAddr[len(logicAddr)-1]
 
-		page,flag :=GetPageInMemory(fisicAddr)
+		page,flag :=GetPageInMemory(fisicAddr,base)
 
 		if !flag {
 
-			page,flag =GetPageInMemory(fisicAddr)
+			page,flag =GetPageInMemory(fisicAddr,base)
 
 			if !flag {
 
@@ -316,11 +320,11 @@ func ReadMemory(logicAddr []int, size int) int{
 			return -1
 		}
 
-		page,flag = GetPageInMemory(fisicAddr)
+		page,flag = GetPageInMemory(fisicAddr,paginaActual)
 
 		if !flag {
 
-			page,flag =GetPageInMemory(fisicAddr)
+			page,flag =GetPageInMemory(fisicAddr,paginaActual)
 			if !flag {
 
 				slog.Error("Error al traducir la pagina ","Pagina", paginaActual)
@@ -350,11 +354,11 @@ func ReadMemory(logicAddr []int, size int) int{
 				return -1
 			}
 
-			page,flag = GetPageInMemory(fisicAddr)
+			page,flag = GetPageInMemory(fisicAddr,paginaActual)
 
 			if !flag {
 
-				page,flag =GetPageInMemory(fisicAddr)
+				page,flag =GetPageInMemory(fisicAddr,paginaActual)
 
 				if !flag {
 

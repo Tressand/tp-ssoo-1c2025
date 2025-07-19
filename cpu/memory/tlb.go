@@ -101,13 +101,10 @@ func ClearTLB() {
 	config.Tlb.Entries = make([]config.Tlb_entries, 0, config.Tlb.Capacity)
 }
 
-func findLogigAddress(frame []int) ([]int,bool){
-	for i := range config.Tlb.Entries {
-		if config.Tlb.Entries[i].Frame == frame[0] {
-			
-			return config.Tlb.Entries[i].Page, true
-		}
+func printTLB() {
+	fmt.Println("----- Estado actual de la TLB -----")
+	for i, entry := range config.Tlb.Entries {
+		fmt.Printf("Entrada %d: Página = %v | Marco = %d | LastUsed = %d\n", i, entry.Page, entry.Frame, entry.LastUsed)
 	}
-
-	return nil,false
+	fmt.Println("-----------------------------------")
 }

@@ -5,9 +5,9 @@
   "log_level": "INFO",
   
   "memory_size": 4096,
-  "page_size": 32,
-  "entries_per_page": 8,
-  "number_of_levels": 3,
-  "memory_delay": 100,
-  "swap_delay": 2500
+  "page_size": 64,
+  "entries_per_page": 4,
+  "number_of_levels": 2,
+  "memory_delay": 5,
+  "swap_delay": 15000
 }
