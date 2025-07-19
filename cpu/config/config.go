@@ -63,6 +63,7 @@ type Tlb_entries struct {
 	Page     []int
 	Frame    int
 	LastUsed int64
+	Pid int
 }
 
 type TLB struct {

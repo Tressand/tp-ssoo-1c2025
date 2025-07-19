@@ -7,28 +7,6 @@ import (
 	"fmt"
 )
 
-// "ssoo-cpu/config"
-func lookupTlb(page []int) (int, bool) {
-
-	for i, entry := range config.Tlb.Entries {
-		if areSlicesEqual(entry.Page, page) {
-			//tlb hit
-			if config.Tlb.ReplacementAlg == "LRU" {
-				config.Tlb.Entries[i].LastUsed = time.Now().UnixNano()
-			}
-			logger.RequiredLog(false,uint(config.Pcb.PID),"TLB HIT",map[string]string{
-				"Pagina": fmt.Sprint(page),
-			})
-			return entry.Frame, true
-		}
-	}
-
-	//TLB MISS
-	logger.RequiredLog(false,uint(config.Pcb.PID),"TLB MISS",map[string]string{
-		"Pagina": fmt.Sprint(page),
-	})
-	return 0, false
-}
 
 func areSlicesEqual(a, b []int) bool {
 	if len(a) != len(b) {
@@ -42,15 +20,38 @@ func areSlicesEqual(a, b []int) bool {
 	return true
 }
 
-func findFrame(page []int) (int, bool) {
+func findFrame(page []int,pid int) (int, bool) {
 
-	frame, boolean := lookupTlb(page)
+	for i, entry := range config.Tlb.Entries {
+		if areSlicesEqual(entry.Page, page) && entry.Pid == pid{
+			//tlb hit
+			if config.Tlb.ReplacementAlg == "LRU" {
+				config.Tlb.Entries[i].LastUsed = time.Now().UnixNano()
+			}
+			logger.RequiredLog(false,uint(config.Pcb.PID),"TLB HIT",map[string]string{
+				"Pagina": fmt.Sprint(page),
+				"Pid": fmt.Sprint(entry.Pid),
+				"Frame": fmt.Sprint(entry.Frame),
+			})
 
-	if !boolean {
-		return frame, false
+			for j, e := range config.Tlb.Entries {
+				logger.RequiredLog(false, uint(config.Pcb.PID), fmt.Sprintf("TLB Entry #%d", j), map[string]string{
+					"PID":       fmt.Sprint(e.Pid),
+					"Page":      fmt.Sprint(e.Page),
+					"Frame":     fmt.Sprint(e.Frame),
+					"LastUsed":  fmt.Sprint(e.LastUsed),
+				})
+			}
+
+			return entry.Frame, true
+		}
 	}
 
-	return frame, true
+	//TLB MISS
+	logger.RequiredLog(false,uint(config.Pcb.PID),"TLB MISS",map[string]string{
+		"Pagina": fmt.Sprint(page),
+	})
+	return 0, false
 }
 
 func AddEntryTLB(page []int, frame int) {
@@ -83,6 +84,7 @@ func AddEntryTLB(page []int, frame int) {
 		Page:     nuevoPage,
 		Frame:    frame,
 		LastUsed: time.Now().UnixNano(),
+		Pid: config.Pcb.PID,
 	})
 
 	logger.RequiredLog(false,uint(config.Pcb.PID),"TLB ADD",map[string]string{

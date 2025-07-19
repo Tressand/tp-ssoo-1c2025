@@ -403,7 +403,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 
 	if !found {
 
-		frame,flag:= Traducir(logicAddr)
+		frame,flag:= Traducir(logicAddr,config.Pcb.PID)
 
 		if !flag {
 			slog.Error("Error buscando la página en cache")
@@ -426,7 +426,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 
 		copy(page[delta:], value)
 
-		frame, _ := findFrame(base)
+		frame, _ := findFrame(base,config.Pcb.PID)
 		fisicAddr := []int{frame, delta}
 
 		logger.RequiredLog(false, uint(config.Pcb.PID), "Escribir", map[string]string{
@@ -443,7 +443,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 
 	copy(page[offset:], value[:bytesPrimeraPagina])
 
-	frame, _ := findFrame(base)
+	frame, _ := findFrame(base,config.Pcb.PID)
 	fisicAddr := []int{frame, delta}
 
 	logger.RequiredLog(false, uint(config.Pcb.PID), "Escribir", map[string]string{
@@ -479,7 +479,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 		page, flag := SearchPageInCache(paginaActual) //busco la pagina
 		if !flag {
 
-			frame,flag:= Traducir(paginaActual)
+			frame,flag:= Traducir(paginaActual,config.Pcb.PID)
 
 			if !flag {
 				slog.Error("Error buscando la página en cache")
@@ -503,7 +503,7 @@ func WriteCache(logicAddr []int, value []byte) bool {
 
 		paginaActual = append(paginaActual, 0)
 
-		frame, _ := Traducir(paginaActual)
+		frame, _ := Traducir(paginaActual,config.Pcb.PID)
 
 		paginaActual = paginaActual[:len(paginaActual)-1]
 

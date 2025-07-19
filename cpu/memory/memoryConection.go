@@ -25,7 +25,7 @@ func fromLogicAddrToString(logicAddr []int) string {
 	return strings.Join(strs, "|")
 }
 
-func findFrameInMemory(logicAddr []int) (int, bool) {
+func findFrameInMemory(logicAddr []int,pid int) (int, bool) {
 
 	str := fromLogicAddrToString(logicAddr)
 
@@ -34,7 +34,7 @@ func findFrameInMemory(logicAddr []int) (int, bool) {
 		Port:     config.Values.PortMemory,
 		Endpoint: "frame",
 		Queries: map[string]string{
-			"pid":     fmt.Sprint(config.Pcb.PID),
+			"pid":     fmt.Sprint(pid),
 			"address": str,
 		},
 	})
@@ -42,24 +42,28 @@ func findFrameInMemory(logicAddr []int) (int, bool) {
 	resp, err := http.Get(url)
 	if err != nil {
 		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
+		MandarDumpMemory(config.Pcb.PID)
 		return 0, false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("respuesta no exitosa", "respuesta", resp.Status)
+		MandarDumpMemory(config.Pcb.PID)
 		return 0, false
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		slog.Error("error al leer el cuerpo de la respuesta", "error", err)
+		MandarDumpMemory(config.Pcb.PID)
 		return 0, false
 	}
 
 	frame, err := strconv.Atoi(string(bodyBytes))
 	if err != nil {
 		slog.Error("error al convertir la respuesta a int", "respuesta", string(bodyBytes), "error", err)
+		MandarDumpMemory(config.Pcb.PID)
 		return 0, false
 	}
 
@@ -76,6 +80,7 @@ func FindMemoryConfig() bool {
 	resp, err := http.Get(url)
 	if err != nil {
 		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
+		MandarDumpMemory(config.Pcb.PID)
 		return false
 	}
 
@@ -83,12 +88,14 @@ func FindMemoryConfig() bool {
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("respuesta no exitosa al escribir en memoria", "status", resp.Status)
+		MandarDumpMemory(config.Pcb.PID)
 		return false
 	}
 
 	var memoryConfig config.PaginationConfig
 	if err := json.NewDecoder(resp.Body).Decode(&memoryConfig); err != nil {
 		slog.Error("error al decodificar la respuesta de memoria", "error", err)
+		MandarDumpMemory(config.Pcb.PID)
 		return false
 	}
 
@@ -118,14 +125,16 @@ func GetPageInMemory(fisicAddr []int, logicAddr []int) ([]byte, bool) {
 	resp, err := http.Get(url)
 	if err != nil {
 		slog.Error("error al realizar la solicitud a la memoria ", "error", err)
+		MandarDumpMemory(config.Pcb.PID)
 		return nil, false
 	}
 
 	defer resp.Body.Close()
-	page, err := io.ReadAll(resp.Body)
+	page,_ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("respuesta no exitosa", "respuesta", resp.Status, "error", err)
+		slog.Error("respuesta no exitosa", "respuesta", resp.Status, "error", page)
+		MandarDumpMemory(config.Pcb.PID)
 		return nil, false
 	}
 
@@ -146,7 +155,7 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 
 	addr = append(addr, 0)
 
-	frame_str, _ := Traducir(addr)
+	frame_str, _ := Traducir(addr,pid)
 
 	url := httputils.BuildUrl(httputils.URLData{
 		Ip:       config.Values.IpMemory,
@@ -161,6 +170,7 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 	resp, err := http.Post(url, "application/octet-stream", bytes.NewReader(page))
 	if err != nil {
 		slog.Error("Error al hacer POST a memoria", "err", err)
+		MandarDumpMemory(pid)
 		return err
 	}
 	defer resp.Body.Close()
@@ -168,8 +178,31 @@ func SavePageInMemory(page []byte, addr []int, pid int) error {
 	if resp.StatusCode != http.StatusOK {
 		b_err, _ := io.ReadAll(resp.Body)
 		slog.Error("La memoria respondió con error", "status", resp.Status, "err", string(b_err))
+		MandarDumpMemory(pid)
 		return err
 	}
 
 	return nil
+}
+
+func MandarDumpMemory(pid int){
+	url := httputils.BuildUrl(httputils.URLData{
+		Ip:       config.Values.IpMemory,
+		Port:     config.Values.PortMemory,
+		Endpoint: "memory_dump",
+		Queries: map[string]string{
+			"pid":  fmt.Sprint(pid),
+		},
+	})
+
+	resp, err := http.Post(url, "application/octet-stream", nil)
+	if err != nil {
+		slog.Error("Error al hacer POST a memoria", "err", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b_err, _ := io.ReadAll(resp.Body)
+		slog.Error("La memoria respondió con error", "status", resp.Status, "err", string(b_err))
+	}
 }

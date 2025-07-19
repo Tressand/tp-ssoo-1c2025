@@ -18,7 +18,7 @@ func StringToLogicAddress(str string) []int {
 	return addr
 }
 
-func Traducir(addr []int) ([]int,bool) {
+func Traducir(addr []int,pid int) ([]int,bool) {
 
 	if len(addr) == 0 {
 		return nil,false
@@ -30,13 +30,16 @@ func Traducir(addr []int) ([]int,bool) {
 	frame := -1
 
 	if config.Tlb.Capacity != 0{
-		frame, found = findFrame(page) //tlb
+		frame, found = findFrame(page,pid) //tlb
 	}
 
 	if !found {
-		frame, found = findFrameInMemory(page) //memoria
+		frame, found = findFrameInMemory(page,pid) //memoria
 		if !found {
-			frame, _ = findFrameInMemory(page)
+			frame, found = findFrameInMemory(page,pid)
+			if !found{
+				return nil, false
+			}
 		}
 
 		AddEntryTLB(page, frame)
@@ -59,7 +62,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 
 		} else{ //si la pagina no esta en cache
 
-			fisicAddr,flag := Traducir(logicAddr) //traduzco la direccion
+			fisicAddr,flag := Traducir(logicAddr,config.Pcb.PID) //traduzco la direccion
 			
 			if !flag {
 				slog.Error("Error"," al traducir la dirección logica, ",fmt.Sprint(logicAddr))
@@ -78,7 +81,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 		}
 	} else {
 
-		fisicAddr,flag := Traducir(logicAddr) //traduzco la direccion
+		fisicAddr,flag := Traducir(logicAddr,config.Pcb.PID) //traduzco la direccion
 		
 		if !flag {
 			slog.Error("Error"," al traducir la dirección logica, ",fmt.Sprint(logicAddr))
@@ -151,7 +154,7 @@ func WriteMemory(logicAddr []int, value []byte) bool{
 
 			paginaActual = append(paginaActual, 0)
 
-			frames, _ = Traducir(paginaActual)
+			frames, _ = Traducir(paginaActual,config.Pcb.PID)
 
 			paginaActual = paginaActual[:len(paginaActual)-1]
 
@@ -194,7 +197,7 @@ func NextPageMMU(logicAddr []int)([]int,[]int,bool){ //me da una base y yo busco
 
 	logicAddr = append(logicAddr, 0)
 
-	frame,flag := Traducir(logicAddr)
+	frame,flag := Traducir(logicAddr,config.Pcb.PID)
 
 	if !flag{
 		slog.Error("Page Fault","No existe la pagina ",fmt.Sprint(logicAddr))
@@ -223,12 +226,12 @@ func sum(val []int, mod int) {
 func ReadMemory(logicAddr []int, size int) int{
 
 	base := logicAddr[:len(logicAddr)-1]
-	fisicAddr, flag := Traducir(logicAddr)
+	fisicAddr, flag := Traducir(logicAddr,config.Pcb.PID)
 	frame := fisicAddr
 
 	if !flag {
 
-		fisicAddr, flag = Traducir(logicAddr)
+		fisicAddr, flag = Traducir(logicAddr,config.Pcb.PID)
 
 		if !flag{
 			slog.Error("Error al traducir la pagina ","Pagina", base)
