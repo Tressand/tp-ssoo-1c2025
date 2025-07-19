@@ -344,7 +344,7 @@ func sendIO() int {
 
 	cache.EndProcess(config.Pcb.PID)
 
-	resp, err := sendSygscall("syscall", instruction)
+	resp, err := sendSyscall("syscall", instruction)
 	if err != nil {
 		slog.Error("Error en syscall IO", "error", err)
 		return -1
