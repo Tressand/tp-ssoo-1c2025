@@ -85,6 +85,10 @@ func AddEntryCacheClock(logicAddr []int, content []byte) {
 		}
 
 		if !entry.Use {
+			logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Replacement", map[string]string{
+				"Pagina": fmt.Sprint(entry.Page),
+				"PID": fmt.Sprint(entry.Pid),
+			})
 			SavePageInMemory(entry.Content, entry.Page, entry.Pid)
 
 			nuevoContenido := make([]byte, len(content))
@@ -138,6 +142,10 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 			entry = &config.Cache.Entries[position]
 
 			if !entry.Modified && !entry.Use {
+				logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Replacement", map[string]string{
+					"Pagina": fmt.Sprint(entry.Page),
+					"PID": fmt.Sprint(entry.Pid),
+				})
 				SavePageInMemory(entry.Content, entry.Page, entry.Pid)
 
 				nuevoContenido := make([]byte, len(content))
@@ -174,6 +182,10 @@ func AddEntryCacheClockM(logicAddr []int, content []byte) {
 			entry := &config.Cache.Entries[position]
 
 			if entry.Modified && !entry.Use {
+				logger.RequiredLog(false, uint(config.Pcb.PID), "Cache Replacement", map[string]string{
+					"Pagina": fmt.Sprint(entry.Page),
+					"PID": fmt.Sprint(entry.Pid),
+				})
 				SavePageInMemory(entry.Content, entry.Page, entry.Pid)
 
 				nuevoContenido := make([]byte, len(content))

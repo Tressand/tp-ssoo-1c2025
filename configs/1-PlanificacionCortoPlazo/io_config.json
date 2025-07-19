@@ -1,0 +1,6 @@
+{
+  "ip_kernel": "self",
+  "port_kernel": 8081,
+  "port_io": 8090,
+  "log_level": "DEBUG"
+}

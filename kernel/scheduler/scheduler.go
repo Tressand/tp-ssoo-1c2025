@@ -106,8 +106,6 @@ func STS() {
 
 			slog.Info("Se analiza Interrupción de CPU")
 
-			queues.MostrarLasColas("analisis interrupcion")
-
 			process := queues.Search(pcb.READY, sortBy)
 
 			if process == nil {
@@ -149,8 +147,6 @@ func STS() {
 			}
 
 		}
-
-		queues.MostrarLasColas("STS")
 		slog.Debug("No hay CPUs disponibles, esperando a que se libere una")
 		<-globals.CpuAvailableSignal
 		slog.Debug("Se desbloquea STS porque hay CPUs disponibles")
