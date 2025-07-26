@@ -414,6 +414,20 @@ func handleIODisconnected() http.HandlerFunc {
 				shared.TerminateProcess(process)
 				slog.Info(fmt.Sprintf("Removed process %d from MTS queue due to IO disconnection", process.PCB.GetPID()))
 			}
+
+			for index,_ := range globals.SuspReadyQueue {
+				process := globals.SuspReadyQueue[index]
+
+				globals.MTSQueueMu.Lock()
+				globals.SuspReadyQueue = append(globals.SuspReadyQueue[:index], globals.SuspReadyQueue[index+1:]...)
+				globals.MTSQueueMu.Unlock()
+
+				queues.RemoveByPID(process.PCB.GetState(), process.PCB.GetPID())
+				queues.Enqueue(pcb.EXIT, process)
+				shared.TerminateProcess(process)
+				slog.Info(fmt.Sprintf("Removed process %d from Suspend Ready queue due to IO disconnection", process.PCB.GetPID()))
+			}
+
 		}()
 
 		w.WriteHeader(http.StatusOK)
