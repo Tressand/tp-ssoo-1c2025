@@ -1,7 +1,8 @@
 ## Trabajo Práctico "The Rise of Gopher" de Sistemas Operativos.
+Documentos de la consigna y las pruebas adjuntados al repositorio.
 ### Integrantes:
-- Geronimo Herrera (Memoria, DevOps, Utils)
-- Elias Puddini (CPU, Kernel)
-- José Becerra (Kernel)
+- Geronimo Herrera (IO, Memoria, DevOps, Utils)
+- Elias Puddini (CPU, Kernel) ⭐ MVP
+- José Becerra (IO, Kernel, Testeo)
 - Lautaro Molina (Kernel)
 
