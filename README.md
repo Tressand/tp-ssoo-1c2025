@@ -1,21 +1,7 @@
-## Checkpoint
+## Trabajo Práctico "The Rise of Gopher" de Sistemas Operativos.
+### Integrantes:
+- Geronimo Herrera (Memoria, DevOps, Utils)
+- Elias Puddini (CPU, Kernel)
+- José Becerra (Kernel)
+- Lautaro Molina (Kernel)
 
-Para cada checkpoint de control obligatorio, se debe crear un tag en el
-repositorio con el siguiente formato:
-
-```
-checkpoint-{número}
-```
-
-Donde `{número}` es el número del checkpoint.
-
-Para crear un tag y subirlo al repositorio, podemos utilizar los siguientes
-comandos:
-
-```bash
-git tag -a checkpoint-{número} -m "Checkpoint {número}"
-git push origin checkpoint-{número}
-```
-
-Asegúrense de que el código compila y cumple con los requisitos del checkpoint
-antes de subir el tag.
